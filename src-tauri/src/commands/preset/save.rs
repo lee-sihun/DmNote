@@ -11,8 +11,9 @@ use crate::{
     commands::dialog::parented_file_dialog,
     errors::{CmdResult, CommandError},
     models::{
-        FontSettings, FontType, GraphPositions, KeyMappings, KeyPositions, KnobPositions,
-        LayerGroups, SpritePositions, StatPositions, TabCssOverrides, TabNoteOverrides,
+        rewrite_coupled_sprite_image_reference, FontSettings, FontType, GraphPositions,
+        KeyMappings, KeyPositions, KnobPositions, LayerGroups, SpritePositions, StatPositions,
+        TabCssOverrides, TabNoteOverrides,
     },
     state::{atomic_file::atomic_replace, AppState},
 };
@@ -502,17 +503,21 @@ pub(super) fn build_preset_image_payload(
 
     for sprites in exported_sprite_positions.values_mut() {
         for sprite in sprites {
-            rewrite_position_image_reference(
-                &mut sprite.base_image,
-                &mut embedded_local_images,
-                &mut path_to_image_id,
-            )?;
-            for pose in &mut sprite.poses {
+            rewrite_coupled_sprite_image_reference(sprite, |image_ref| {
                 rewrite_position_image_reference(
-                    &mut pose.image_override,
+                    image_ref,
                     &mut embedded_local_images,
                     &mut path_to_image_id,
-                )?;
+                )
+            })?;
+            for pose in &mut sprite.poses {
+                rewrite_coupled_sprite_image_reference(pose, |image_ref| {
+                    rewrite_position_image_reference(
+                        image_ref,
+                        &mut embedded_local_images,
+                        &mut path_to_image_id,
+                    )
+                })?;
             }
         }
     }

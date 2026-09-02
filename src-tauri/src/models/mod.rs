@@ -891,6 +891,8 @@ pub const SPRITE_RESIZE_MIN_DIMENSION: f64 = 0.000_001;
 pub const SPRITE_TRANSITION_MS_MAX: u32 = 1_000;
 pub const SPRITE_PRESS_DURATION_MS_MIN: u32 = 1;
 pub const SPRITE_PRESS_DURATION_MS_MAX: u32 = 5_000;
+pub const SPRITE_IMAGE_DIMENSION_MIN: u32 = 1;
+pub const SPRITE_IMAGE_DIMENSION_MAX: u32 = 32_768;
 pub const MAX_SPRITE_POSES: usize = 64;
 pub const MAX_SPRITE_POSE_TRIGGERS: usize = 512;
 
@@ -957,6 +959,66 @@ pub enum SpriteImageFit {
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub enum SpriteImagePlacement {
+    #[default]
+    Box,
+    Pivot,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SpriteImageMetrics {
+    pub source: String,
+    pub width: u32,
+    pub height: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SpriteReferenceNaturalSize {
+    pub source: Option<String>,
+    pub width: u32,
+    pub height: u32,
+}
+
+pub(crate) fn is_renderable_image_ref(value: Option<&str>) -> bool {
+    value.is_some_and(|value| !value.trim().is_empty())
+}
+
+pub(crate) trait CoupledSpriteImageReference {
+    fn image_reference(&self) -> &Option<String>;
+    fn image_reference_mut(&mut self) -> &mut Option<String>;
+    fn coupled_source(&self) -> Option<&str>;
+    fn set_coupled_source(&mut self, source: Option<&str>);
+}
+
+pub(crate) fn rewrite_coupled_sprite_image_reference<T, R>(
+    target: &mut T,
+    rewrite: impl FnOnce(&mut Option<String>) -> R,
+) -> R
+where
+    T: CoupledSpriteImageReference,
+{
+    let original = target.image_reference().clone();
+    let source_was_coupled = original.as_deref().is_some_and(|image_ref| {
+        is_renderable_image_ref(Some(image_ref)) && target.coupled_source() == Some(image_ref)
+    });
+    let result = rewrite(target.image_reference_mut());
+
+    if source_was_coupled {
+        let rewritten = target
+            .image_reference()
+            .as_deref()
+            .filter(|image_ref| is_renderable_image_ref(Some(image_ref)))
+            .map(str::to_owned);
+        target.set_coupled_source(rewritten.as_deref());
+    }
+
+    result
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub enum SpriteActivation {
     #[default]
     WhileHeld,
@@ -984,6 +1046,10 @@ pub struct SpritePose {
     pub image_override: Option<String>,
     #[serde(default = "default_sprite_contact_point")]
     pub contact_point: SpriteAnchor,
+    #[serde(default)]
+    pub image_pivot: Option<SpriteAnchor>,
+    #[serde(default)]
+    pub image_override_metrics: Option<SpriteImageMetrics>,
 }
 
 impl Default for SpritePose {
@@ -995,6 +1061,8 @@ impl Default for SpritePose {
             transform: SpriteTransform::default(),
             image_override: None,
             contact_point: default_sprite_contact_point(),
+            image_pivot: None,
+            image_override_metrics: None,
         }
     }
 }
@@ -1005,6 +1073,33 @@ impl SpritePose {
         self.triggers.sort_unstable();
         self.triggers.dedup();
         self.triggers != original
+    }
+}
+
+impl CoupledSpriteImageReference for SpritePose {
+    fn image_reference(&self) -> &Option<String> {
+        &self.image_override
+    }
+
+    fn image_reference_mut(&mut self) -> &mut Option<String> {
+        &mut self.image_override
+    }
+
+    fn coupled_source(&self) -> Option<&str> {
+        self.image_override_metrics
+            .as_ref()
+            .map(|metrics| metrics.source.as_str())
+    }
+
+    fn set_coupled_source(&mut self, source: Option<&str>) {
+        match source {
+            Some(source) => {
+                if let Some(metrics) = self.image_override_metrics.as_mut() {
+                    metrics.source = source.to_string();
+                }
+            }
+            None => self.image_override_metrics = None,
+        }
     }
 }
 
@@ -1041,6 +1136,10 @@ pub struct ReactiveSpritePosition {
     pub base_image: Option<String>,
     #[serde(default)]
     pub image_fit: Option<SpriteImageFit>,
+    #[serde(default)]
+    pub image_placement: SpriteImagePlacement,
+    #[serde(default)]
+    pub reference_natural_size: Option<SpriteReferenceNaturalSize>,
     pub image_rect: SpriteRect,
     pub pivot: SpriteAnchor,
     pub idle_transform: SpriteTransform,
@@ -1072,6 +1171,8 @@ impl Default for ReactiveSpritePosition {
             use_inline_styles: None,
             base_image: None,
             image_fit: None,
+            image_placement: SpriteImagePlacement::default(),
+            reference_natural_size: None,
             image_rect: SpriteRect::default(),
             pivot: SpriteAnchor::default(),
             idle_transform: SpriteTransform::default(),
@@ -1080,6 +1181,28 @@ impl Default for ReactiveSpritePosition {
             press_duration_ms: default_sprite_press_duration_ms(),
             transition_ms: default_sprite_transition_ms(),
             transition_easing: default_sprite_transition_easing(),
+        }
+    }
+}
+
+impl CoupledSpriteImageReference for ReactiveSpritePosition {
+    fn image_reference(&self) -> &Option<String> {
+        &self.base_image
+    }
+
+    fn image_reference_mut(&mut self) -> &mut Option<String> {
+        &mut self.base_image
+    }
+
+    fn coupled_source(&self) -> Option<&str> {
+        self.reference_natural_size
+            .as_ref()
+            .and_then(|reference| reference.source.as_deref())
+    }
+
+    fn set_coupled_source(&mut self, source: Option<&str>) {
+        if let Some(reference) = self.reference_natural_size.as_mut() {
+            reference.source = source.map(str::to_owned);
         }
     }
 }
@@ -3285,11 +3408,14 @@ pub struct SettingsPatch {
 #[cfg(test)]
 mod tests {
     use super::{
-        compact_canonical_rgba, note_border_representative_hex, scrub_removed_text_outline_fields,
-        FadePosition, GradientSpec, GraphPosition, GraphStatType, GraphType, KeyCounterAlign,
+        compact_canonical_rgba, default_sprite_contact_point, note_border_representative_hex,
+        rewrite_coupled_sprite_image_reference, scrub_removed_text_outline_fields, FadePosition,
+        GradientSpec, GraphPosition, GraphStatType, GraphType, KeyCounterAlign,
         KeyCounterAlignMode, KeyCounterColor, KeyCounterPlacement, KeyCounterSettings, KeyMappings,
-        KeyPosition, KeySlot, KnobPosition, NoteColor, NoteSettings, SlotMatch, SpriteImageFit,
-        SpritePose, StatPosition, StatType, MAX_SLOT_KEYS, POSITION_COLLECTION_FIELDS,
+        KeyPosition, KeySlot, KnobPosition, NoteColor, NoteSettings, ReactiveSpritePosition,
+        SlotMatch, SpriteAnchor, SpriteImageFit, SpriteImagePlacement, SpritePose,
+        SpriteReferenceNaturalSize, SpriteTransform, StatPosition, StatType, MAX_SLOT_KEYS,
+        POSITION_COLLECTION_FIELDS,
     };
     use serde::Deserialize;
 
@@ -3350,6 +3476,24 @@ mod tests {
     }
 
     #[test]
+    fn coupled_image_rewrite_keeps_null_reference_source_without_base_image() {
+        let mut sprite = ReactiveSpritePosition {
+            reference_natural_size: Some(SpriteReferenceNaturalSize {
+                source: None,
+                width: 100,
+                height: 100,
+            }),
+            ..ReactiveSpritePosition::default()
+        };
+
+        rewrite_coupled_sprite_image_reference(&mut sprite, |image_ref| {
+            assert_eq!(image_ref, &None);
+        });
+
+        assert_eq!(sprite.reference_natural_size.unwrap().source, None);
+    }
+
+    #[test]
     fn sprite_image_fit_wire_values_remain_single_word() {
         for (fit, wire) in [
             (SpriteImageFit::Cover, "cover"),
@@ -3362,6 +3506,79 @@ mod tests {
                 fit
             );
         }
+    }
+
+    #[test]
+    fn sprite_pivot_fields_follow_wire_defaults_and_null_contract() {
+        let mut raw = serde_json::to_value(ReactiveSpritePosition::default()).unwrap();
+        let sprite = raw.as_object_mut().unwrap();
+        sprite.remove("imagePlacement");
+        sprite.remove("referenceNaturalSize");
+        sprite.insert(
+            "poses".to_string(),
+            serde_json::json!([{
+                "poseId": "pose-a",
+                "triggers": [],
+                "transform": SpriteTransform::default(),
+                "imageOverride": null,
+                "contactPoint": default_sprite_contact_point()
+            }]),
+        );
+
+        let defaulted: ReactiveSpritePosition = serde_json::from_value(raw).unwrap();
+        assert_eq!(defaulted.image_placement, SpriteImagePlacement::Box);
+        assert_eq!(defaulted.reference_natural_size, None);
+        assert_eq!(defaulted.poses[0].image_pivot, None);
+        assert_eq!(defaulted.poses[0].image_override_metrics, None);
+
+        let serialized = serde_json::to_value(&defaulted).unwrap();
+        assert_eq!(serialized["imagePlacement"], "box");
+        assert!(serialized["referenceNaturalSize"].is_null());
+        assert!(serialized["poses"][0]["imagePivot"].is_null());
+        assert!(serialized["poses"][0]["imageOverrideMetrics"].is_null());
+        let null_round_trip: ReactiveSpritePosition =
+            serde_json::from_value(serialized.clone()).unwrap();
+        assert_eq!(null_round_trip.reference_natural_size, None);
+        assert_eq!(null_round_trip.poses[0].image_pivot, None);
+        assert_eq!(null_round_trip.poses[0].image_override_metrics, None);
+
+        let mut valued_raw = serde_json::to_value(ReactiveSpritePosition::default()).unwrap();
+        let valued_object = valued_raw.as_object_mut().unwrap();
+        valued_object.insert("imagePlacement".to_string(), serde_json::json!("pivot"));
+        valued_object.insert(
+            "referenceNaturalSize".to_string(),
+            serde_json::json!({ "source": null, "width": 1920, "height": 1080 }),
+        );
+        valued_object.insert(
+            "poses".to_string(),
+            serde_json::json!([{
+                "poseId": "pose-a",
+                "triggers": [],
+                "transform": SpriteTransform::default(),
+                "imageOverride": "/images/pose.png",
+                "contactPoint": default_sprite_contact_point(),
+                "imagePivot": { "x": 0.25, "y": 0.75 },
+                "imageOverrideMetrics": {
+                    "source": "/images/pose.png",
+                    "width": 640,
+                    "height": 480
+                }
+            }]),
+        );
+        let valued: ReactiveSpritePosition = serde_json::from_value(valued_raw).unwrap();
+        assert_eq!(valued.image_placement, SpriteImagePlacement::Pivot);
+        assert_eq!(valued.reference_natural_size.unwrap().source, None);
+        assert_eq!(
+            valued.poses[0].image_pivot,
+            Some(SpriteAnchor { x: 0.25, y: 0.75 })
+        );
+        assert_eq!(
+            valued.poses[0]
+                .image_override_metrics
+                .as_ref()
+                .map(|metrics| metrics.source.as_str()),
+            Some("/images/pose.png")
+        );
     }
 
     #[test]

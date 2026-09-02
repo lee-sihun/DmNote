@@ -332,10 +332,12 @@ mod tests {
                 "id",
                 "idleTransform",
                 "imageFit",
+                "imagePlacement",
                 "imageRect",
                 "pivot",
                 "poses",
                 "pressDurationMs",
+                "referenceNaturalSize",
                 "transitionEasing",
                 "transitionMs",
                 "useInlineStyles",
@@ -351,6 +353,8 @@ mod tests {
             [
                 "contactPoint",
                 "imageOverride",
+                "imageOverrideMetrics",
+                "imagePivot",
                 "poseId",
                 "transform",
                 "triggers"

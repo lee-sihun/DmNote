@@ -20,12 +20,13 @@ use crate::{
     errors::{CmdResult, CommandError},
     models::{
         default_missing_note_gradient_multipliers, normalize_key_mappings,
-        scrub_removed_text_outline_fields, AppStoreData, CustomCss, CustomCssPatch, CustomJs,
-        CustomJsPatch, EditorCommitOrigin, EditorField, FontSettings, FontType, GradientSpec,
-        GraphPositions, KeyMappings, KeyPosition, KeyPositions, KeySlot, KnobPositions,
-        LayerGroups, NoteSettings, NoteSettingsPatch, SettingsPatchInput, SpritePositions,
-        StatPositions, TabCss, TabCssOverrides, TabNoteSettings, POSITION_COLLECTION_FIELDS,
-        SHADOW_BLUR_MAX, SHADOW_BLUR_MIN, SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
+        rewrite_coupled_sprite_image_reference, scrub_removed_text_outline_fields, AppStoreData,
+        CustomCss, CustomCssPatch, CustomJs, CustomJsPatch, EditorCommitOrigin, EditorField,
+        FontSettings, FontType, GradientSpec, GraphPositions, KeyMappings, KeyPosition,
+        KeyPositions, KeySlot, KnobPositions, LayerGroups, NoteSettings, NoteSettingsPatch,
+        SettingsPatchInput, SpritePositions, StatPositions, TabCss, TabCssOverrides,
+        TabNoteSettings, POSITION_COLLECTION_FIELDS, SHADOW_BLUR_MAX, SHADOW_BLUR_MIN,
+        SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
     },
     services::settings::apply_patch_to_store,
     state::{
@@ -1490,19 +1491,23 @@ fn restore_preset_local_images_in_dir(
 
     for sprites in sprite_positions.values_mut() {
         for sprite in sprites {
-            restore_position_image_reference(
-                images_dir,
-                &embedded_map,
-                &mut restored_path_cache,
-                &mut sprite.base_image,
-            )?;
-            for pose in &mut sprite.poses {
+            rewrite_coupled_sprite_image_reference(sprite, |image_ref| {
                 restore_position_image_reference(
                     images_dir,
                     &embedded_map,
                     &mut restored_path_cache,
-                    &mut pose.image_override,
-                )?;
+                    image_ref,
+                )
+            })?;
+            for pose in &mut sprite.poses {
+                rewrite_coupled_sprite_image_reference(pose, |image_ref| {
+                    restore_position_image_reference(
+                        images_dir,
+                        &embedded_map,
+                        &mut restored_path_cache,
+                        image_ref,
+                    )
+                })?;
             }
         }
     }
@@ -1853,10 +1858,40 @@ mod tests {
         defaults::{default_keys, default_positions},
         models::{
             CustomCssHistoryEntry, CustomFont, FontWeightRange, GraphPosition, GraphStatType,
-            GraphType, JsPlugin, KnobPosition, ReactiveSpritePosition, SpritePose, StatPosition,
-            StatType,
+            GraphType, JsPlugin, KnobPosition, ReactiveSpritePosition, SpriteImageMetrics,
+            SpriteImagePlacement, SpritePose, SpriteReferenceNaturalSize, StatPosition, StatType,
         },
     };
+
+    fn pivot_sprite_with_local_images(
+        base_image: &Path,
+        pose_image: &Path,
+    ) -> ReactiveSpritePosition {
+        let base_image = base_image.to_string_lossy().into_owned();
+        let pose_image = pose_image.to_string_lossy().into_owned();
+        ReactiveSpritePosition {
+            id: uuid::Uuid::new_v4().to_string(),
+            base_image: Some(base_image.clone()),
+            image_placement: SpriteImagePlacement::Pivot,
+            reference_natural_size: Some(SpriteReferenceNaturalSize {
+                source: Some(base_image),
+                width: 800,
+                height: 600,
+            }),
+            poses: vec![SpritePose {
+                pose_id: uuid::Uuid::new_v4().to_string(),
+                triggers: vec![uuid::Uuid::new_v4().to_string()],
+                image_override: Some(pose_image.clone()),
+                image_override_metrics: Some(SpriteImageMetrics {
+                    source: pose_image,
+                    width: 320,
+                    height: 240,
+                }),
+                ..SpritePose::default()
+            }],
+            ..ReactiveSpritePosition::default()
+        }
+    }
 
     #[test]
     fn full_preset_settings_patch_preserves_custom_css_history() {
@@ -1906,23 +1941,11 @@ mod tests {
         std::fs::write(&base_image, b"base-image").unwrap();
         std::fs::write(&pose_image, b"pose-image").unwrap();
 
-        let sprite_id = uuid::Uuid::new_v4().to_string();
-        let pose_id = uuid::Uuid::new_v4().to_string();
-        let trigger_id = uuid::Uuid::new_v4().to_string();
-        let sprites = SpritePositions::from([(
-            "4key".to_string(),
-            vec![ReactiveSpritePosition {
-                id: sprite_id.clone(),
-                base_image: Some(base_image.to_string_lossy().into_owned()),
-                poses: vec![SpritePose {
-                    pose_id: pose_id.clone(),
-                    triggers: vec![trigger_id.clone()],
-                    image_override: Some(pose_image.to_string_lossy().into_owned()),
-                    ..SpritePose::default()
-                }],
-                ..ReactiveSpritePosition::default()
-            }],
-        )]);
+        let sprite = pivot_sprite_with_local_images(&base_image, &pose_image);
+        let sprite_id = sprite.id.clone();
+        let pose_id = sprite.poses[0].pose_id.clone();
+        let trigger_id = sprite.poses[0].triggers[0].clone();
+        let sprites = SpritePositions::from([("4key".to_string(), vec![sprite])]);
 
         let (_, _, _, _, exported_sprites, embedded) =
             crate::commands::preset::save::build_preset_image_payload(
@@ -1934,6 +1957,19 @@ mod tests {
             )
             .unwrap();
         assert_eq!(embedded.len(), 2);
+        let exported = &exported_sprites["4key"][0];
+        assert_eq!(
+            exported.reference_natural_size.as_ref().unwrap().source,
+            exported.base_image
+        );
+        assert_eq!(
+            exported.poses[0]
+                .image_override_metrics
+                .as_ref()
+                .unwrap()
+                .source,
+            exported.poses[0].image_override.as_deref().unwrap()
+        );
 
         let preset_bytes = serde_json::to_vec(&PresetFile {
             sprite_positions: Some(exported_sprites),
@@ -1941,6 +1977,9 @@ mod tests {
             ..PresetFile::default()
         })
         .unwrap();
+        let preset_json = std::str::from_utf8(&preset_bytes).unwrap();
+        assert!(!preset_json.contains(base_image.to_string_lossy().as_ref()));
+        assert!(!preset_json.contains(pose_image.to_string_lossy().as_ref()));
         let imported: PresetFile = serde_json::from_slice(&preset_bytes).unwrap();
         let mut imported_sprites = imported.sprite_positions.unwrap();
 
@@ -1959,10 +1998,103 @@ mod tests {
         assert_eq!(restored.id, sprite_id);
         assert_eq!(restored.poses[0].pose_id, pose_id);
         assert_eq!(restored.poses[0].triggers, [trigger_id]);
+        assert_eq!(restored.image_placement, SpriteImagePlacement::Pivot);
         let restored_base = Path::new(restored.base_image.as_deref().unwrap());
         let restored_pose = Path::new(restored.poses[0].image_override.as_deref().unwrap());
+        assert_eq!(
+            restored.reference_natural_size.as_ref().unwrap().source,
+            restored.base_image
+        );
+        assert_eq!(
+            restored.poses[0]
+                .image_override_metrics
+                .as_ref()
+                .unwrap()
+                .source,
+            restored.poses[0].image_override.as_deref().unwrap()
+        );
         assert_eq!(std::fs::read(restored_base).unwrap(), b"base-image");
         assert_eq!(std::fs::read(restored_pose).unwrap(), b"pose-image");
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn pivot_sprite_sources_survive_tab_preset_image_round_trip() {
+        let root = std::env::temp_dir().join(format!(
+            "dmnote-pivot-sprite-tab-preset-round-trip-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let source_dir = root.join("source");
+        let restored_dir = root.join("restored");
+        std::fs::create_dir_all(&source_dir).unwrap();
+        let base_image = source_dir.join("base.png");
+        let pose_image = source_dir.join("pose.png");
+        std::fs::write(&base_image, b"tab-base-image").unwrap();
+        std::fs::write(&pose_image, b"tab-pose-image").unwrap();
+
+        let sprites = SpritePositions::from([(
+            "source-tab".to_string(),
+            vec![pivot_sprite_with_local_images(&base_image, &pose_image)],
+        )]);
+        let (_, _, _, _, exported_sprites, embedded) =
+            crate::commands::preset::save::build_preset_image_payload(
+                &KeyPositions::new(),
+                &StatPositions::new(),
+                &GraphPositions::new(),
+                &KnobPositions::new(),
+                &sprites,
+            )
+            .unwrap();
+        let preset_bytes = serde_json::to_vec(&PresetFile {
+            sprite_positions: Some(exported_sprites),
+            selected_key_type: Some("source-tab".to_string()),
+            embedded_local_images: Some(embedded),
+            ..PresetFile::default()
+        })
+        .unwrap();
+        let preset_json = std::str::from_utf8(&preset_bytes).unwrap();
+        assert!(!preset_json.contains(base_image.to_string_lossy().as_ref()));
+        assert!(!preset_json.contains(pose_image.to_string_lossy().as_ref()));
+
+        let imported: PresetFile = serde_json::from_slice(&preset_bytes).unwrap();
+        let mut imported_sprites = SpritePositions::from([(
+            "target-tab".to_string(),
+            imported.sprite_positions.unwrap()["source-tab"].clone(),
+        )]);
+        restore_preset_local_images_in_dir(
+            &restored_dir,
+            &mut KeyPositions::new(),
+            &mut StatPositions::new(),
+            &mut GraphPositions::new(),
+            &mut KnobPositions::new(),
+            &mut imported_sprites,
+            imported.embedded_local_images.as_deref(),
+        )
+        .unwrap();
+
+        let restored = &imported_sprites["target-tab"][0];
+        assert_eq!(restored.image_placement, SpriteImagePlacement::Pivot);
+        assert_eq!(
+            restored.reference_natural_size.as_ref().unwrap().source,
+            restored.base_image
+        );
+        assert_eq!(
+            restored.poses[0]
+                .image_override_metrics
+                .as_ref()
+                .unwrap()
+                .source,
+            restored.poses[0].image_override.as_deref().unwrap()
+        );
+        assert_eq!(
+            std::fs::read(restored.base_image.as_ref().unwrap()).unwrap(),
+            b"tab-base-image"
+        );
+        assert_eq!(
+            std::fs::read(restored.poses[0].image_override.as_ref().unwrap()).unwrap(),
+            b"tab-pose-image"
+        );
 
         let _ = std::fs::remove_dir_all(root);
     }

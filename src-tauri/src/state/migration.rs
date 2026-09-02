@@ -26,20 +26,22 @@ use crate::{
     defaults::{default_keys, default_positions},
     models::{
         default_missing_note_gradient_multipliers, default_sprite_contact_point,
-        default_sprite_press_duration_ms, default_sprite_transition_ms, normalize_key_slot,
+        default_sprite_press_duration_ms, default_sprite_transition_ms, is_renderable_image_ref,
+        normalize_key_slot, rewrite_coupled_sprite_image_reference,
         scrub_removed_text_outline_fields, AppStoreData, CounterAnimationPreset, CustomCss,
         CustomCssHistoryEntry, CustomFont, CustomJs, CustomTab, FontType, FontWeightRange,
         GradientSpec, GraphPosition, GraphPositions, GraphStatType, GraphType, GridSettings,
         ImageMode, ImageTransform, JsPlugin, KeyCounters, KeyMappings, KeyPosition, KeyPositions,
         KeySlot, KnobPosition, KnobPositions, LayerGroupDef, LayerGroups, NoteSettings,
-        ReactiveSpritePosition, ShortcutsState, SoundLibraryEntry, SpriteAnchor, SpritePositions,
-        SpriteRect, SpriteTransform, StatPosition, StatPositions, StatType, StoredOverlayBounds,
-        TabCss, TabNoteSettings, IMAGE_TRANSFORM_OFFSET_MAX, IMAGE_TRANSFORM_OFFSET_MIN,
-        IMAGE_TRANSFORM_ROTATION_MAX, IMAGE_TRANSFORM_ROTATION_MIN, IMAGE_TRANSFORM_SCALE_MAX,
-        IMAGE_TRANSFORM_SCALE_MIN, POSITION_COLLECTION_FIELDS, SPRITE_PRESS_DURATION_MS_MAX,
-        SPRITE_PRESS_DURATION_MS_MIN, SPRITE_TRANSFORM_OFFSET_MAX, SPRITE_TRANSFORM_OFFSET_MIN,
-        SPRITE_TRANSFORM_ROTATION_MAX, SPRITE_TRANSFORM_ROTATION_MIN, SPRITE_TRANSFORM_SCALE_MAX,
-        SPRITE_TRANSFORM_SCALE_MIN, SPRITE_TRANSITION_MS_MAX,
+        ReactiveSpritePosition, ShortcutsState, SoundLibraryEntry, SpriteAnchor,
+        SpriteImagePlacement, SpritePositions, SpriteRect, SpriteTransform, StatPosition,
+        StatPositions, StatType, StoredOverlayBounds, TabCss, TabNoteSettings,
+        IMAGE_TRANSFORM_OFFSET_MAX, IMAGE_TRANSFORM_OFFSET_MIN, IMAGE_TRANSFORM_ROTATION_MAX,
+        IMAGE_TRANSFORM_ROTATION_MIN, IMAGE_TRANSFORM_SCALE_MAX, IMAGE_TRANSFORM_SCALE_MIN,
+        POSITION_COLLECTION_FIELDS, SPRITE_IMAGE_DIMENSION_MAX, SPRITE_IMAGE_DIMENSION_MIN,
+        SPRITE_PRESS_DURATION_MS_MAX, SPRITE_PRESS_DURATION_MS_MIN, SPRITE_TRANSFORM_OFFSET_MAX,
+        SPRITE_TRANSFORM_OFFSET_MIN, SPRITE_TRANSFORM_ROTATION_MAX, SPRITE_TRANSFORM_ROTATION_MIN,
+        SPRITE_TRANSFORM_SCALE_MAX, SPRITE_TRANSFORM_SCALE_MIN, SPRITE_TRANSITION_MS_MAX,
     },
     services::font_metadata::parse_font_metadata,
 };
@@ -591,10 +593,13 @@ pub(crate) fn migrate_key_images_to_app_data(app_data_dir: &Path, data: &mut App
 
     for sprites in data.sprite_positions.values_mut() {
         for sprite in sprites {
-            changed |= migrate_image_reference_to_app_data(&images_dir, &mut sprite.base_image);
+            changed |= rewrite_coupled_sprite_image_reference(sprite, |image_ref| {
+                migrate_image_reference_to_app_data(&images_dir, image_ref)
+            });
             for pose in &mut sprite.poses {
-                changed |=
-                    migrate_image_reference_to_app_data(&images_dir, &mut pose.image_override);
+                changed |= rewrite_coupled_sprite_image_reference(pose, |image_ref| {
+                    migrate_image_reference_to_app_data(&images_dir, image_ref)
+                });
             }
         }
     }
@@ -631,9 +636,13 @@ pub(crate) fn rehome_foreign_asset_references(
     }
     for sprites in data.sprite_positions.values_mut() {
         for sprite in sprites {
-            changed |= rehome_optional_asset_reference(app_data_dir, &mut sprite.base_image);
+            changed |= rewrite_coupled_sprite_image_reference(sprite, |image_ref| {
+                rehome_optional_asset_reference(app_data_dir, image_ref)
+            });
             for pose in &mut sprite.poses {
-                changed |= rehome_optional_asset_reference(app_data_dir, &mut pose.image_override);
+                changed |= rewrite_coupled_sprite_image_reference(pose, |image_ref| {
+                    rehome_optional_asset_reference(app_data_dir, image_ref)
+                });
             }
         }
     }
@@ -1029,6 +1038,10 @@ pub(crate) fn normalize_sprite_triggers(data: &mut AppStoreData) -> bool {
     for sprite in data.sprite_positions.values_mut().flatten() {
         for pose in &mut sprite.poses {
             changed |= pose.normalize_triggers();
+            if !is_renderable_image_ref(pose.image_override.as_deref()) {
+                changed |= pose.image_pivot.take().is_some();
+                changed |= pose.image_override_metrics.take().is_some();
+            }
         }
     }
     changed
@@ -1145,6 +1158,65 @@ fn repair_sprite_numeric_ranges(data: &mut AppStoreData) -> bool {
         for pose in &mut position.poses {
             repaired |= repair_transform(&mut pose.transform);
             repaired |= repair_anchor(&mut pose.contact_point, default_sprite_contact_point());
+            if let Some(image_pivot) = pose.image_pivot.as_mut() {
+                repaired |= repair_anchor(image_pivot, SpriteAnchor::default());
+            }
+            if pose.image_override_metrics.as_ref().is_some_and(|metrics| {
+                metrics.source.is_empty()
+                    || !(SPRITE_IMAGE_DIMENSION_MIN..=SPRITE_IMAGE_DIMENSION_MAX)
+                        .contains(&metrics.width)
+                    || !(SPRITE_IMAGE_DIMENSION_MIN..=SPRITE_IMAGE_DIMENSION_MAX)
+                        .contains(&metrics.height)
+            }) {
+                pose.image_override_metrics = None;
+                repaired = true;
+            }
+        }
+        if position
+            .reference_natural_size
+            .as_ref()
+            .is_some_and(|reference| {
+                reference.source.as_deref() == Some("")
+                    || !(SPRITE_IMAGE_DIMENSION_MIN..=SPRITE_IMAGE_DIMENSION_MAX)
+                        .contains(&reference.width)
+                    || !(SPRITE_IMAGE_DIMENSION_MIN..=SPRITE_IMAGE_DIMENSION_MAX)
+                        .contains(&reference.height)
+            })
+        {
+            position.reference_natural_size = None;
+            repaired = true;
+        }
+        if position.image_placement == SpriteImagePlacement::Pivot {
+            let base_image = position
+                .base_image
+                .as_deref()
+                .filter(|image_ref| is_renderable_image_ref(Some(image_ref)));
+            let reference_is_stale = match (base_image, position.reference_natural_size.as_ref()) {
+                (Some(base_image), Some(reference)) => {
+                    reference.source.as_deref() != Some(base_image)
+                }
+                (Some(_), None) => true,
+                (None, Some(reference)) => reference.source.is_some(),
+                (None, None) => position
+                    .poses
+                    .iter()
+                    .any(|pose| is_renderable_image_ref(pose.image_override.as_deref())),
+            };
+            let override_metrics_are_stale = position.poses.iter().any(|pose| {
+                pose.image_override
+                    .as_deref()
+                    .filter(|image_ref| is_renderable_image_ref(Some(image_ref)))
+                    .is_some_and(|image_override| {
+                        pose.image_override_metrics
+                            .as_ref()
+                            .is_none_or(|metrics| metrics.source != image_override)
+                    })
+            });
+            if reference_is_stale || override_metrics_are_stale {
+                position.image_placement = SpriteImagePlacement::Box;
+                repaired = true;
+                log::warn!("[Migration] stale sprite pivot metadata downgraded to box placement");
+            }
         }
         repaired
     }
@@ -2437,11 +2509,12 @@ struct LegacyOverlayPosition {
 #[cfg(test)]
 mod tests {
     use super::{
-        load_store_from_path, migrate_local_fonts_to_app_data, migrate_sound_library_enabled,
-        normalize_state, parse_portable_asset_reference, recover_collection_field,
-        recover_key_mapping_entries, rehome_foreign_asset_references, repair_image_transforms,
-        repair_sprite_numeric_ranges, rgba_to_hex, AssetCategory, LEGACY_OVERLAY_HEIGHT,
-        LEGACY_OVERLAY_WIDTH, LEGACY_PANEL_DETACH_ENABLED_KEY,
+        load_store_from_path, migrate_key_images_to_app_data, migrate_local_fonts_to_app_data,
+        migrate_sound_library_enabled, normalize_sprite_triggers, normalize_state,
+        parse_portable_asset_reference, recover_collection_field, recover_key_mapping_entries,
+        rehome_foreign_asset_references, repair_image_transforms, repair_sprite_numeric_ranges,
+        rgba_to_hex, AssetCategory, LEGACY_OVERLAY_HEIGHT, LEGACY_OVERLAY_WIDTH,
+        LEGACY_PANEL_DETACH_ENABLED_KEY,
     };
     use crate::{
         defaults::{default_keys, default_positions},
@@ -2450,9 +2523,11 @@ mod tests {
             GraphPosition, GraphStatType, GraphType, ImageTransform, KeyCounterAlign,
             KeyCounterAlignMode, KeyCounterColor, KeyCounterPlacement, KeyMappings, KeyPosition,
             KeySlot, KnobPosition, LayerGroupDef, NoteColor, OverlayBounds, ReactiveSpritePosition,
-            SlotMatch, SoundLibraryEntry, SpriteAnchor, SpritePose, SpritePositions, SpriteRect,
-            SpriteTransform, StatPosition, StatType, StoredOverlayBounds,
-            StoredOverlayNativePosition, TabCss, TabNoteSettings, POSITION_COLLECTION_FIELDS,
+            SlotMatch, SoundLibraryEntry, SpriteAnchor, SpriteImageMetrics, SpriteImagePlacement,
+            SpritePose, SpritePositions, SpriteRect, SpriteReferenceNaturalSize, SpriteTransform,
+            StatPosition, StatType, StoredOverlayBounds, StoredOverlayNativePosition, TabCss,
+            TabNoteSettings, POSITION_COLLECTION_FIELDS, SPRITE_IMAGE_DIMENSION_MAX,
+            SPRITE_IMAGE_DIMENSION_MIN,
         },
         state::editor::validate_document_transition,
     };
@@ -2483,6 +2558,13 @@ mod tests {
         dimension_max: f64,
     }
 
+    #[derive(Clone, Copy, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct ImageMetricsRangeFixture {
+        dimension_min: u32,
+        dimension_max: u32,
+    }
+
     #[derive(Deserialize)]
     #[serde(rename_all = "camelCase")]
     struct SpriteNumericConstraintFixture {
@@ -2492,8 +2574,10 @@ mod tests {
         anchor: NumericRangeFixture,
         transition_ms: IntegerRangeFixture,
         image_rect: ImageRectRangeFixture,
+        image_metrics: ImageMetricsRangeFixture,
         resize_min_dimension: f64,
         press_duration_ms: IntegerRangeFixture,
+        default_image_placement: SpriteImagePlacement,
     }
 
     fn rehome_test_directory(label: &str) -> std::path::PathBuf {
@@ -6096,6 +6180,15 @@ mod tests {
 
         let fixture: SpriteNumericConstraintFixture =
             serde_json::from_str(SPRITE_CONSTRAINT_FIXTURE).unwrap();
+        assert_eq!(
+            fixture.image_metrics.dimension_min,
+            SPRITE_IMAGE_DIMENSION_MIN
+        );
+        assert_eq!(
+            fixture.image_metrics.dimension_max,
+            SPRITE_IMAGE_DIMENSION_MAX
+        );
+        assert_eq!(fixture.default_image_placement, SpriteImagePlacement::Box);
         let bounded_fields: [BoundedFloatField; 14] = [
             BoundedFloatField {
                 name: "idleTransform.x",
@@ -6275,6 +6368,191 @@ mod tests {
             (field.set)(&mut sprite, field.maximum.checked_add(1).unwrap());
             assert_invalid_then_repaired(&format!("{} above maximum", field.name), sprite);
         }
+    }
+
+    #[test]
+    fn sprite_override_normalization_clears_dependent_pivot_fields() {
+        let mut data = AppStoreData::default();
+        data.sprite_positions.insert(
+            "4key".to_string(),
+            vec![ReactiveSpritePosition {
+                poses: vec![
+                    SpritePose {
+                        image_override: None,
+                        image_pivot: Some(SpriteAnchor { x: 0.2, y: 0.8 }),
+                        image_override_metrics: Some(SpriteImageMetrics {
+                            source: "/images/removed.png".to_string(),
+                            width: 100,
+                            height: 200,
+                        }),
+                        ..SpritePose::default()
+                    },
+                    SpritePose {
+                        image_override: Some("  \t ".to_string()),
+                        image_pivot: Some(SpriteAnchor { x: 0.3, y: 0.7 }),
+                        image_override_metrics: Some(SpriteImageMetrics {
+                            source: "  \t ".to_string(),
+                            width: 100,
+                            height: 200,
+                        }),
+                        ..SpritePose::default()
+                    },
+                ],
+                ..ReactiveSpritePosition::default()
+            }],
+        );
+
+        assert!(normalize_sprite_triggers(&mut data));
+        let poses = &data.sprite_positions["4key"][0].poses;
+        assert_eq!(poses[0].image_pivot, None);
+        assert_eq!(poses[0].image_override_metrics, None);
+        assert_eq!(poses[1].image_override.as_deref(), Some("  \t "));
+        assert_eq!(poses[1].image_pivot, None);
+        assert_eq!(poses[1].image_override_metrics, None);
+        assert!(!normalize_sprite_triggers(&mut data));
+    }
+
+    #[test]
+    fn sprite_pivot_repair_fixes_anchors_and_downgrades_incomplete_metadata() {
+        let valid_reference = SpriteReferenceNaturalSize {
+            source: Some("/images/base.png".to_string()),
+            width: 800,
+            height: 600,
+        };
+        let valid_metrics = SpriteImageMetrics {
+            source: "/images/pose.png".to_string(),
+            width: 320,
+            height: 240,
+        };
+
+        let anchor_repair = ReactiveSpritePosition {
+            image_placement: SpriteImagePlacement::Pivot,
+            base_image: Some("/images/base.png".to_string()),
+            reference_natural_size: Some(valid_reference.clone()),
+            poses: vec![SpritePose {
+                image_override: Some("/images/pose.png".to_string()),
+                image_pivot: Some(SpriteAnchor {
+                    x: f64::NAN,
+                    y: 1.5,
+                }),
+                image_override_metrics: Some(valid_metrics.clone()),
+                ..SpritePose::default()
+            }],
+            ..ReactiveSpritePosition::default()
+        };
+        let (repaired, repaired_anchor) = repair_single_sprite_numeric_ranges(anchor_repair);
+        assert!(repaired);
+        assert_eq!(repaired_anchor.image_placement, SpriteImagePlacement::Pivot);
+        assert_eq!(
+            repaired_anchor.poses[0].image_pivot,
+            Some(SpriteAnchor { x: 0.5, y: 0.5 })
+        );
+
+        let downgrade_cases = [
+            ReactiveSpritePosition {
+                image_placement: SpriteImagePlacement::Pivot,
+                base_image: Some("/images/base.png".to_string()),
+                reference_natural_size: None,
+                ..ReactiveSpritePosition::default()
+            },
+            ReactiveSpritePosition {
+                image_placement: SpriteImagePlacement::Pivot,
+                base_image: Some("/images/base.png".to_string()),
+                reference_natural_size: Some(SpriteReferenceNaturalSize {
+                    source: Some("/images/old.png".to_string()),
+                    ..valid_reference.clone()
+                }),
+                ..ReactiveSpritePosition::default()
+            },
+            ReactiveSpritePosition {
+                image_placement: SpriteImagePlacement::Pivot,
+                reference_natural_size: Some(SpriteReferenceNaturalSize {
+                    source: None,
+                    width: 800,
+                    height: 600,
+                }),
+                poses: vec![SpritePose {
+                    image_override: Some("/images/pose.png".to_string()),
+                    image_override_metrics: None,
+                    ..SpritePose::default()
+                }],
+                ..ReactiveSpritePosition::default()
+            },
+            ReactiveSpritePosition {
+                image_placement: SpriteImagePlacement::Pivot,
+                reference_natural_size: Some(SpriteReferenceNaturalSize {
+                    source: None,
+                    width: 800,
+                    height: 600,
+                }),
+                poses: vec![SpritePose {
+                    image_override: Some("/images/pose.png".to_string()),
+                    image_override_metrics: Some(SpriteImageMetrics {
+                        source: "/images/pose.png".to_string(),
+                        width: 0,
+                        height: 240,
+                    }),
+                    ..SpritePose::default()
+                }],
+                ..ReactiveSpritePosition::default()
+            },
+        ];
+        for sprite in downgrade_cases {
+            let (repaired, sprite) = repair_single_sprite_numeric_ranges(sprite);
+            assert!(repaired);
+            assert_eq!(sprite.image_placement, SpriteImagePlacement::Box);
+        }
+
+        let valid = ReactiveSpritePosition {
+            image_placement: SpriteImagePlacement::Pivot,
+            base_image: Some("/images/base.png".to_string()),
+            reference_natural_size: Some(valid_reference),
+            poses: vec![SpritePose {
+                image_override: Some("/images/pose.png".to_string()),
+                image_override_metrics: Some(valid_metrics),
+                ..SpritePose::default()
+            }],
+            ..ReactiveSpritePosition::default()
+        };
+        let (repaired, valid) = repair_single_sprite_numeric_ranges(valid);
+        assert!(!repaired);
+        assert_eq!(valid.image_placement, SpriteImagePlacement::Pivot);
+    }
+
+    #[test]
+    fn whitespace_sprite_image_refs_follow_renderable_recovery_contract() {
+        let whitespace_only = ReactiveSpritePosition {
+            image_placement: SpriteImagePlacement::Pivot,
+            base_image: Some("   ".to_string()),
+            poses: vec![SpritePose {
+                image_override: Some("\t \n".to_string()),
+                ..SpritePose::default()
+            }],
+            ..ReactiveSpritePosition::default()
+        };
+        let (repaired, whitespace_only) = repair_single_sprite_numeric_ranges(whitespace_only);
+        assert!(!repaired);
+        assert_eq!(whitespace_only.image_placement, SpriteImagePlacement::Pivot);
+        assert_eq!(whitespace_only.base_image.as_deref(), Some("   "));
+        assert_eq!(
+            whitespace_only.poses[0].image_override.as_deref(),
+            Some("\t \n")
+        );
+
+        let stale_reference = ReactiveSpritePosition {
+            image_placement: SpriteImagePlacement::Pivot,
+            base_image: Some("   ".to_string()),
+            reference_natural_size: Some(SpriteReferenceNaturalSize {
+                source: Some("   ".to_string()),
+                width: 100,
+                height: 100,
+            }),
+            ..ReactiveSpritePosition::default()
+        };
+        let (repaired, stale_reference) = repair_single_sprite_numeric_ranges(stale_reference);
+        assert!(repaired);
+        assert_eq!(stale_reference.image_placement, SpriteImagePlacement::Box);
+        assert_eq!(stale_reference.base_image.as_deref(), Some("   "));
     }
 
     #[test]
@@ -6752,6 +7030,136 @@ mod tests {
                 "failed to parse {raw}"
             );
         }
+    }
+
+    #[test]
+    fn sprite_image_migration_rewrites_coupled_metric_sources() {
+        let root = rehome_test_directory("sprite-image-migration");
+        let source_dir = root.join("source");
+        let app_data_dir = root.join("app-data");
+        std::fs::create_dir_all(&source_dir).unwrap();
+        let base_path = source_dir.join("base.png");
+        let override_path = source_dir.join("override.png");
+        std::fs::write(&base_path, b"base-image").unwrap();
+        std::fs::write(&override_path, b"override-image").unwrap();
+        let base_source = base_path.to_string_lossy().into_owned();
+        let override_source = override_path.to_string_lossy().into_owned();
+        let mut data = AppStoreData::default();
+        data.sprite_positions.insert(
+            "4key".to_string(),
+            vec![ReactiveSpritePosition {
+                base_image: Some(base_source.clone()),
+                reference_natural_size: Some(SpriteReferenceNaturalSize {
+                    source: Some(base_source.clone()),
+                    width: 800,
+                    height: 600,
+                }),
+                poses: vec![SpritePose {
+                    image_override: Some(override_source.clone()),
+                    image_override_metrics: Some(SpriteImageMetrics {
+                        source: override_source.clone(),
+                        width: 320,
+                        height: 240,
+                    }),
+                    ..SpritePose::default()
+                }],
+                ..ReactiveSpritePosition::default()
+            }],
+        );
+
+        assert!(migrate_key_images_to_app_data(&app_data_dir, &mut data));
+
+        let sprite = &data.sprite_positions["4key"][0];
+        let migrated_base = sprite.base_image.as_deref().unwrap();
+        let migrated_override = sprite.poses[0].image_override.as_deref().unwrap();
+        assert_ne!(migrated_base, base_source);
+        assert_ne!(migrated_override, override_source);
+        assert!(std::path::Path::new(migrated_base).starts_with(app_data_dir.join("images")));
+        assert!(std::path::Path::new(migrated_override).starts_with(app_data_dir.join("images")));
+        assert_eq!(
+            sprite
+                .reference_natural_size
+                .as_ref()
+                .unwrap()
+                .source
+                .as_deref(),
+            Some(migrated_base)
+        );
+        assert_eq!(
+            sprite.poses[0]
+                .image_override_metrics
+                .as_ref()
+                .unwrap()
+                .source,
+            migrated_override
+        );
+        assert_eq!(std::fs::read(migrated_base).unwrap(), b"base-image");
+        assert_eq!(std::fs::read(migrated_override).unwrap(), b"override-image");
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn sprite_rehome_rewrites_coupled_metric_sources() {
+        let dir = rehome_test_directory("sprite-sources");
+        let images_dir = dir.join("images");
+        std::fs::create_dir_all(&images_dir).unwrap();
+        std::fs::write(images_dir.join("base.png"), b"base-image").unwrap();
+        std::fs::write(images_dir.join("override.png"), b"override-image").unwrap();
+        let foreign_base =
+            r"C:\Users\me\AppData\Roaming\com.dmnote.desktop\images\base.png".to_string();
+        let foreign_override =
+            r"C:\Users\me\AppData\Roaming\com.dmnote.desktop\images\override.png".to_string();
+        let mut data = AppStoreData::default();
+        data.sprite_positions.insert(
+            "4key".to_string(),
+            vec![ReactiveSpritePosition {
+                image_placement: SpriteImagePlacement::Pivot,
+                base_image: Some(foreign_base.clone()),
+                reference_natural_size: Some(SpriteReferenceNaturalSize {
+                    source: Some(foreign_base),
+                    width: 800,
+                    height: 600,
+                }),
+                poses: vec![SpritePose {
+                    image_override: Some(foreign_override.clone()),
+                    image_override_metrics: Some(SpriteImageMetrics {
+                        source: foreign_override,
+                        width: 320,
+                        height: 240,
+                    }),
+                    ..SpritePose::default()
+                }],
+                ..ReactiveSpritePosition::default()
+            }],
+        );
+
+        assert!(rehome_foreign_asset_references(&dir, &mut data));
+
+        let sprite = &data.sprite_positions["4key"][0];
+        assert_eq!(
+            sprite.base_image.as_deref(),
+            Some(images_dir.join("base.png").to_string_lossy().as_ref())
+        );
+        assert_eq!(
+            sprite.reference_natural_size.as_ref().unwrap().source,
+            sprite.base_image
+        );
+        assert_eq!(
+            sprite.poses[0].image_override.as_deref(),
+            Some(images_dir.join("override.png").to_string_lossy().as_ref())
+        );
+        assert_eq!(
+            sprite.poses[0]
+                .image_override_metrics
+                .as_ref()
+                .unwrap()
+                .source,
+            sprite.poses[0].image_override.as_deref().unwrap()
+        );
+        assert!(!rehome_foreign_asset_references(&dir, &mut data));
+
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

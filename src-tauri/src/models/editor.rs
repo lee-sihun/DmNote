@@ -1,4 +1,7 @@
-use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+
+use serde::{de::Error as DeError, Deserialize, Deserializer, Serialize};
+use serde_json::Value;
 
 use super::{
     AppStoreData, GradientSpec, GradientStop, GraphPosition, GraphPositions, GraphType, ImageFit,
@@ -140,7 +143,114 @@ impl EditorDocumentV1 {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SpritePosePatchPresence {
+    image_pivot: bool,
+    image_override_metrics: bool,
+    contact_point: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SpritePositionPatchPresence {
+    image_placement: bool,
+    reference_natural_size: bool,
+    activation: bool,
+    press_duration_ms: bool,
+    poses: Vec<SpritePosePatchPresence>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(transparent)]
+pub(crate) struct SpritePositionsPatchPresence(HashMap<String, Vec<SpritePositionPatchPresence>>);
+
+impl SpritePositionsPatchPresence {
+    fn from_patch_value(value: &Value) -> Option<Self> {
+        let modes = value.get("spritePositions")?.as_object()?;
+        let presence = modes
+            .iter()
+            .map(|(mode, sprites)| {
+                let sprites = sprites
+                    .as_array()
+                    .map(|sprites| {
+                        sprites
+                            .iter()
+                            .map(|sprite| {
+                                let object = sprite.as_object();
+                                let poses = object
+                                    .and_then(|sprite| sprite.get("poses"))
+                                    .and_then(Value::as_array)
+                                    .map(|poses| {
+                                        poses
+                                            .iter()
+                                            .map(|pose| {
+                                                let pose = pose.as_object();
+                                                SpritePosePatchPresence {
+                                                    image_pivot: pose.is_some_and(|pose| {
+                                                        pose.contains_key("imagePivot")
+                                                    }),
+                                                    image_override_metrics: pose.is_some_and(
+                                                        |pose| {
+                                                            pose.contains_key(
+                                                                "imageOverrideMetrics",
+                                                            )
+                                                        },
+                                                    ),
+                                                    contact_point: pose.is_some_and(|pose| {
+                                                        pose.contains_key("contactPoint")
+                                                    }),
+                                                }
+                                            })
+                                            .collect()
+                                    })
+                                    .unwrap_or_default();
+                                SpritePositionPatchPresence {
+                                    image_placement: object.is_some_and(|sprite| {
+                                        sprite.contains_key("imagePlacement")
+                                    }),
+                                    reference_natural_size: object.is_some_and(|sprite| {
+                                        sprite.contains_key("referenceNaturalSize")
+                                    }),
+                                    activation: object
+                                        .is_some_and(|sprite| sprite.contains_key("activation")),
+                                    press_duration_ms: object.is_some_and(|sprite| {
+                                        sprite.contains_key("pressDurationMs")
+                                    }),
+                                    poses,
+                                }
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                (mode.clone(), sprites)
+            })
+            .collect();
+        Some(Self(presence))
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct EditorPatchV1Input {
+    schema_version: u16,
+    #[serde(default)]
+    keys: Option<KeyMappings>,
+    #[serde(default)]
+    key_positions: Option<KeyPositions>,
+    #[serde(default)]
+    stat_positions: Option<StatPositions>,
+    #[serde(default)]
+    graph_positions: Option<GraphPositions>,
+    #[serde(default)]
+    knob_positions: Option<KnobPositions>,
+    #[serde(default)]
+    sprite_positions: Option<SpritePositions>,
+    #[serde(default)]
+    layer_groups: Option<LayerGroups>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EditorPatchV1 {
     pub schema_version: u16,
@@ -158,6 +268,30 @@ pub struct EditorPatchV1 {
     pub sprite_positions: Option<SpritePositions>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub layer_groups: Option<LayerGroups>,
+    #[serde(skip)]
+    pub(crate) sprite_positions_presence: Option<SpritePositionsPatchPresence>,
+}
+
+impl<'de> Deserialize<'de> for EditorPatchV1 {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = Value::deserialize(deserializer)?;
+        let sprite_positions_presence = SpritePositionsPatchPresence::from_patch_value(&value);
+        let input = EditorPatchV1Input::deserialize(value).map_err(D::Error::custom)?;
+        Ok(Self {
+            schema_version: input.schema_version,
+            keys: input.keys,
+            key_positions: input.key_positions,
+            stat_positions: input.stat_positions,
+            graph_positions: input.graph_positions,
+            knob_positions: input.knob_positions,
+            sprite_positions: input.sprite_positions,
+            layer_groups: input.layer_groups,
+            sprite_positions_presence,
+        })
+    }
 }
 
 impl Default for EditorPatchV1 {
@@ -171,6 +305,7 @@ impl Default for EditorPatchV1 {
             knob_positions: None,
             sprite_positions: None,
             layer_groups: None,
+            sprite_positions_presence: None,
         }
     }
 }
@@ -201,6 +336,68 @@ impl EditorPatchV1 {
         .into_iter()
         .filter(|field| self.includes(*field))
         .collect()
+    }
+
+    pub(crate) fn merge_omitted_sprite_fields(&mut self, current: &SpritePositions) {
+        let (Some(candidate), Some(presence)) = (
+            self.sprite_positions.as_mut(),
+            self.sprite_positions_presence.as_ref(),
+        ) else {
+            return;
+        };
+
+        for (mode, candidate_sprites) in candidate {
+            let Some(sprite_presence) = presence.0.get(mode) else {
+                continue;
+            };
+            for (sprite, sprite_presence) in candidate_sprites.iter_mut().zip(sprite_presence) {
+                if sprite.id.is_empty() {
+                    continue;
+                }
+                let Some(current_sprite) = current
+                    .values()
+                    .flatten()
+                    .find(|current_sprite| current_sprite.id == sprite.id)
+                else {
+                    continue;
+                };
+
+                if !sprite_presence.image_placement {
+                    sprite.image_placement = current_sprite.image_placement;
+                }
+                if !sprite_presence.reference_natural_size {
+                    sprite.reference_natural_size = current_sprite.reference_natural_size.clone();
+                }
+                if !sprite_presence.activation {
+                    sprite.activation = current_sprite.activation;
+                }
+                if !sprite_presence.press_duration_ms {
+                    sprite.press_duration_ms = current_sprite.press_duration_ms;
+                }
+
+                for (pose, pose_presence) in sprite.poses.iter_mut().zip(&sprite_presence.poses) {
+                    if pose.pose_id.is_empty() {
+                        continue;
+                    }
+                    let Some(current_pose) = current_sprite
+                        .poses
+                        .iter()
+                        .find(|current_pose| current_pose.pose_id == pose.pose_id)
+                    else {
+                        continue;
+                    };
+                    if !pose_presence.image_pivot {
+                        pose.image_pivot = current_pose.image_pivot;
+                    }
+                    if !pose_presence.image_override_metrics {
+                        pose.image_override_metrics = current_pose.image_override_metrics.clone();
+                    }
+                    if !pose_presence.contact_point {
+                        pose.contact_point = current_pose.contact_point;
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -917,7 +1114,10 @@ pub struct EditorTransactionResult<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{ReactiveSpritePosition, SpritePose};
+    use crate::models::{
+        ReactiveSpritePosition, SpriteActivation, SpriteAnchor, SpriteImageMetrics,
+        SpriteImagePlacement, SpritePose, SpriteReferenceNaturalSize,
+    };
 
     // TS canonical 배열과 공유하는 property 태그 fixture
     const PROPERTY_TAG_FIXTURE: &str =
@@ -987,6 +1187,168 @@ mod tests {
             &serialized,
             "/spritePositions/4key/0",
         );
+    }
+
+    #[test]
+    fn changes_presence_merge_preserves_omitted_existing_sprite_fields() {
+        for schema_version in [EDITOR_SCHEMA_VERSION, EDITOR_COMMIT_SCHEMA_VERSION_V2] {
+            let sprite_id = uuid::Uuid::new_v4().to_string();
+            let pose_id = uuid::Uuid::new_v4().to_string();
+            let current_sprite = ReactiveSpritePosition {
+                id: sprite_id,
+                image_placement: SpriteImagePlacement::Pivot,
+                reference_natural_size: Some(SpriteReferenceNaturalSize {
+                    source: Some("/images/base.png".to_string()),
+                    width: 800,
+                    height: 600,
+                }),
+                activation: SpriteActivation::OnPress,
+                press_duration_ms: 900,
+                poses: vec![SpritePose {
+                    pose_id,
+                    image_override: Some("/images/pose.png".to_string()),
+                    contact_point: SpriteAnchor { x: 0.1, y: 0.9 },
+                    image_pivot: Some(SpriteAnchor { x: 0.2, y: 0.8 }),
+                    image_override_metrics: Some(SpriteImageMetrics {
+                        source: "/images/pose.png".to_string(),
+                        width: 320,
+                        height: 240,
+                    }),
+                    ..SpritePose::default()
+                }],
+                ..ReactiveSpritePosition::default()
+            };
+            let mut current = SpritePositions::new();
+            current.insert("4key".to_string(), vec![current_sprite.clone()]);
+            let mut candidate = current_sprite;
+            candidate.transition_easing = "linear".to_string();
+            let mut raw = serde_json::to_value(EditorPatchV1 {
+                schema_version,
+                sprite_positions: Some(HashMap::from([("4key".to_string(), vec![candidate])])),
+                ..EditorPatchV1::default()
+            })
+            .unwrap();
+            let sprite = raw
+                .pointer_mut("/spritePositions/4key/0")
+                .and_then(Value::as_object_mut)
+                .unwrap();
+            for field in [
+                "imagePlacement",
+                "referenceNaturalSize",
+                "activation",
+                "pressDurationMs",
+            ] {
+                sprite.remove(field);
+            }
+            let pose = sprite["poses"][0].as_object_mut().unwrap();
+            for field in ["imagePivot", "imageOverrideMetrics", "contactPoint"] {
+                pose.remove(field);
+            }
+
+            let mut patch: EditorPatchV1 = serde_json::from_value(raw).unwrap();
+            patch.merge_omitted_sprite_fields(&current);
+            let merged = &patch.sprite_positions.as_ref().unwrap()["4key"][0];
+            let expected = &current["4key"][0];
+            assert_eq!(merged.image_placement, expected.image_placement);
+            assert_eq!(
+                merged.reference_natural_size,
+                expected.reference_natural_size
+            );
+            assert_eq!(merged.activation, expected.activation);
+            assert_eq!(merged.press_duration_ms, expected.press_duration_ms);
+            assert_eq!(merged.poses[0].image_pivot, expected.poses[0].image_pivot);
+            assert_eq!(
+                merged.poses[0].image_override_metrics,
+                expected.poses[0].image_override_metrics
+            );
+            assert_eq!(
+                merged.poses[0].contact_point,
+                expected.poses[0].contact_point
+            );
+            assert_eq!(merged.transition_easing, "linear");
+        }
+    }
+
+    #[test]
+    fn changes_presence_merge_keeps_new_defaults_and_applies_nullable_nulls() {
+        let mut existing = sprite_with_pose();
+        existing.reference_natural_size = Some(SpriteReferenceNaturalSize {
+            source: Some("/images/base.png".to_string()),
+            width: 800,
+            height: 600,
+        });
+        existing.poses[0].image_pivot = Some(SpriteAnchor { x: 0.2, y: 0.8 });
+        existing.poses[0].image_override_metrics = Some(SpriteImageMetrics {
+            source: "/images/pose.png".to_string(),
+            width: 320,
+            height: 240,
+        });
+        let mut current = SpritePositions::new();
+        current.insert("4key".to_string(), vec![existing.clone()]);
+
+        let mut raw = serde_json::to_value(EditorPatchV1 {
+            sprite_positions: Some(HashMap::from([(
+                "4key".to_string(),
+                vec![existing.clone(), sprite_with_pose()],
+            )])),
+            ..EditorPatchV1::default()
+        })
+        .unwrap();
+        let sprites = raw["spritePositions"]["4key"].as_array_mut().unwrap();
+        let existing_raw = sprites[0].as_object_mut().unwrap();
+        existing_raw.insert("referenceNaturalSize".to_string(), Value::Null);
+        let existing_pose = existing_raw["poses"][0].as_object_mut().unwrap();
+        existing_pose.insert("imagePivot".to_string(), Value::Null);
+        existing_pose.insert("imageOverrideMetrics".to_string(), Value::Null);
+        let new_raw = sprites[1].as_object_mut().unwrap();
+        for field in [
+            "imagePlacement",
+            "referenceNaturalSize",
+            "activation",
+            "pressDurationMs",
+        ] {
+            new_raw.remove(field);
+        }
+        let new_pose = new_raw["poses"][0].as_object_mut().unwrap();
+        for field in ["imagePivot", "imageOverrideMetrics", "contactPoint"] {
+            new_pose.remove(field);
+        }
+
+        let mut patch: EditorPatchV1 = serde_json::from_value(raw).unwrap();
+        patch.merge_omitted_sprite_fields(&current);
+        let sprites = &patch.sprite_positions.as_ref().unwrap()["4key"];
+        assert_eq!(sprites[0].reference_natural_size, None);
+        assert_eq!(sprites[0].poses[0].image_pivot, None);
+        assert_eq!(sprites[0].poses[0].image_override_metrics, None);
+        assert_eq!(sprites[1].image_placement, SpriteImagePlacement::Box);
+        assert_eq!(sprites[1].reference_natural_size, None);
+        assert_eq!(sprites[1].activation, SpriteActivation::WhileHeld);
+        assert_eq!(sprites[1].press_duration_ms, 300);
+        assert_eq!(
+            sprites[1].poses[0].contact_point,
+            SpriteAnchor { x: 0.5, y: 1.0 }
+        );
+    }
+
+    #[test]
+    fn changes_presence_rejects_non_nullable_nulls() {
+        let sprite = sprite_with_pose();
+        let raw = serde_json::to_value(EditorPatchV1 {
+            sprite_positions: Some(HashMap::from([("4key".to_string(), vec![sprite])])),
+            ..EditorPatchV1::default()
+        })
+        .unwrap();
+
+        for pointer in [
+            "/spritePositions/4key/0/imagePlacement",
+            "/spritePositions/4key/0/activation",
+            "/spritePositions/4key/0/pressDurationMs",
+            "/spritePositions/4key/0/poses/0/contactPoint",
+        ] {
+            let mut invalid = raw.clone();
+            *invalid.pointer_mut(pointer).unwrap() = Value::Null;
+            assert!(serde_json::from_value::<EditorPatchV1>(invalid).is_err());
+        }
     }
 
     #[test]

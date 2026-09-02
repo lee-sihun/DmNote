@@ -359,4 +359,78 @@ mod tests {
         assert_eq!(wire["details"]["validationCode"], "INVALID_REQUEST_PAYLOAD");
         assert_eq!(wire["retryable"], false);
     }
+
+    #[test]
+    fn nullable_contract_rejects_null_for_non_nullable_sprite_fields() {
+        let sprite = crate::models::ReactiveSpritePosition {
+            poses: vec![crate::models::SpritePose::default()],
+            ..crate::models::ReactiveSpritePosition::default()
+        };
+        let changes = serde_json::json!({
+            "schemaVersion": 1,
+            "spritePositions": { "4key": [sprite] }
+        });
+
+        for pointer in [
+            "/spritePositions/4key/0/imagePlacement",
+            "/spritePositions/4key/0/activation",
+            "/spritePositions/4key/0/pressDurationMs",
+            "/spritePositions/4key/0/poses/0/contactPoint",
+        ] {
+            let mut invalid_changes = changes.clone();
+            *invalid_changes.pointer_mut(pointer).unwrap() = Value::Null;
+            let error = decode_editor_commit_request(serde_json::json!({
+                "baseRevision": 0,
+                "mutationId": uuid::Uuid::new_v4().to_string(),
+                "changes": invalid_changes
+            }))
+            .unwrap_err();
+            assert_eq!(
+                error
+                    .details
+                    .and_then(|details| details.validation_code)
+                    .as_deref(),
+                Some("INVALID_REQUEST_PAYLOAD")
+            );
+        }
+    }
+
+    #[test]
+    fn omitted_and_explicit_sprite_fields_have_distinct_mutation_fingerprints() {
+        let sprite = crate::models::ReactiveSpritePosition {
+            poses: vec![crate::models::SpritePose::default()],
+            ..crate::models::ReactiveSpritePosition::default()
+        };
+        let explicit_changes = serde_json::json!({
+            "schemaVersion": 1,
+            "spritePositions": { "4key": [sprite] }
+        });
+        let mut omitted_changes = explicit_changes.clone();
+        let sprite = omitted_changes
+            .pointer_mut("/spritePositions/4key/0")
+            .and_then(Value::as_object_mut)
+            .unwrap();
+        sprite.remove("imagePlacement");
+        sprite.remove("activation");
+        sprite["poses"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("contactPoint");
+        let mutation_id = uuid::Uuid::new_v4().to_string();
+        let decode = |changes| {
+            decode_editor_commit_request(serde_json::json!({
+                "baseRevision": 0,
+                "mutationId": &mutation_id,
+                "changes": changes
+            }))
+            .unwrap()
+        };
+        let explicit = decode(explicit_changes);
+        let omitted = decode(omitted_changes);
+
+        assert_ne!(
+            crate::state::editor::request_fingerprint(&explicit).unwrap(),
+            crate::state::editor::request_fingerprint(&omitted).unwrap()
+        );
+    }
 }

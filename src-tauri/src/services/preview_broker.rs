@@ -103,6 +103,8 @@ const SPRITE_POSITION_PATCH_FIELDS: &[&str] = &[
     "transitionEasing",
     "imageFit",
     "baseImage",
+    "imagePlacement",
+    "referenceNaturalSize",
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -918,7 +920,13 @@ mod tests {
             "transitionMs": 120,
             "transitionEasing": "ease-out",
             "imageFit": "contain",
-            "baseImage": "/images/base.png"
+            "baseImage": "/images/base.png",
+            "imagePlacement": "pivot",
+            "referenceNaturalSize": {
+                "source": "/images/base.png",
+                "width": 640,
+                "height": 360
+            }
         });
         let request: PreviewPublishRequest = serde_json::from_value(serde_json::json!({
             "schemaVersion": PREVIEW_SCHEMA_VERSION,
@@ -960,6 +968,8 @@ mod tests {
                 "transitionEasing",
                 "imageFit",
                 "baseImage",
+                "imagePlacement",
+                "referenceNaturalSize",
             ]
         );
     }

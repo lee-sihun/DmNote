@@ -3254,8 +3254,9 @@ mod tests {
             EditorFrozenElementV1, EditorFrozenGroupV1, EditorFrozenKeySlotV1, EditorGroupUpdateV1,
             EditorOpResultStatusV1, EditorOpV1, EditorTargetGroupV1, EditorZUpdateV1,
             GraphPosition, GraphStatType, GraphType, KeyPosition, KnobPosition, LayerGroupDef,
-            ReactiveSpritePosition, SpriteAnchor, SpritePose, SpriteRect, SpriteTransform,
-            StatPosition, StatType,
+            ReactiveSpritePosition, SpriteAnchor, SpriteImageMetrics, SpriteImagePlacement,
+            SpritePose, SpriteRect, SpriteReferenceNaturalSize, SpriteTransform, StatPosition,
+            StatType,
         },
         state::native_element_id::{
             backfill_store_element_ids, DUPLICATE_ELEMENT_ID, INVALID_ELEMENT_ID,
@@ -4329,6 +4330,59 @@ mod tests {
         assert_eq!(
             (position.image_rect, position.idle_transform, position.poses,),
             content_before
+        );
+    }
+
+    #[test]
+    fn resize_sprite_preserves_pivot_image_metadata() {
+        let mut position = ReactiveSpritePosition {
+            width: 200.0,
+            height: 100.0,
+            image_placement: SpriteImagePlacement::Pivot,
+            reference_natural_size: Some(SpriteReferenceNaturalSize {
+                source: Some("/images/base.png".to_string()),
+                width: 800,
+                height: 600,
+            }),
+            poses: vec![SpritePose {
+                image_override: Some("/images/pose.png".to_string()),
+                image_pivot: Some(SpriteAnchor { x: 0.2, y: 0.8 }),
+                image_override_metrics: Some(SpriteImageMetrics {
+                    source: "/images/pose.png".to_string(),
+                    width: 320,
+                    height: 240,
+                }),
+                ..SpritePose::default()
+            }],
+            ..ReactiveSpritePosition::default()
+        };
+        let metadata_before = (
+            position.image_placement,
+            position.reference_natural_size.clone(),
+            position.pivot,
+            position.poses[0].image_pivot,
+            position.poses[0].image_override_metrics.clone(),
+        );
+
+        apply_sprite_resize(
+            &mut position,
+            &EditorBoundsV1 {
+                dx: 10.0,
+                dy: 20.0,
+                width: 600.0,
+                height: 250.0,
+            },
+        );
+
+        assert_eq!(
+            (
+                position.image_placement,
+                position.reference_natural_size,
+                position.pivot,
+                position.poses[0].image_pivot,
+                position.poses[0].image_override_metrics.clone(),
+            ),
+            metadata_before
         );
     }
 
