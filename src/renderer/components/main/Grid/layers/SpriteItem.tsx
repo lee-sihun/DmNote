@@ -81,10 +81,17 @@ const SpriteItem = ({
         posePreview.fallbackPose
     : null;
   // 기준점은 회전·배율의 축이자 축 배치의 고정점이라 선택 중에는 늘 보이고,
-  // 기준점 편집 중에는 강조한다
+  // 기준점 편집 중에는 강조한다. 자세 편집 중에는 기즈모가 자세 이동값이 적용된
+  // 축을 그리므로 여기 표식은 숨겨 축이 둘로 보이지 않게 한다
   const pivotEditing = editPreview?.kind === 'pivot';
-  const showPivotMarker = pivotEditing || isSelected;
-  const pivotMarkerPx = anchorPx(position.imageRect, position.pivot);
+  const showPivotMarker =
+    pivotEditing || (isSelected && editPreview?.kind !== 'pose');
+  // 표식 위치는 화면에서 실제로 회전이 일어나는 점 - 축에 기본 자세의 이동값이 더해진다
+  const pivotAxisPx = anchorPx(position.imageRect, position.pivot);
+  const pivotMarkerPx = {
+    x: pivotAxisPx.x + position.idleTransform.x,
+    y: pivotAxisPx.y + position.idleTransform.y,
+  };
 
   // 유실 이미지를 그대로 두면 캔버스에 깨진 아이콘이 박히고, 송출 화면(오버레이)은
   // 폴백을 그려 미리보기가 결과와 어긋난다. 폴백 규칙은 오버레이와 같다.
