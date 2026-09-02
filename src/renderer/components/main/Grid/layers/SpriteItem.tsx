@@ -80,7 +80,10 @@ const SpriteItem = ({
       : position.poses.find((pose) => pose.poseId === posePreview.poseId) ??
         posePreview.fallbackPose
     : null;
-  const showPivotMarker = editPreview?.kind === 'pivot';
+  // 기준점은 회전·배율의 축이자 축 배치의 고정점이라 선택 중에는 늘 보이고,
+  // 기준점 편집 중에는 강조한다
+  const pivotEditing = editPreview?.kind === 'pivot';
+  const showPivotMarker = pivotEditing || isSelected;
   const pivotMarkerPx = anchorPx(position.imageRect, position.pivot);
 
   // 유실 이미지를 그대로 두면 캔버스에 깨진 아이콘이 박히고, 송출 화면(오버레이)은
@@ -236,6 +239,7 @@ const SpriteItem = ({
               )})`,
               pointerEvents: 'none',
               color: 'var(--ui-selection-border)',
+              opacity: pivotEditing ? 1 : 0.55,
             }}
           >
             <svg
