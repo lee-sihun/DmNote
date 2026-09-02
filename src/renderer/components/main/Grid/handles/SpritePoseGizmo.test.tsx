@@ -3,6 +3,7 @@
  * - 노브 드래그가 축 고정 역산으로 preview·commit을 흘리고 마지막 move를 flush한다
  * - 다른 pointerId의 move·up은 무시된다
  * - 세션 종료가 활성 드래그를 취소하고 전역 드래그 락을 돌려놓는다
+ * - undo/redo 반영은 진행 중 드래그를 커밋 없이 취소한다
  */
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -12,6 +13,7 @@ import {
   useSpritePoseGizmoStore,
   type SpritePoseGizmoSession,
 } from '@stores/grid/useSpritePoseGizmoStore';
+import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
 import {
   releaseDragSession,
   tryAcquireDragSession,
@@ -196,7 +198,7 @@ describe('SpritePoseGizmo', () => {
     expect(session.commit).not.toHaveBeenCalled();
   });
 
-  // 리사이즈 착지·undo는 세션을 유지한 채 세대만 올린다. 이때 대기 중이던 마지막
+  // 리사이즈 착지는 세션을 유지한 채 세대만 올린다. 이때 대기 중이던 마지막
   // move를 flush하면 패널이 이미 닫아둔 preview 제스처가 다시 열리고, 커밋만
   // 생략되어 낡은 세션이 남는다
   it('소유권이 무효화되면 대기 move를 버리고 커밋 없이 취소한다', () => {
@@ -257,6 +259,37 @@ describe('SpritePoseGizmo', () => {
       await new Promise((resolve) => window.setTimeout(resolve, 0));
     });
     expect(session.preview).not.toHaveBeenCalled();
+  });
+
+  // undo는 대상(positionId·poseId)도 세대도 바꾸지 않는다. 시작 시점 transform으로
+  // 푼 결과를 up이 그대로 커밋하면 방금 되돌린 저장값이 다시 저장된다
+  it('undo/redo 반영은 진행 중 드래그를 커밋 없이 취소한다', () => {
+    const session = makeSession();
+    render(session);
+
+    pointer('pointerdown', knob()!, { clientX: 50, clientY: 200 });
+    pointer('pointermove', window, { clientX: 200, clientY: 50 });
+    act(() => useCommittedApplyStore.getState().bump('historyUndo'));
+
+    expect(session.cancel).toHaveBeenCalledTimes(1);
+    expect(tryAcquireDragSession()).toBe(true);
+    releaseDragSession();
+
+    pointer('pointerup', window, { clientX: 200, clientY: 50 });
+    expect(session.commit).not.toHaveBeenCalled();
+  });
+
+  it('일반 커밋 echo는 진행 중 드래그를 끊지 않는다', () => {
+    const session = makeSession();
+    render(session);
+
+    pointer('pointerdown', knob()!, { clientX: 50, clientY: 200 });
+    pointer('pointermove', window, { clientX: 200, clientY: 50 });
+    act(() => useCommittedApplyStore.getState().bump('local'));
+
+    expect(session.cancel).not.toHaveBeenCalled();
+    pointer('pointerup', window, { clientX: 200, clientY: 50 });
+    expect(session.commit).toHaveBeenCalledTimes(1);
   });
 
   it('Alt 드래그는 transform 대신 핀 위치를 커밋한다', () => {

@@ -4,6 +4,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import { useSpritePoseGizmoStore } from '@stores/grid/useSpritePoseGizmoStore';
+import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
 import {
   contactWorldPosition,
   solveTransformTowardTarget,
@@ -98,6 +99,17 @@ const SpritePoseGizmo = ({ zoom, panX, panY }: SpritePoseGizmoProps) => {
     if (dragRef.current) cancelDragRef.current?.();
   }, [ownerKey]);
   useEffect(() => () => cancelDragRef.current?.(), []);
+
+  // undo/redo 반영은 대상도 세대도 바꾸지 않아 위 배선에 걸리지 않는다. 그대로 두면
+  // 저장값이 되돌아간 뒤 pointerup이 시작 시점 transform으로 푼 결과를 다시 커밋한다
+  // (GradientAxisHandle과 같은 규칙)
+  const historyTick = useCommittedApplyStore((state) => state.historyTick);
+  const historyTickRef = useRef(historyTick);
+  useEffect(() => {
+    if (historyTickRef.current === historyTick) return;
+    historyTickRef.current = historyTick;
+    if (dragRef.current) cancelDragRef.current?.();
+  }, [historyTick]);
 
   if (!session) {
     if (dragTransform !== null || dragPin !== null) {

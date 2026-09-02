@@ -1,4 +1,4 @@
-import React, { act, createRef } from 'react';
+import React, { act, createRef, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -6,7 +6,11 @@ import { SingleSpritePanel } from './SingleSpritePanel';
 import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useSpriteEditPreviewStore } from '@stores/grid/useSpriteEditPreviewStore';
-import { useSpritePoseGizmoStore } from '@stores/grid/useSpritePoseGizmoStore';
+import {
+  useSpritePoseGizmoStore,
+  type SpritePoseGizmoSession,
+} from '@stores/grid/useSpritePoseGizmoStore';
+import { makeSpritePose } from '@utils/sprite/spriteFixtures';
 import { projectSpriteResize } from '@utils/sprite/resizeProjection';
 import type { CanonicalReactiveSpritePosition } from '@src/types/editor';
 
@@ -1352,6 +1356,106 @@ describe('SingleSpritePanel 자세 편집', () => {
     expect(useSpritePoseGizmoStore.getState().generation).toBeGreaterThan(
       generationBefore,
     );
+  });
+
+  // 기즈모는 드래그 시작 시점 세션을 붙들고 취소를 부르며, 세션 콜백은 ref를 거쳐
+  // 패널의 최신 배선을 읽는다. 아래 두 케이스는 그 취소가 같은 커밋의 passive
+  // effect에서 올 때 이전 렌더·죽은 패널의 handleTransformCancel이 방금 버린 무효
+  // draft를 fallback preview로 되살리지 않는지 본다
+  describe('시작 시점 세션의 취소', () => {
+    const validPose = makeSpritePose({
+      poseId: 'pose-valid',
+      triggers: [KEY_ID_A],
+      transform: { x: 0, y: 0, rotation: 0, scale: 1 },
+    });
+    let capturedSession: SpritePoseGizmoSession | null = null;
+    // 기즈모처럼 트리상 앞에서 passive effect로 시작 시점 세션의 취소를 부르는 탐침
+    const CancelOnTick = ({ tick }: { tick: number }) => {
+      useEffect(() => {
+        if (tick > 0) capturedSession?.cancel();
+      }, [tick]);
+      return null;
+    };
+    const renderWithProbe = (
+      pos: CanonicalReactiveSpritePosition | null,
+      tick: number,
+    ) => {
+      act(() => {
+        root.render(
+          <>
+            <CancelOnTick tick={tick} />
+            {pos ? (
+              <SingleSpritePanel
+                setPanelElement={vi.fn()}
+                panelElement={container}
+                singleSpritePosition={pos}
+                selectedKeyType="4key"
+                isRenaming={false}
+                renameInputRef={createRef<HTMLInputElement>() as never}
+                renameValue=""
+                setRenameValue={vi.fn()}
+                renameCancelledRef={{ current: false }}
+                handleRenameCommit={vi.fn()}
+                handleRenameCancel={vi.fn()}
+                handleRenameStart={vi.fn()}
+                singleScrollRefFor={() => vi.fn()}
+                t={((key: string) => key) as never}
+              />
+            ) : null}
+          </>,
+        );
+      });
+    };
+    // 무효 draft(빈 트리거)와 그 자세의 팝업 - 세션과 fallback preview가 발행된다
+    const openInvalidDraft = () => {
+      const position = spritePosition({ poses: [validPose] });
+      seed(position);
+      renderWithProbe(position, 0);
+      act(() => buttonByText('propertiesPanel.spriteAddPose').click());
+      capturedSession = useSpritePoseGizmoStore.getState().session;
+      expect(capturedSession).not.toBeNull();
+      const draftPoseId = capturedSession!.poseId;
+      expect(useSpriteEditPreviewStore.getState().preview).toMatchObject({
+        kind: 'pose',
+        poseId: draftPoseId,
+        preferFallback: true,
+      });
+      mocks.gestureCancel.mockClear();
+      return draftPoseId;
+    };
+    const previewPoseId = () =>
+      (
+        useSpriteEditPreviewStore.getState().preview as {
+          poseId?: string;
+        } | null
+      )?.poseId;
+
+    it('undo가 draft를 버린 커밋에서 낡은 draft preview를 되살리지 않는다', () => {
+      const draftPoseId = openInvalidDraft();
+
+      // undo가 canonical 자세를 갈아 draft가 버려지는 커밋
+      const undone = spritePosition({
+        poses: [
+          { ...validPose, transform: { x: 4, y: 0, rotation: 0, scale: 1 } },
+        ],
+      });
+      seed(undone);
+      renderWithProbe(undone, 1);
+
+      expect(mocks.gestureCancel).toHaveBeenCalled();
+      expect(previewPoseId()).not.toBe(draftPoseId);
+    });
+
+    it('패널이 내려간 커밋에서는 게스처만 닫고 낡은 draft preview를 발행하지 않는다', () => {
+      openInvalidDraft();
+
+      // 선택 해제 등으로 패널이 언마운트된 커밋 - 기즈모의 세션 소실 effect가
+      // 같은 커밋에서 시작 시점 세션의 cancel을 부른다
+      renderWithProbe(null, 1);
+
+      expect(mocks.gestureCancel).toHaveBeenCalled();
+      expect(useSpriteEditPreviewStore.getState().preview).toBeNull();
+    });
   });
 
   it('박스만 바뀌는 변경은 draft 자세를 건드리지 않는다', async () => {

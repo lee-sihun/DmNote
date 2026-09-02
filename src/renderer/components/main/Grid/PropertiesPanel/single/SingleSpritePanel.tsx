@@ -491,7 +491,9 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
     cancel: () => void;
     commitContactPoint: (point: SpriteAnchor) => void;
   } | null>(null);
-  useEffect(() => {
+  // layout 단계 갱신 - 같은 커밋의 passive effect(기즈모의 undo 취소)가 이전 렌더의
+  // 클로저를 불러 낡은 draft를 preview로 되살리지 않게 한다
+  useLayoutEffect(() => {
     gizmoHandlersRef.current = {
       // 노브 드래그는 축 고정 역산이 x·y까지 이미 정했다 - 핀 고정 보정 미적용
       preview: (next) => previewPosePatch({ transform: next }),
@@ -534,8 +536,19 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
     position.pivot,
     stretchEnabled,
   ]);
+  // 언마운트 뒤에도 기즈모는 드래그 시작 시점 세션을 붙들고 취소를 부른다. 마지막
+  // 렌더의 배선이 남아 있으면 무효 draft를 fallback preview로 다시 발행해 버린 자세가
+  // 캔버스에 남으므로, 게스처만 닫는 배선으로 바꾼 뒤 세션을 내린다
   useLayoutEffect(
-    () => () => useSpritePoseGizmoStore.getState().setSession(null),
+    () => () => {
+      gizmoHandlersRef.current = {
+        preview: () => {},
+        commit: () => {},
+        cancel: () => editGestureController.cancel(),
+        commitContactPoint: () => {},
+      };
+      useSpritePoseGizmoStore.getState().setSession(null);
+    },
     [],
   );
 
