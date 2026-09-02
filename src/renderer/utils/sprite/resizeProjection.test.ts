@@ -20,6 +20,8 @@ const basePosition = () => ({
       poseId: 'pose-1',
       transform: { x: -30, y: 44, rotation: -90, scale: 0.5 },
       contactPoint: { x: 0.5, y: 1 },
+      imagePivot: null,
+      imageOverrideMetrics: null,
     },
   ],
   transitionMs: 90,
