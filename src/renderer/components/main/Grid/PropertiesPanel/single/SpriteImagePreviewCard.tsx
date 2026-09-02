@@ -1,5 +1,10 @@
 import { resolveImageSource } from '@utils/core/imageSource';
 import {
+  isErrorForCurrentSrc,
+  useFailedImageSrcs,
+} from '@hooks/overlay/useFailedImageSrcs';
+import SpriteImagePlaceholder from '@components/main/common/SpriteImagePlaceholder';
+import {
   DEFAULT_SPRITE_IMAGE_FIT,
   type SpriteImageFit,
 } from '@src/types/key/sprites';
@@ -23,6 +28,10 @@ const SpriteImagePreviewCard = ({
   t,
 }: SpriteImagePreviewCardProps) => {
   const imageSrc = resolveImageSource(source);
+  // 유실 이미지는 캔버스 아이템과 같은 자리표시자로 - 깨진 img를 두면 "미설정"과
+  // 구분이 안 되는 빈 카드가 남는다. 초기화 칩은 저장값 기준이라 그대로 지울 수 있다
+  const { failedImageSrcs, markFailed } = useFailedImageSrcs(source);
+  const imageFailed = imageSrc !== null && failedImageSrcs.has(imageSrc);
 
   return (
     <div className="relative w-full h-[76px] rounded-[8px] overflow-hidden group">
@@ -34,7 +43,9 @@ const SpriteImagePreviewCard = ({
             'var(--ui-checker-pattern) center / var(--ui-checker-size) var(--ui-checker-size) repeat',
         }}
       />
-      {imageSrc ? (
+      {imageFailed ? (
+        <SpriteImagePlaceholder color="var(--ui-fg-faint)" />
+      ) : imageSrc ? (
         <img
           key={imageSrc}
           src={imageSrc}
@@ -42,6 +53,10 @@ const SpriteImagePreviewCard = ({
           draggable={false}
           className="absolute inset-0 block w-full h-full pointer-events-none select-none"
           style={{ objectFit: imageFit ?? DEFAULT_SPRITE_IMAGE_FIT }}
+          onError={(event) => {
+            if (!isErrorForCurrentSrc(event.currentTarget, imageSrc)) return;
+            markFailed(imageSrc);
+          }}
         />
       ) : null}
       <button

@@ -1,5 +1,10 @@
 import DuplicateGhostHost from './DuplicateGhostHost';
 import { resolveImageSource } from '@utils/core/imageSource';
+import {
+  isErrorForCurrentSrc,
+  useFailedImageSrcs,
+} from '@hooks/overlay/useFailedImageSrcs';
+import SpriteImagePlaceholder from '@components/main/common/SpriteImagePlaceholder';
 import { computeSpriteImageStyle } from '@utils/sprite/spriteImageStyles';
 import {
   ACTIVITY_AREA_GUIDE_COLOR,
@@ -24,7 +29,12 @@ const SpriteDuplicateGhost = ({
 }: SpriteDuplicateGhostProps) => {
   const width = position.width || DEFAULT_SPRITE_SIZE;
   const height = position.height || DEFAULT_SPRITE_SIZE;
-  const ghostImage = resolveImageSource(position.baseImage);
+  const baseSrc = resolveImageSource(position.baseImage);
+  // 이미지가 없거나 유실됐으면 아이템과 같은 자리표시자 - 놓는 순간 보일 것과 같게
+  const { failedImageSrcs, markFailed } = useFailedImageSrcs(
+    position.baseImage,
+  );
+  const ghostImage = baseSrc && !failedImageSrcs.has(baseSrc) ? baseSrc : null;
 
   return (
     <DuplicateGhostHost
@@ -33,7 +43,7 @@ const SpriteDuplicateGhost = ({
       cursor={cursor}
       dataAttributes={{ 'data-sprite-ghost': 'true' }}
     >
-      {ghostImage && (
+      {ghostImage ? (
         <img
           src={ghostImage}
           alt=""
@@ -47,7 +57,13 @@ const SpriteDuplicateGhost = ({
             pointerEvents: 'none',
             userSelect: 'none',
           }}
+          onError={(event) => {
+            if (!isErrorForCurrentSrc(event.currentTarget, ghostImage)) return;
+            markFailed(ghostImage);
+          }}
         />
+      ) : (
+        <SpriteImagePlaceholder />
       )}
       <div
         data-sprite-activity-guide="true"

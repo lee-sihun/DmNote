@@ -90,4 +90,34 @@ describe('SpriteDuplicateGhost', () => {
     expect(image?.style.left).toBe('10px');
     expect(image?.style.top).toBe('20px');
   });
+
+  it('이미지 로드 실패는 깨진 img 대신 아이템과 같은 자리표시자를 그린다', () => {
+    const ghost = renderGhost();
+    const image = ghost?.querySelector<HTMLImageElement>('img');
+    expect(image).not.toBeNull();
+
+    act(() => {
+      image!.dispatchEvent(new Event('error'));
+    });
+    expect(ghost?.querySelector('img')).toBeNull();
+    expect(
+      ghost?.querySelector('[data-sprite-placeholder="true"]'),
+    ).not.toBeNull();
+  });
+
+  it('기본 이미지가 없으면 자리표시자를 그린다', () => {
+    act(() => {
+      root.render(
+        <SpriteDuplicateGhost
+          position={position({ baseImage: null })}
+          cursor={{ x: 300, y: 200 }}
+          zoom={1}
+        />,
+      );
+    });
+    expect(container.querySelector('img')).toBeNull();
+    expect(
+      container.querySelector('[data-sprite-placeholder="true"]'),
+    ).not.toBeNull();
+  });
 });
