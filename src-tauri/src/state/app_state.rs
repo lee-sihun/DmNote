@@ -64,6 +64,11 @@ use crate::{
 
 const OVERLAY_LABEL: &str = "overlay";
 pub(crate) const PANEL_LABEL: &str = "panel";
+// Windows 창 클래스. OBS 윈도우 캡처는 기본 우선순위에서 같은 클래스의 창을 대체 후보로
+// 잡으므로 창마다 다른 이름을 준다(메인은 tauri.conf.json). OBS 씬에 저장되는 값이라
+// 출시 후 바꾸지 않는다
+const OVERLAY_WINDOW_CLASS: &str = "DmNoteOverlayWindow";
+const PANEL_WINDOW_CLASS: &str = "DmNotePanelWindow";
 const FRONTEND_LIFECYCLE_WINDOW_LABELS: [&str; 2] = ["main", OVERLAY_LABEL];
 // 메인이 window.open을 부르기 직전 arm하고, 이 시간 안에 온 요청만 패널 창으로 인정
 const PANEL_OPEN_ARM_TIMEOUT: Duration = Duration::from_secs(2);
@@ -3625,6 +3630,7 @@ impl AppState {
         )
         .window_features(features)
         .title("DM Note - Panel")
+        .window_classname(PANEL_WINDOW_CLASS)
         // 메인·오버레이와 같은 프레임리스 크롬 - 드래그 영역은 패널 상단 스트립이 담당
         .decorations(false)
         // Windows는 DWM이 실루엣을 소유하므로(windows_window_corners) 모서리 바깥을 비출
@@ -3826,6 +3832,7 @@ impl AppState {
             WebviewUrl::App("overlay/index.html".into()),
         )
         .title("DM Note - Overlay")
+        .window_classname(OVERLAY_WINDOW_CLASS)
         .decorations(false)
         .resizable(false)
         .maximizable(false)
