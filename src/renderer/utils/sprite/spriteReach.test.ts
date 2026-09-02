@@ -60,6 +60,9 @@ const makeSprite = (
   baseImage: 'base.png',
   imageRect: { x: 0, y: 0, width: 200, height: 200 },
   pivot: { x: 0.5, y: 0.5 },
+  imageFit: null,
+  imagePlacement: 'box',
+  referenceNaturalSize: null,
   idleTransform: makeTransform(),
   poses: [],
   transitionEasing: DEFAULT_SPRITE_TRANSITION_EASING,
@@ -577,5 +580,43 @@ describe('easingOvershootExtension', () => {
   it('무효 easing 강등은 도달 여유를 늘리지 않는다', () => {
     expect(easingOvershootExtension('cubic-bezier(2, 0, 0.5, 1)')).toBe(0);
     expect(easingOvershootExtension('wobble')).toBe(0);
+  });
+});
+
+describe('computeSpriteReachAabb pivot 배치', () => {
+  it('자세 이미지의 배치가 상자보다 크면 그만큼 도달 범위가 넓어진다', () => {
+    const reach = computeSpriteReachAabb(
+      makeSprite({
+        imagePlacement: 'pivot',
+        referenceNaturalSize: { source: 'base.png', width: 200, height: 200 },
+        poses: [
+          makeSpritePose({
+            poseId: 'p',
+            triggers: ['p'],
+            transform: makeTransform(),
+            imageOverride: 'hand.png',
+            imageOverrideMetrics: {
+              source: 'hand.png',
+              width: 200,
+              height: 400,
+            },
+            imagePivot: { x: 0.5, y: 1 },
+          }),
+        ],
+      }),
+    );
+    // 기준 이미지는 상자 그대로(0..200), 자세 이미지는 축(100,100) 위로 400px
+    expect(reach).toEqual({ minX: 0, minY: -300, maxX: 200, maxY: 200 });
+  });
+
+  it('원본 크기가 없는 자세는 box 배치로 세어 상자 밖으로 나가지 않는다', () => {
+    const reach = computeSpriteReachAabb(
+      makeSprite({
+        imagePlacement: 'pivot',
+        referenceNaturalSize: { source: 'base.png', width: 200, height: 200 },
+        poses: [makePose('p', {}, 'hand.png')],
+      }),
+    );
+    expect(reach).toEqual({ minX: 0, minY: 0, maxX: 200, maxY: 200 });
   });
 });

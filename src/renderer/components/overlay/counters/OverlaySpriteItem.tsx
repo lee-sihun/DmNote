@@ -14,15 +14,21 @@ import {
   resolveImageSource,
 } from '@utils/core/imageSource';
 import { warmupImageSource } from '@utils/core/imageWarmup';
+import { stableStringify } from '@utils/core/stableStringify';
 import {
   resolveSpriteTarget,
   spriteTriggerIds,
 } from '@utils/sprite/poseResolver';
 import {
+  applySpritePlacementStyle,
   computeSpriteImageStyle,
   hasSpriteTransformOverride,
   spriteTransformToCss,
 } from '@utils/sprite/spriteImageStyles';
+import {
+  placeSpriteVisual,
+  spriteIdleVisual,
+} from '@utils/sprite/spritePlacement';
 import {
   resolveSpriteRenderEasing,
   SPRITE_SAFE_FALLBACK_EASING,
@@ -125,14 +131,20 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
     ? undefined
     : `transform ${position.transitionMs}ms ${renderEasing}`;
 
-  // 실패한 src는 baseImage로 폴백, 그것도 실패면 렌더 제외
+  // 실패한 src는 baseImage로 폴백, 그것도 실패면 렌더 제외.
+  // 배치도 이미지와 한 벌 - 폴백이면 기본 이미지 배치로 함께 돌아간다
   let heldImageSrc = heldTarget
     ? resolveImageSource(heldTarget.imageSrc)
     : null;
+  let heldPlacement = heldTarget
+    ? placeSpriteVisual(position, heldTarget.visual)
+    : null;
   if (heldImageSrc && failedImageSrcs.has(heldImageSrc)) {
     heldImageSrc = baseImageSrc;
+    heldPlacement = placeSpriteVisual(position, spriteIdleVisual(position));
   }
   if (heldImageSrc && failedImageSrcs.has(heldImageSrc)) heldImageSrc = null;
+  const idlePlacement = placeSpriteVisual(position, spriteIdleVisual(position));
 
   // 첫 자세 전환에서 cold decode가 겹치지 않도록 base와 모든 override를 선행 디코드
   const warmupSrcs = useMemo(() => {
@@ -213,6 +225,11 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
       el.removeAttribute('src');
       el.style.visibility = 'hidden';
     }
+    // 재생이 바꾼 rect·축을 최신 문서의 기본 이미지 배치로 되돌린다
+    applySpritePlacementStyle(
+      el,
+      placeSpriteVisual(pos, spriteIdleVisual(pos)),
+    );
   };
 
   // 진행 중 재생 정리 - 세대 무효화로 늦은 콜백까지 차단 (멱등).
@@ -234,6 +251,43 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
       if (el) restoreIdleTransform(el, latestRef.current.position);
     }
   };
+
+  // 재생이 DOM에 직접 쓰는 값(src·rect·축·transform)을 결정하는 문서 내용의 서명.
+  // 문서 복제처럼 내용이 같은 새 identity에는 바뀌지 않는다
+  const visualSignature = useMemo(
+    () =>
+      stableStringify({
+        baseImage: position.baseImage,
+        imageFit: position.imageFit,
+        imageRect: position.imageRect,
+        pivot: position.pivot,
+        imagePlacement: position.imagePlacement,
+        referenceNaturalSize: position.referenceNaturalSize,
+        idleTransform: position.idleTransform,
+        useInlineStyles: position.useInlineStyles,
+        poses: position.poses.map((pose) => [
+          pose.poseId,
+          pose.imageOverride,
+          pose.imagePivot,
+          pose.imageOverrideMetrics,
+        ]),
+      }),
+    [position],
+  );
+  // 재생 중 문서 내용이 바뀌면 React가 idle 스타일 차이만 다시 쓰고 직접 쓴 자세 배치는
+  // 남아, 남은 재생 동안 src·rect·축이 서로 다른 세대로 섞인다. 문서 편집은 재생보다
+  // 드물고 한 탭 재생은 짧으니 진행 중 재생을 끊고 최신 idle 한 벌로 되돌린다
+  const visualSignatureRef = useRef(visualSignature);
+  useEffect(() => {
+    if (visualSignatureRef.current === visualSignature) return;
+    visualSignatureRef.current = visualSignature;
+    if (!isOneShot) return;
+    const playback = playbackRef.current;
+    if (!playback.animation && playback.timer === null) return;
+    const el = imgRef.current;
+    stopPlayback(el);
+    if (el) restoreBaseImage(el);
+  });
 
   useEffect(() => {
     if (!isOneShot) return undefined;
@@ -265,7 +319,12 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
       let baseSrc = resolveImageSource(pos.baseImage);
       if (baseSrc && failed.has(baseSrc)) baseSrc = null;
       let src = resolveImageSource(resolved.imageSrc);
-      if (src && failed.has(src)) src = baseSrc;
+      // 이미지가 기본으로 폴백하면 배치도 기본 이미지 것으로
+      let playbackPlacement = placeSpriteVisual(pos, resolved.visual);
+      if (src && failed.has(src)) {
+        src = baseSrc;
+        playbackPlacement = placeSpriteVisual(pos, spriteIdleVisual(pos));
+      }
 
       const playback = playbackRef.current;
       // 재트리거 소유권 이전 - 이전 재생의 콜백을 떼고 취소한다
@@ -275,11 +334,16 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
       if (src) {
         el.src = src;
         el.style.visibility = '';
+        applySpritePlacementStyle(el, playbackPlacement);
       } else {
         // 재생할 이미지가 없으면 이전 세대의 잔상을 즉시 걷어낸다
         el.removeAttribute('src');
         el.style.visibility = baseSrc ? '' : 'hidden';
         if (baseSrc) el.src = baseSrc;
+        applySpritePlacementStyle(
+          el,
+          placeSpriteVisual(pos, spriteIdleVisual(pos)),
+        );
       }
       const restore = () => {
         if (playbackRef.current.generation !== generation) return;
@@ -403,7 +467,12 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
                 alt=""
                 draggable={false}
                 style={{
-                  ...computeSpriteImageStyle(position, position.idleTransform),
+                  ...computeSpriteImageStyle(
+                    position,
+                    position.idleTransform,
+                    undefined,
+                    idlePlacement,
+                  ),
                   willChange: 'transform',
                   // 기본 이미지가 없으면 재생 순간에만 보인다
                   ...(idleBaseSrc ? {} : { visibility: 'hidden' as const }),
@@ -434,6 +503,7 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
                     position,
                     heldTarget.transform,
                     transitionCss,
+                    heldPlacement ?? undefined,
                   ),
                   willChange: 'transform',
                 }}

@@ -9,6 +9,11 @@ import { resolveImageSource } from '@utils/core/imageSource';
 import { computeSpriteImageStyle } from '@utils/sprite/spriteImageStyles';
 import SpriteImagePlaceholder from '@components/main/common/SpriteImagePlaceholder';
 import { resolvePoseImage } from '@utils/sprite/poseResolver';
+import {
+  placeSpriteVisual,
+  spriteIdleVisual,
+  spritePoseVisual,
+} from '@utils/sprite/spritePlacement';
 import { anchorPx } from '@utils/sprite/spriteGeometry';
 import {
   activityAreaGuideMetrics,
@@ -91,7 +96,15 @@ const SpriteItem = ({
   let imageSrc = resolveImageSource(
     resolvePoseImage(previewPose?.imageOverride, position.baseImage),
   );
-  if (imageSrc && failedImageSrcs.has(imageSrc)) imageSrc = fallbackSrc;
+  // 이미지·원본 크기·축은 한 벌로 움직인다 - 폴백도 기본 이미지 배치로 함께 간다
+  let visual = previewPose
+    ? spritePoseVisual(position, previewPose)
+    : spriteIdleVisual(position);
+  if (imageSrc && failedImageSrcs.has(imageSrc)) {
+    imageSrc = fallbackSrc;
+    visual = spriteIdleVisual(position);
+  }
+  const placement = placeSpriteVisual(position, visual);
 
   const {
     isSelectionMode,
@@ -177,6 +190,8 @@ const SpriteItem = ({
               ...computeSpriteImageStyle(
                 position,
                 previewPose ? previewPose.transform : position.idleTransform,
+                undefined,
+                placement,
               ),
               pointerEvents: 'none',
               userSelect: 'none',

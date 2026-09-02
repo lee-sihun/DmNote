@@ -545,6 +545,24 @@ describe('OverlaySpriteItem onPress', () => {
     expect(img.src).toContain(OVERRIDE_IMAGE);
   });
 
+  it('재생 중 배치 내용이 바뀌면 진행 중 재생을 끊고 기본 이미지·배치로 되돌린다', () => {
+    const sprite = oneShotSprite();
+    render(sprite);
+    const img = imgEl()!;
+    act(() => applyEventKeyState('KeyA', true));
+    expect(img.src).toContain(OVERRIDE_IMAGE);
+
+    // 상자가 바뀌면 React는 idle 스타일 차이만 다시 쓴다 - 직접 쓴 자세 배치가 남지 않게
+    // 재생을 취소하고 한 벌로 복원한다
+    render({
+      ...sprite,
+      imageRect: { ...sprite.imageRect, width: sprite.imageRect.width + 10 },
+    });
+    expect(animations[0].cancelled).toBe(true);
+    expect(img.src).not.toContain(OVERRIDE_IMAGE);
+    expect(img.style.width).toBe(`${sprite.imageRect.width + 10}px`);
+  });
+
   it('트리거의 canonical이 실제로 바뀌면 새 키로 재구독한다', () => {
     const sprite = oneShotSprite();
     render(sprite);

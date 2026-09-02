@@ -11,6 +11,12 @@ import {
 } from '@utils/core/imageSource';
 
 import { DEG_TO_RAD, RAD_TO_DEG } from './spriteGeometry';
+import {
+  spriteIdleVisual,
+  spritePoseVisual,
+  type SpriteVisual,
+  type SpriteVisualSource,
+} from './spritePlacement';
 
 // 평균 벡터 길이가 이보다 작으면 방향이 정의되지 않은 것으로 본다 (정반대 각 조합)
 const DEGENERATE_MEAN_VECTOR_EPSILON = 1e-9;
@@ -18,7 +24,15 @@ const DEGENERATE_MEAN_VECTOR_EPSILON = 1e-9;
 export interface SpriteTargetResolution {
   transform: SpriteTransform;
   imageSrc: string | null;
+  /** 이미지·원본 크기·축 한 벌. 축은 평균하지 않고 이미지를 소유한 자세의 것을 쓴다 */
+  visual: SpriteVisual;
 }
+
+export type SpriteResolutionSource = Pick<
+  ReactiveSpritePosition,
+  'poses' | 'idleTransform'
+> &
+  SpriteVisualSource;
 
 // poseId 코드포인트 사전순, 로케일 무관 고정 순서
 const byPoseId = (a: SpritePose, b: SpritePose): number => {
@@ -122,11 +136,16 @@ export const resolvePoseImage = (
 
 // 눌린 키 집합만 읽는 순수 해석. 눌린 순서, 시각, 이전 상태에 의존하지 않는다
 export const resolveSpriteTarget = (
-  // 도달 범위 계산도 같은 해석을 돌린다 - 전체 위치가 아니라 해석에 쓰는 세 필드만 받는다
-  sprite: Pick<ReactiveSpritePosition, 'poses' | 'idleTransform' | 'baseImage'>,
+  // 도달 범위 계산도 같은 해석을 돌린다 - 전체 위치가 아니라 해석에 쓰는 필드만 받는다
+  sprite: SpriteResolutionSource,
   pressedKeyElementIds: ReadonlySet<string>,
 ): SpriteTargetResolution => {
   const prepared = preparePoses(sprite.poses);
+  const idle = (): SpriteTargetResolution => ({
+    transform: sprite.idleTransform,
+    imageSrc: sprite.baseImage,
+    visual: spriteIdleVisual(sprite),
+  });
 
   // 1단계: 담당 키 중 지금 눌린 것, 담당 밖 키와 죽은 키 id는 여기서 걸러진다
   const active = new Set<string>();
@@ -135,9 +154,7 @@ export const resolveSpriteTarget = (
   }
 
   // 2단계: 활성 키 없음, 저장된 참조 그대로 반환해 identity 보존
-  if (active.size === 0) {
-    return { transform: sprite.idleTransform, imageSrc: sprite.baseImage };
-  }
+  if (active.size === 0) return idle();
 
   // 3단계: triggers 집합이 active와 정확히 같은 pose (순서와 중복 무시)
   const exactPose = prepared.exactByKey.get(triggerSetKey([...active]));
@@ -145,6 +162,7 @@ export const resolveSpriteTarget = (
     return {
       transform: exactPose.transform,
       imageSrc: resolvePoseImage(exactPose.imageOverride, sprite.baseImage),
+      visual: spritePoseVisual(sprite, exactPose),
     };
   }
 
@@ -156,9 +174,7 @@ export const resolveSpriteTarget = (
   }
 
   // 활성 키가 전부 조합 pose에만 속하면 평균 대상이 없다, idle과 동일 처리
-  if (singles.length === 0) {
-    return { transform: sprite.idleTransform, imageSrc: sprite.baseImage };
-  }
+  if (singles.length === 0) return idle();
 
   // 원소 하나의 평균은 자기 자신, 참조 identity 보존
   if (singles.length === 1) {
@@ -166,6 +182,7 @@ export const resolveSpriteTarget = (
     return {
       transform: pose.transform,
       imageSrc: resolvePoseImage(pose.imageOverride, sprite.baseImage),
+      visual: spritePoseVisual(sprite, pose),
     };
   }
 
@@ -193,11 +210,14 @@ export const resolveSpriteTarget = (
       ? singles[0].transform.rotation
       : clampRotation(Math.atan2(sumSin, sumCos) * RAD_TO_DEG);
 
-  // poseId 사전순 첫 imageOverride, 없으면 baseImage
+  // poseId 사전순 첫 imageOverride, 없으면 baseImage. 축·원본 크기도 그 이미지를
+  // 소유한 자세의 것 - 다른 그림의 축을 평균하면 어느 그림도 가리키지 않는다
   let imageSrc = sprite.baseImage;
+  let visual = spriteIdleVisual(sprite);
   for (const pose of singles) {
     if (isRenderableImageRef(pose.imageOverride)) {
       imageSrc = pose.imageOverride;
+      visual = spritePoseVisual(sprite, pose);
       break;
     }
   }
@@ -210,5 +230,6 @@ export const resolveSpriteTarget = (
       scale: sumScale / count,
     },
     imageSrc,
+    visual,
   };
 };

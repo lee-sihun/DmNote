@@ -7,6 +7,10 @@ import {
 import SpriteImagePlaceholder from '@components/main/common/SpriteImagePlaceholder';
 import { computeSpriteImageStyle } from '@utils/sprite/spriteImageStyles';
 import {
+  placeSpriteVisual,
+  spriteIdleVisual,
+} from '@utils/sprite/spritePlacement';
+import {
   ACTIVITY_AREA_GUIDE_COLOR,
   activityAreaGuideMetrics,
 } from '@utils/grid/activityAreaGuide';
@@ -53,6 +57,8 @@ const SpriteDuplicateGhost = ({
             ...computeSpriteImageStyle(
               { ...position, useInlineStyles: true },
               position.idleTransform,
+              undefined,
+              placeSpriteVisual(position, spriteIdleVisual(position)),
             ),
             pointerEvents: 'none',
             userSelect: 'none',

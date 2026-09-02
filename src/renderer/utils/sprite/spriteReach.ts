@@ -13,12 +13,19 @@ import {
 } from './poseResolver';
 
 import { anchorPx } from './spriteGeometry';
+import {
+  placeSpriteVisual,
+  spriteIdleVisual,
+  spritePoseVisual,
+  type SpritePlacement,
+} from './spritePlacement';
 
 // 스프라이트 이미지 도달 범위 계산.
-// 저장된 모든 상태(idle + pose)의 imageRect에 pivot 기준 scale·rotation·offset을
-// 적용한 AABB의 합집합이다. 창 바운즈가 이 값을 포함해야 이미지가 활동 영역을
-// 넘어도 네이티브 창 가장자리에서 잘리지 않는다.
-// 반환 좌표계는 활동 영역(dx/dy) 로컬 기준
+// 저장된 모든 상태(idle + pose)의 이미지 배치에 축 기준 scale·rotation·offset을
+// 적용한 AABB의 합집합이다. box 모드는 배치가 imageRect 하나이고, pivot 모드는
+// 상태마다 배치가 달라 각 배치에 전체 transform 범위를 곱해 보수적으로 합친다.
+// 창 바운즈가 이 값을 포함해야 이미지가 활동 영역을 넘어도 네이티브 창
+// 가장자리에서 잘리지 않는다. 반환 좌표계는 활동 영역(dx/dy) 로컬 기준
 
 export interface SpriteAabb {
   minX: number;
@@ -32,6 +39,9 @@ export type SpriteReachGeometry = Pick<
   | 'baseImage'
   | 'imageRect'
   | 'pivot'
+  | 'imageFit'
+  | 'imagePlacement'
+  | 'referenceNaturalSize'
   | 'idleTransform'
   | 'poses'
   | 'transitionEasing'
@@ -331,10 +341,14 @@ export const computeSpriteReachAabb = (
       : enumerateReachableTargets(sprite, canonicalByTrigger);
 
   let transforms: SpriteTransform[];
+  let placements: SpritePlacement[];
   if (targets) {
     if (!targets.some((target) => isRenderableImageRef(target.imageSrc)))
       return null;
     transforms = targets.map((target) => target.transform);
+    placements = targets.map((target) =>
+      placeSpriteVisual(sprite, target.visual),
+    );
   } else {
     // 폴백도 재생될 수 없는 자세는 빼야 키를 지운 뒤 여유가 회수된다.
     // 선택 가능 판정은 해석기와 같은 전처리에서 파생시켜 규칙이 갈릴 수 없게 한다
@@ -349,6 +363,12 @@ export const computeSpriteReachAabb = (
     transforms = [
       sprite.idleTransform,
       ...reachablePoses.map((pose) => pose.transform),
+    ];
+    placements = [
+      placeSpriteVisual(sprite, spriteIdleVisual(sprite)),
+      ...reachablePoses.map((pose) =>
+        placeSpriteVisual(sprite, spritePoseVisual(sprite, pose)),
+      ),
     ];
   }
 
@@ -365,21 +385,60 @@ export const computeSpriteReachAabb = (
   const rotationsDiffer = transforms.some(
     (t) => t.rotation !== transforms[0].rotation,
   );
+  const rotation = transforms[0].rotation;
 
-  const { imageRect, pivot } = sprite;
-  const { x: pivotX, y: pivotY } = anchorPx(imageRect, pivot);
+  // 같은 배치는 한 번만 계산 - box 모드는 상태 수와 무관하게 배치가 하나다
+  const seen = new Set<string>();
+  let union: SpriteAabb | null = null;
+  for (const placement of placements) {
+    const { rect, pivot } = placement;
+    const key = `${rect.x},${rect.y},${rect.width},${rect.height},${pivot.x},${pivot.y}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const aabb = placementReachAabb(placement, {
+      offsetX,
+      offsetY,
+      scale,
+      rotation,
+      rotationsDiffer,
+    });
+    union = union
+      ? {
+          minX: Math.min(union.minX, aabb.minX),
+          minY: Math.min(union.minY, aabb.minY),
+          maxX: Math.max(union.maxX, aabb.maxX),
+          maxY: Math.max(union.maxY, aabb.maxY),
+        }
+      : aabb;
+  }
+  return union;
+};
+
+interface ReachTransformRanges {
+  offsetX: { lo: number; hi: number };
+  offsetY: { lo: number; hi: number };
+  scale: { lo: number; hi: number };
+  rotation: number;
+  rotationsDiffer: boolean;
+}
+
+// 배치 하나의 AABB - 축 기준 상대 모서리에 transform 범위를 적용한다
+const placementReachAabb = (
+  placement: SpritePlacement,
+  ranges: ReachTransformRanges,
+): SpriteAabb => {
+  const { rect, pivot } = placement;
+  const { offsetX, offsetY, scale } = ranges;
+  const { x: pivotX, y: pivotY } = anchorPx(rect, pivot);
   // pivot 기준 상대 좌표 네 모서리
   const corners: Array<[number, number]> = [
-    [imageRect.x - pivotX, imageRect.y - pivotY],
-    [imageRect.x + imageRect.width - pivotX, imageRect.y - pivotY],
-    [imageRect.x - pivotX, imageRect.y + imageRect.height - pivotY],
-    [
-      imageRect.x + imageRect.width - pivotX,
-      imageRect.y + imageRect.height - pivotY,
-    ],
+    [rect.x - pivotX, rect.y - pivotY],
+    [rect.x + rect.width - pivotX, rect.y - pivotY],
+    [rect.x - pivotX, rect.y + rect.height - pivotY],
+    [rect.x + rect.width - pivotX, rect.y + rect.height - pivotY],
   ];
 
-  if (rotationsDiffer) {
+  if (ranges.rotationsDiffer) {
     // 상태 간 회전이 다르면 전환 중간 각의 AABB가 양 끝 AABB를 벗어날 수 있다.
     // pivot에서 최원점까지 반경의 원을 상한으로 각 offset 위치에 적용해 합집합
     let radius = 0;
@@ -397,7 +456,7 @@ export const computeSpriteReachAabb = (
 
   // 회전 동일: CSS rotate와 같은 방향(y축 아래, 양수 시계방향)으로 모서리 변환.
   // 모서리 좌표는 scale·offset에 선형이라 극단값 조합만 보면 된다
-  const angle = transforms[0].rotation * (Math.PI / 180);
+  const angle = ranges.rotation * (Math.PI / 180);
   const cos = Math.cos(angle);
   const sin = Math.sin(angle);
   let cornerXLo = Infinity;

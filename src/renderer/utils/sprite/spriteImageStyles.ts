@@ -5,6 +5,8 @@ import {
   type SpriteTransform,
 } from '@src/types/key/sprites';
 
+import type { SpritePlacement } from './spritePlacement';
+
 // 자세 변환의 CSS 표현. transform-origin은 pivot이 맡으므로 여기서는
 // translate → rotate → scale 순서만 고정한다
 export const spriteTransformToCss = (transform: SpriteTransform): string =>
@@ -20,22 +22,26 @@ type SpriteImageStyleSource = Pick<
 // 배치·기준점은 항상 인라인, 외관 채널(object-fit·transform·transition)은
 // 기본 모드에서 CSS 변수로 실어 전역 :where 규칙이 소비한다. 사용자 CSS가
 // !important 없이 이기고 자세 transition도 유지 (키 이미지 레이어와 동일 구조).
-// 인라인 우선 모드(useInlineStyles=true)만 실제 선언으로 승격
+// 인라인 우선 모드(useInlineStyles=true)만 실제 선언으로 승격.
+// placement를 주면 그 rect·축을 쓴다(pivot 배치) - 없으면 imageRect·기준점(box)
 export const computeSpriteImageStyle = (
   position: SpriteImageStyleSource,
   transform: SpriteTransform,
   transition?: string,
+  placement?: SpritePlacement,
 ): CSSProperties => {
   const useInline = position.useInlineStyles === true;
   const fit = position.imageFit ?? DEFAULT_SPRITE_IMAGE_FIT;
   const transformCss = spriteTransformToCss(transform);
+  const rect = placement?.rect ?? position.imageRect;
+  const pivot = placement?.pivot ?? position.pivot;
   return {
     position: 'absolute',
-    left: `${position.imageRect.x}px`,
-    top: `${position.imageRect.y}px`,
-    width: `${position.imageRect.width}px`,
-    height: `${position.imageRect.height}px`,
-    transformOrigin: `${position.pivot.x * 100}% ${position.pivot.y * 100}%`,
+    left: `${rect.x}px`,
+    top: `${rect.y}px`,
+    width: `${rect.width}px`,
+    height: `${rect.height}px`,
+    transformOrigin: `${pivot.x * 100}% ${pivot.y * 100}%`,
     ...(useInline
       ? {
           objectFit: fit as CSSProperties['objectFit'],
@@ -65,4 +71,19 @@ export const hasSpriteTransformOverride = (el: Element): boolean => {
       .getPropertyValue(SPRITE_TRANSFORM_OVERRIDE_VAR)
       .trim() !== ''
   );
+};
+
+// 재생이 DOM에 직접 쓰는 배치 - onPress는 React 렌더 없이 src와 transform을 바꾸므로
+// 이미지가 바뀔 때 rect·축도 같이 바꾸고, 복원 때 idle 배치로 되돌린다
+export const applySpritePlacementStyle = (
+  el: HTMLElement,
+  placement: SpritePlacement,
+): void => {
+  el.style.left = `${placement.rect.x}px`;
+  el.style.top = `${placement.rect.y}px`;
+  el.style.width = `${placement.rect.width}px`;
+  el.style.height = `${placement.rect.height}px`;
+  el.style.transformOrigin = `${placement.pivot.x * 100}% ${
+    placement.pivot.y * 100
+  }%`;
 };
