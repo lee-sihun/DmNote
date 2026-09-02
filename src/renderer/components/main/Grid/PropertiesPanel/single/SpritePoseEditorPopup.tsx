@@ -1,5 +1,9 @@
 import React from 'react';
 import PickerSurface from '@components/main/Grid/PropertiesPanel/PickerSurface';
+import {
+  PropertyRow,
+  PropertySection,
+} from '@components/main/Grid/PropertiesPanel/PropertyInputs';
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import { NumberInput } from '@components/main/common/NumberInput';
@@ -13,6 +17,7 @@ import {
   type SpriteImageFit,
   type SpriteTransform,
 } from '@src/types/key/sprites';
+import { SECTION_LABEL_CLASS, SECTION_WRAPPER_CLASS } from '@utils/cardRecipes';
 import { clamp } from '@utils/core/clamp';
 import { anchorToPercent, percentToAnchor } from '@utils/sprite/spriteGeometry';
 import SpriteImagePreviewCard from './SpriteImagePreviewCard';
@@ -102,7 +107,8 @@ const SpritePoseEditorPopup: React.FC<SpritePoseEditorPopupProps> = ({
       referenceRef={referenceRef}
       panelElement={panelElement}
       fallbackWidth={172}
-      fallbackHeight={297}
+      // 미리보기 76 + 변환 그리드 50 + 손끝 섹션 127 + 담당 키 23 + 간격·패딩 40
+      fallbackHeight={316}
       cardClassName="flex flex-col p-[8px] gap-[8px] w-[172px] rounded-popup"
       offsetY={-93}
       interactiveRefs={interactiveRefs}
@@ -203,83 +209,83 @@ const SpritePoseEditorPopup: React.FC<SpritePoseEditorPopupProps> = ({
           </div>
         </div>
 
-        {/* 핀(손끝) - 자세 이미지 기준 %. 캔버스 노브·Alt 드래그와 같은 값 */}
-        <div className="flex flex-col gap-[4px]">
-          <span className="text-label text-fg-muted">
+        {/* 손끝(핀) - 자세 이미지 기준 %. 캔버스 노브·Alt 드래그와 같은 값.
+            X·Y 쌍은 라벨을 옆에 둘 폭이 없어 섹션 라벨 + 설정 카드 레시피로 묶고,
+            토글 행은 이미지 피커의 설정 카드와 같은 행 문법을 따른다 */}
+        <div className={SECTION_WRAPPER_CLASS}>
+          <p className={SECTION_LABEL_CLASS}>
             {t('propertiesPanel.spriteContactPoint') || '손끝'}
-          </span>
-          <div className="flex items-center gap-[8px] w-full">
-            <NumberInput
-              value={anchorToPercent(pinControls.contactPoint.x)}
-              onChange={(value) =>
-                pinControls.onContactPointCommit({
-                  ...pinControls.contactPoint,
-                  x: percentToAnchor(value),
-                })
-              }
-              onPreview={(value) =>
-                pinControls.onContactPointPreview({
-                  ...pinControls.contactPoint,
-                  x: percentToAnchor(value),
-                })
-              }
-              onCancel={onTransformCancel}
-              prefix="X"
-              suffix="%"
-              ariaLabel={`${
-                t('propertiesPanel.spriteContactPoint') || '손끝'
-              } X`}
-              width="100%"
-              min={0}
-              max={100}
-              allowDecimal
-              decimalScale={1}
-            />
-            <NumberInput
-              value={anchorToPercent(pinControls.contactPoint.y)}
-              onChange={(value) =>
-                pinControls.onContactPointCommit({
-                  ...pinControls.contactPoint,
-                  y: percentToAnchor(value),
-                })
-              }
-              onPreview={(value) =>
-                pinControls.onContactPointPreview({
-                  ...pinControls.contactPoint,
-                  y: percentToAnchor(value),
-                })
-              }
-              onCancel={onTransformCancel}
-              prefix="Y"
-              suffix="%"
-              ariaLabel={`${
-                t('propertiesPanel.spriteContactPoint') || '손끝'
-              } Y`}
-              width="100%"
-              min={0}
-              max={100}
-              allowDecimal
-              decimalScale={1}
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-label text-fg-muted">
-              {t('propertiesPanel.spritePinLock') || '핀 고정'}
-            </span>
-            <Checkbox
-              checked={pinControls.pinLock}
-              onChange={pinControls.onPinLockToggle}
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-label text-fg-muted">
-              {t('propertiesPanel.spriteStretch') || '뻗기'}
-            </span>
-            <Checkbox
-              checked={pinControls.stretch}
-              onChange={pinControls.onStretchToggle}
-            />
-          </div>
+          </p>
+          <PropertySection>
+            <div className="flex items-center gap-[8px] w-full min-h-[32px]">
+              <NumberInput
+                value={anchorToPercent(pinControls.contactPoint.x)}
+                onChange={(value) =>
+                  pinControls.onContactPointCommit({
+                    ...pinControls.contactPoint,
+                    x: percentToAnchor(value),
+                  })
+                }
+                onPreview={(value) =>
+                  pinControls.onContactPointPreview({
+                    ...pinControls.contactPoint,
+                    x: percentToAnchor(value),
+                  })
+                }
+                onCancel={onTransformCancel}
+                prefix="X"
+                suffix="%"
+                ariaLabel={`${
+                  t('propertiesPanel.spriteContactPoint') || '손끝'
+                } X`}
+                width="100%"
+                min={0}
+                max={100}
+                allowDecimal
+                decimalScale={1}
+              />
+              <NumberInput
+                value={anchorToPercent(pinControls.contactPoint.y)}
+                onChange={(value) =>
+                  pinControls.onContactPointCommit({
+                    ...pinControls.contactPoint,
+                    y: percentToAnchor(value),
+                  })
+                }
+                onPreview={(value) =>
+                  pinControls.onContactPointPreview({
+                    ...pinControls.contactPoint,
+                    y: percentToAnchor(value),
+                  })
+                }
+                onCancel={onTransformCancel}
+                prefix="Y"
+                suffix="%"
+                ariaLabel={`${
+                  t('propertiesPanel.spriteContactPoint') || '손끝'
+                } Y`}
+                width="100%"
+                min={0}
+                max={100}
+                allowDecimal
+                decimalScale={1}
+              />
+            </div>
+            <PropertyRow
+              label={t('propertiesPanel.spritePinLock') || '핀 고정'}
+            >
+              <Checkbox
+                checked={pinControls.pinLock}
+                onChange={pinControls.onPinLockToggle}
+              />
+            </PropertyRow>
+            <PropertyRow label={t('propertiesPanel.spriteStretch') || '뻗기'}>
+              <Checkbox
+                checked={pinControls.stretch}
+                onChange={pinControls.onStretchToggle}
+              />
+            </PropertyRow>
+          </PropertySection>
         </div>
 
         {/* 담당 키 - 미리보기·변환 아래가 정위치, 신규 상태도 카드가 작아 한눈에 보인다 */}

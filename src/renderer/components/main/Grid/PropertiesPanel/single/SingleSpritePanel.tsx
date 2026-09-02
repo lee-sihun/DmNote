@@ -954,6 +954,9 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
                 이름 없는 상태는 '상태 N'으로 표시하고, 미지정·중복은 이름 톤으로 알린다 */}
             <div
               ref={poseListRef}
+              // 분리 창 피커가 폭·좌우 정렬을 맞추는 섹션 앵커 - 자세 행이 팝업 트리거라
+              // 표식이 없으면 카드 고정 폭으로 떨어져 이미지 설정 팝업과 폭이 갈린다
+              data-dmn-section="true"
               className="bg-fill-faint rounded-surface p-[4px] flex flex-col gap-[4px]"
             >
               {displayPoses.map((pose, poseIndex) => {
