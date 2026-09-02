@@ -511,6 +511,46 @@ describe('OverlaySpriteItem onPress', () => {
     expect(img.src).toContain(BASE_IMAGE);
   });
 
+  // 문서 편집 커밋은 coordinator가 문서를 통째로 clone해 모든 스프라이트 객체와
+  // 키 맵이 새 identity를 받는다. 내용이 같으면 재구독하지 않아야 재생이 살아남는다
+  it('같은 내용의 새 키 맵으로 리렌더돼도 진행 중 재생을 끊지 않는다', () => {
+    const sprite = oneShotSprite();
+    render(sprite);
+    const img = imgEl()!;
+    act(() => applyEventKeyState('KeyA', true));
+    expect(img.src).toContain(OVERRIDE_IMAGE);
+
+    render(sprite, new Map(keyCanonicalMap));
+    expect(animations[0].cancelled).toBe(false);
+    expect(img.src).toContain(OVERRIDE_IMAGE);
+  });
+
+  it('문서 복제로 자세 배열 identity가 바뀌어도 진행 중 재생을 끊지 않는다', () => {
+    const sprite = oneShotSprite();
+    render(sprite);
+    const img = imgEl()!;
+    act(() => applyEventKeyState('KeyA', true));
+
+    render(structuredClone(sprite));
+    expect(animations[0].cancelled).toBe(false);
+    expect(img.src).toContain(OVERRIDE_IMAGE);
+  });
+
+  it('트리거의 canonical이 실제로 바뀌면 새 키로 재구독한다', () => {
+    const sprite = oneShotSprite();
+    render(sprite);
+    act(() => applyEventKeyState('KeyA', true));
+    expect(animations).toHaveLength(1);
+    act(() => applyEventKeyState('KeyA', false));
+
+    render(sprite, new Map([['el-a', 'KeyB']]));
+    expect(animations[0].cancelled).toBe(true);
+    act(() => applyEventKeyState('KeyA', true));
+    expect(animations).toHaveLength(1);
+    act(() => applyEventKeyState('KeyB', true));
+    expect(animations).toHaveLength(2);
+  });
+
   it('whileHeld 스프라이트는 edge 채널로 재생되지 않는다', () => {
     render(makeSprite());
     act(() => applyEventKeyState('KeyA', true));
@@ -679,14 +719,8 @@ describe('OverlaySpriteItem onPress', () => {
       'translate(10px, -6px) rotate(15deg) scale(1.2)',
     );
 
-    // 자세 목록 교체로 구독 effect가 다시 돈다 - 타이머만 지우면 각도가 남는다
-    render({
-      ...sprite,
-      poses: [
-        makePose('p1', ['el-a'], { imageOverride: OVERRIDE_IMAGE }),
-        makePose('p2', ['el-a'], { imageOverride: OVERRIDE_IMAGE }),
-      ],
-    });
+    // 트리거 canonical 교체로 구독 effect가 다시 돈다 - 타이머만 지우면 각도가 남는다
+    render(sprite, new Map([['el-a', 'KeyB']]));
     expect(imgEl()!.style.transform).toBe(
       'translate(0px, 0px) rotate(0deg) scale(1)',
     );

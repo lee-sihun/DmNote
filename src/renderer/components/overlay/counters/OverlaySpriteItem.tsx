@@ -165,10 +165,32 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
   });
   // edge 핸들러는 구독 effect보다 자주 갱신되는 값을 ref로 읽는다 (재구독 방지).
   // layout 단계 갱신이라 구독 해제 cleanup도 최신 문서·실패 집합으로 복원한다
-  const latestRef = useRef({ position, failedImageSrcs });
-  useLayoutEffect(() => {
-    latestRef.current = { position, failedImageSrcs };
+  const latestRef = useRef({
+    position,
+    failedImageSrcs,
+    triggerIds,
+    keyCanonicalMap,
   });
+  useLayoutEffect(() => {
+    latestRef.current = {
+      position,
+      failedImageSrcs,
+      triggerIds,
+      keyCanonicalMap,
+    };
+  });
+
+  // 구독 대상 canonical 집합의 내용 시그니처. 문서 clone·키 맵 재생성처럼 내용이
+  // 같은 새 identity로 effect가 다시 돌면 진행 중 재생이 끊기므로 집합이 실제로
+  // 바뀔 때만 재구독한다. 트리거→canonical 짝은 edge 시점에 ref로 읽는다
+  const canonicalKey = useMemo(() => {
+    const canonicals = new Set<string>();
+    for (const id of triggerIds) {
+      const canonical = keyCanonicalMap.get(id);
+      if (canonical) canonicals.add(canonical);
+    }
+    return [...canonicals].sort().join('\n');
+  }, [triggerIds, keyCanonicalMap]);
 
   // 직접 쓴 src·visibility를 현재 문서의 기본 이미지로 되돌린다.
   // 재생 종료·취소, 구독 해제, 로드 실패가 같은 복원 규칙을 쓴다.
@@ -218,22 +240,23 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
     // 모드 전환 시에는 어차피 key 재마운트가 잔상을 걷는다
     const mountedImg = imgRef.current;
 
-    const canonicals = new Set<string>();
-    for (const id of triggerIds) {
-      const canonical = keyCanonicalMap.get(id);
-      if (canonical) canonicals.add(canonical);
-    }
-    if (canonicals.size === 0) return undefined;
+    if (canonicalKey === '') return undefined;
+    const canonicals = canonicalKey.split('\n');
 
     const handleEdge = () => {
       const el = imgRef.current;
       if (!el) return;
-      const { position: pos, failedImageSrcs: failed } = latestRef.current;
+      const {
+        position: pos,
+        failedImageSrcs: failed,
+        triggerIds: ids,
+        keyCanonicalMap: canonicalMap,
+      } = latestRef.current;
 
       // 눌린 집합은 시그널 peek로만 만든다 - 여기서 구독이 생기면 안 된다
       const pressed = new Set<string>();
-      for (const id of triggerIds) {
-        const canonical = keyCanonicalMap.get(id);
+      for (const id of ids) {
+        const canonical = canonicalMap.get(id);
         if (canonical && getKeySignal(canonical).value) pressed.add(id);
       }
       const resolved = resolveSpriteTarget(pos, pressed);
@@ -313,7 +336,7 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
       }
     };
 
-    const unsubscribes = [...canonicals].map((canonical) =>
+    const unsubscribes = canonicals.map((canonical) =>
       subscribeKeyPressEdge(canonical, handleEdge),
     );
     return () => {
@@ -325,7 +348,7 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
       // 노드를 갈아 끼우고, 같은 분기 안 재구독에는 이 복원이 잡는다)
       if (mountedImg) restoreBaseImage(mountedImg);
     };
-  }, [isOneShot, triggerIds, keyCanonicalMap]);
+  }, [isOneShot, canonicalKey]);
 
   if (position.hidden) return null;
 
