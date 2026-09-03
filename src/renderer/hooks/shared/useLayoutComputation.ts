@@ -132,7 +132,7 @@ export function computeLayout(input: LayoutInput) {
       heights.push(pos.dy + (pos.height ?? 60));
     });
 
-    // 스프라이트 활동 영역 전체를 콘텐츠 바운즈에 포함 (계약 §9)
+    // 스프라이트 요소 상자(기본 이미지 상자)를 콘텐츠 바운즈에 포함
     currentSpritePositions.forEach((pos) => {
       if (!pos || pos.hidden) return;
       xs.push(pos.dx);
@@ -190,7 +190,7 @@ export function computeLayout(input: LayoutInput) {
 
   // 창 바운즈 계산 - 스프라이트는 클리핑하지 않으므로 이미지 도달 범위
   // (모든 자세의 회전·확대·오프셋 AABB 합집합, 전환 오버슈트 여유 포함)가
-  // 활동 영역을 넘으면 그만큼 창을 넓혀 네이티브 창 가장자리 잘림을 막는다.
+  // 요소 상자를 넘으면 그만큼 창을 넓혀 네이티브 창 가장자리 잘림을 막는다.
   // 배경 박스는 콘텐츠 바운즈 기준을 유지해 눈에 보이는 크기는 변하지 않는다
   const bounds: Bounds | null = (() => {
     if (!contentBounds) return null;

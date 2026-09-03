@@ -22,10 +22,10 @@ import {
 
 // 스프라이트 이미지 도달 범위 계산.
 // 저장된 모든 상태(idle + pose)의 이미지 배치에 축 기준 scale·rotation·offset을
-// 적용한 AABB의 합집합이다. box 모드는 배치가 imageRect 하나이고, pivot 모드는
-// 상태마다 배치가 달라 각 배치에 전체 transform 범위를 곱해 보수적으로 합친다.
-// 창 바운즈가 이 값을 포함해야 이미지가 활동 영역을 넘어도 네이티브 창
-// 가장자리에서 잘리지 않는다. 반환 좌표계는 활동 영역(dx/dy) 로컬 기준
+// 적용한 AABB의 합집합이다. 기본 이미지는 배치가 요소 상자 하나이고, 크기가 다른
+// 자세 이미지는 배치가 달라 각 배치에 전체 transform 범위를 곱해 보수적으로 합친다.
+// 창 바운즈가 이 값을 포함해야 이미지가 요소 상자를 넘어도 네이티브 창
+// 가장자리에서 잘리지 않는다. 반환 좌표계는 요소 상자(dx/dy) 로컬 기준
 
 export interface SpriteAabb {
   minX: number;
@@ -37,10 +37,9 @@ export interface SpriteAabb {
 export type SpriteReachGeometry = Pick<
   ReactiveSpritePosition,
   | 'baseImage'
-  | 'imageRect'
+  | 'width'
+  | 'height'
   | 'pivot'
-  | 'imageFit'
-  | 'imagePlacement'
   | 'referenceNaturalSize'
   | 'idleTransform'
   | 'poses'
@@ -387,7 +386,7 @@ export const computeSpriteReachAabb = (
   );
   const rotation = transforms[0].rotation;
 
-  // 같은 배치는 한 번만 계산 - box 모드는 상태 수와 무관하게 배치가 하나다
+  // 같은 배치는 한 번만 계산 - 원본 크기를 모르면 상태 수와 무관하게 배치가 하나다
   const seen = new Set<string>();
   let union: SpriteAabb | null = null;
   for (const placement of placements) {

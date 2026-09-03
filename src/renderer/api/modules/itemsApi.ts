@@ -11,7 +11,10 @@ import { toSpriteWireShape } from '@utils/sprite/spriteWireShape';
 import type { LayerGroups } from '@src/types/layerGroups';
 
 // 커밋 성사 여부를 호출자가 판별하는 typed 결과. targetMissing은 무커밋
-type SpritePatchCommitResult = 'committed' | 'targetMissing';
+type SpritePatchCommitResult = 'committed' | 'targetMissing' | 'skipped';
+type SpritePatchGenerator = (
+  current: ReactiveSpritePosition,
+) => Partial<ReactiveSpritePosition> | null;
 
 export const statItemsApi = {
   getPositions: () => invoke<StatItemPositions>('stat_positions_get'),
@@ -68,6 +71,7 @@ export const spriteItemsApi = {
     id: string,
     patch: Partial<ReactiveSpritePosition>,
     gestureId?: string,
+    generatePatch?: SpritePatchGenerator,
   ): Promise<SpritePatchCommitResult> => {
     let outcome: SpritePatchCommitResult = 'targetMissing';
     return enqueueEditorCompatibilityWrite(
@@ -77,12 +81,16 @@ export const spriteItemsApi = {
             const modePositions = base.spritePositions[mode] ?? [];
             const index = modePositions.findIndex((sprite) => sprite.id === id);
             if (index < 0) return null;
+            outcome = 'skipped';
+            const current = modePositions[index];
+            const latestPatch = generatePatch ? generatePatch(current) : patch;
+            if (!latestPatch) return null;
             outcome = 'committed';
             const nextMode = [...modePositions];
             // patch가 명시 null layerName·groupId를 실어 와도 wire 형태 유지
             nextMode[index] = toSpriteWireShape({
-              ...nextMode[index],
-              ...patch,
+              ...current,
+              ...latestPatch,
               id,
             });
             return {

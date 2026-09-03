@@ -1,6 +1,6 @@
-import type { SpriteRect, SpriteTransform } from '@src/types/key/sprites';
-import { SPRITE_CONSTRAINTS } from '@src/types/key/sprites';
 import type { EditorBoundsV1 } from '@src/types/editor';
+import type { SpriteTransform } from '@src/types/key/sprites';
+import { SPRITE_CONSTRAINTS } from '@src/types/key/sprites';
 
 import { clamp } from '@utils/core/clamp';
 
@@ -14,7 +14,6 @@ export interface SpriteResizeProjectable {
   dy: number;
   width: number;
   height: number;
-  imageRect: SpriteRect;
   idleTransform: SpriteTransform;
   poses: ReadonlyArray<{ transform: SpriteTransform }>;
 }
@@ -34,35 +33,16 @@ export const spriteResizeRatio = (prev: number, next: number): number => {
   return Number.isFinite(ratio) ? ratio : 1;
 };
 
-// 필드 종류별 클램프 범위 - transform offset, imageRect 좌표, imageRect 치수
-export type SpriteResizeValueField = 'offset' | 'coord' | 'dimension';
-
-export const scaleSpriteResizeValue = (
+// 자세 이동값(px)의 비례 스케일. 배율 1은 클램프 없는 완전 passthrough -
+// 순수 이동이 검증상 유효한 값을 비트 단위로 보존한다
+export const scaleSpriteResizeOffset = (
   value: number,
   ratio: number,
-  field: SpriteResizeValueField,
 ): number => {
-  // 배율 1은 클램프 없는 완전 passthrough - 순수 이동이 검증상 유효한
-  // 극소 치수(하한 미만)까지 비트 단위로 보존한다
   if (ratio === 1) return value;
-  const { imageRect, offset, resizeMinDimension } = SPRITE_CONSTRAINTS;
-  const min =
-    field === 'offset'
-      ? offset.min
-      : field === 'coord'
-      ? imageRect.coordMin
-      : resizeMinDimension;
-  const max =
-    field === 'offset'
-      ? offset.max
-      : field === 'coord'
-      ? imageRect.coordMax
-      : imageRect.dimensionMax;
-  return clamp(value * ratio, min, max);
+  const { offset } = SPRITE_CONSTRAINTS;
+  return clamp(value * ratio, offset.min, offset.max);
 };
-
-const scaleOffset = (value: number, ratio: number): number =>
-  scaleSpriteResizeValue(value, ratio, 'offset');
 
 const scaleTransform = (
   transform: SpriteTransform,
@@ -70,8 +50,8 @@ const scaleTransform = (
   sy: number,
 ): SpriteTransform => ({
   ...transform,
-  x: scaleOffset(transform.x, sx),
-  y: scaleOffset(transform.y, sy),
+  x: scaleSpriteResizeOffset(transform.x, sx),
+  y: scaleSpriteResizeOffset(transform.y, sy),
 });
 
 export const isSameSpriteBounds = (
@@ -84,9 +64,9 @@ export const isSameSpriteBounds = (
   position.height === bounds.height;
 
 /**
- * bounds 교체 + 이전 bounds 대비 배율로 콘텐츠(px 좌표) 스케일.
- * rotation·scale·pivot·contactPoint는 불변 - 정규화 좌표는 imageRect를
- * 자동 추종한다. bounds가 동일하면 원본을 그대로 반환한다 (noChange)
+ * bounds 교체 + 이전 bounds 대비 배율로 이동값(px)을 스케일.
+ * rotation·scale·pivot은 불변 - 정규화 좌표는 상자를 자동 추종한다.
+ * bounds가 동일하면 원본을 그대로 반환한다 (noChange)
  */
 export const projectSpriteResize = <T extends SpriteResizeProjectable>(
   position: T,
@@ -101,16 +81,6 @@ export const projectSpriteResize = <T extends SpriteResizeProjectable>(
     dy: bounds.dy,
     width: bounds.width,
     height: bounds.height,
-    imageRect: {
-      x: scaleSpriteResizeValue(position.imageRect.x, sx, 'coord'),
-      y: scaleSpriteResizeValue(position.imageRect.y, sy, 'coord'),
-      width: scaleSpriteResizeValue(position.imageRect.width, sx, 'dimension'),
-      height: scaleSpriteResizeValue(
-        position.imageRect.height,
-        sy,
-        'dimension',
-      ),
-    },
     idleTransform: scaleTransform(position.idleTransform, sx, sy),
     poses: position.poses.map((pose) => ({
       ...pose,
@@ -121,8 +91,8 @@ export const projectSpriteResize = <T extends SpriteResizeProjectable>(
 
 /**
  * 리사이즈가 실제로 바꾸는 필드만 뽑은 patch. bounds와 그 배율로 스케일된
- * 콘텐츠가 한 몸이라, eager 커밋과 편집 중 미리보기가 이 함수 하나를 공유해야
- * 놓는 순간 이미지·자세가 튀지 않는다.
+ * 이동값이 한 몸이라, eager 커밋과 편집 중 미리보기가 이 함수 하나를 공유해야
+ * 놓는 순간 자세가 튀지 않는다.
  * position은 반드시 canonical - preview 합성분을 넣으면 이전 프레임의 배율
  * 위에 다시 배율이 얹혀 누적된다
  */
@@ -131,7 +101,7 @@ export const spriteResizePatch = (
   bounds: EditorBoundsV1,
 ): Pick<
   SpriteResizeProjectable,
-  'dx' | 'dy' | 'width' | 'height' | 'imageRect' | 'idleTransform' | 'poses'
+  'dx' | 'dy' | 'width' | 'height' | 'idleTransform' | 'poses'
 > => {
   const projected = projectSpriteResize(position, bounds);
   return {
@@ -139,7 +109,6 @@ export const spriteResizePatch = (
     dy: projected.dy,
     width: projected.width,
     height: projected.height,
-    imageRect: projected.imageRect,
     idleTransform: projected.idleTransform,
     poses: projected.poses,
   };

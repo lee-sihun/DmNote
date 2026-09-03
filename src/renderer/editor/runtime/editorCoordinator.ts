@@ -1146,7 +1146,6 @@ const frozenOpCasUnit = (
       dy: entry.dy,
       width: entry.width,
       height: entry.height,
-      imageRect: entry.imageRect,
       idleTransform: entry.idleTransform,
       poses: entry.poses,
     };

@@ -26,6 +26,7 @@ import {
 import { drainEditorWrites, trackEditorWrite } from './editorWriteBarrier';
 import { getEditSessionTarget } from './editSessionTarget';
 import {
+  markGestureSessionsDiscarded,
   registerGestureSession,
   releaseGestureSession,
   type GestureSessionLifecycle,
@@ -212,13 +213,17 @@ export const editGestureController = {
         intentKey,
         applied ? { ...applied, ...entry.patch } : { ...entry.patch },
       );
-      previewOverlay.applyLocalPatchByIds(
+      const replacedSessionIds = previewOverlay.applyLocalPatchByIds(
         active.sessionId,
         mode,
         [intentKey],
         entry.patch,
         domain,
       );
+      markGestureSessionsDiscarded(replacedSessionIds);
+      replacedSessionIds.forEach((sessionId) => {
+        previewApi.cancel(sessionId).catch(() => {});
+      });
       let pending = active.pendingPatches.get(domain);
       if (!pending) {
         pending = new Map();
@@ -240,6 +245,18 @@ export const editGestureController = {
 
   activeGestureId(): string | null {
     return active?.sessionId ?? null;
+  },
+
+  /** 컨트롤러 소유권을 잃은 로컬 프리뷰 회수 */
+  discardOrphanedLocalPreviews(): boolean {
+    const discarded = previewOverlay.discardLocalSessionsExcept(
+      active?.sessionId ?? null,
+    );
+    markGestureSessionsDiscarded(discarded);
+    discarded.forEach((sessionId) => {
+      previewApi.cancel(sessionId).catch(() => {});
+    });
+    return discarded.length > 0;
   },
 
   /** 커밋 정산: 성공 시 로컬 세션 종료, 실패 시 재시도 상태 복원 */
@@ -286,7 +303,10 @@ export const editGestureController = {
   /** 게스처 취소: 오버레이 제거 + cancel 브로드캐스트, canonical 무변경 */
   cancel(): void {
     const gesture = active;
-    if (!gesture) return;
+    if (!gesture) {
+      this.discardOrphanedLocalPreviews();
+      return;
+    }
     active = null;
     releaseGestureSession(gesture.lifecycle);
     gesture.pendingPatches.clear();
@@ -360,6 +380,7 @@ export const editGestureController = {
 // 선택 대상 변경 시 진행 중 게스처 취소 (barrier)
 // 지문은 구조 직렬화 - 이어붙이기는 플러그인 fullId의 구분자와 충돌해
 // 서로 다른 선택이 같은 지문이 된다. index는 제외해 재정렬만으로는 미발화
+let unsubscribeSelectionChange: (() => void) | null = null;
 if (typeof window !== 'undefined') {
   const identityFingerprint = (
     elements: ReadonlyArray<{ type: string; id: string }>,
@@ -376,11 +397,24 @@ if (typeof window !== 'undefined') {
   let lastSelectionFingerprint = identityFingerprint(
     useGridSelectionStore.getState().selectedElements,
   );
-  useGridSelectionStore.subscribe((state) => {
+  unsubscribeSelectionChange = useGridSelectionStore.subscribe((state) => {
     const nextFingerprint = identityFingerprint(state.selectedElements);
     if (nextFingerprint !== lastSelectionFingerprint) {
       lastSelectionFingerprint = nextFingerprint;
       editGestureController.cancel();
     }
+  });
+}
+
+// 개발 중 모듈 교체에서도 활성 게스처와 로컬 프리뷰를 함께 회수
+const hotModule = (
+  import.meta as ImportMeta & {
+    hot?: { dispose: (callback: () => void) => void };
+  }
+).hot;
+if (hotModule) {
+  hotModule.dispose(() => {
+    unsubscribeSelectionChange?.();
+    editGestureController.cancel();
   });
 }

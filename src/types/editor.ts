@@ -158,7 +158,7 @@ export interface EditorSetBoundsOpV1 {
   bounds: EditorBoundsV1;
 }
 
-// 스프라이트 전용 - bounds 교체와 함께 imageRect·idleTransform·poses의
+// 스프라이트 전용 - bounds 교체와 함께 idleTransform·poses의
 // px 좌표를 이전 bounds 대비 배율로 스케일한다. 배율은 적용 시점 문서의
 // bounds 기준(last-writer-wins) - 드래그 중 외부 patch가 끼어들어도
 // 최종 bounds는 요청 값, 콘텐츠는 최신 상태 기준 비례로 수렴한다
