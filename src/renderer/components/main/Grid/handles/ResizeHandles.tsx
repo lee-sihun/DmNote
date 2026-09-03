@@ -16,6 +16,7 @@ import {
   createRafLatestScheduler,
   type ContinuousInputStrategy,
 } from '@utils/animation/rafLatestScheduler';
+import { SELECTION_BORDER_CENTER } from './selectionOutline';
 
 /**
  * 8방향 리사이즈 핸들을 표시하는 컴포넌트
@@ -79,6 +80,10 @@ interface ResizeHandlesProps {
     height: number;
   }[];
   continuousInputStrategy?: ContinuousInputStrategy;
+  /** 항상 비율 유지 - 그림 레이어(스프라이트)처럼 늘리면 안 되는 요소 */
+  lockAspect?: boolean;
+  /** 다른 표식이 차지한 자리(정규화 좌표) - 그 자리 핸들은 그리지 않는다 */
+  occupiedHandle?: { x: number; y: number } | null;
 }
 
 interface ResizeState {
@@ -263,6 +268,8 @@ const ResizeHandles = ({
   elementId: _elementId, // 스마트 가이드용 요소 ID
   getOtherElements: _getOtherElements, // 스마트 가이드용 다른 요소 가져오기 함수
   continuousInputStrategy = 'frame',
+  lockAspect = false,
+  occupiedHandle = null,
 }: ResizeHandlesProps) => {
   const resizeRef = useRef<ResizeState>({
     isResizing: false,
@@ -343,7 +350,7 @@ const ResizeHandles = ({
       }
 
       const keepAspect =
-        !!moveEvent.shiftKey &&
+        (lockAspect || !!moveEvent.shiftKey) &&
         Number.isFinite(startAspectRatio) &&
         startAspectRatio > 0 &&
         Number.isFinite(startBounds!.width) &&
@@ -472,9 +479,8 @@ const ResizeHandles = ({
   // 프리뷰 bounds가 있으면 프리뷰용으로 사용, 없으면 실제 bounds 사용
   const displayBounds = previewBounds || bounds;
 
-  // 선택 테두리의 중심선 기준 좌표 (테두리 두께 2px의 중심 = 1px)
-  const borderThickness = 2;
-  const borderCenter = borderThickness / 2; // 테두리의 중심선까지의 거리
+  // 선택 테두리의 중심선 기준 좌표 - 핸들은 테두리 선 위에 앉는다
+  const borderCenter = SELECTION_BORDER_CENTER;
   const selectionLeft = displayBounds.x * zoom + panX - borderCenter;
   const selectionTop = displayBounds.y * zoom + panY - borderCenter;
   const selectionWidth = displayBounds.width * zoom + borderCenter * 2;
@@ -482,7 +488,12 @@ const ResizeHandles = ({
 
   return (
     <>
-      {HANDLES.map((handle) => {
+      {HANDLES.filter(
+        (handle) =>
+          !occupiedHandle ||
+          handle.x !== occupiedHandle.x ||
+          handle.y !== occupiedHandle.y,
+      ).map((handle) => {
         // 핸들 중심 위치 계산 (선택 테두리의 가장자리 중앙에 배치)
         const centerX = selectionLeft + selectionWidth * handle.x;
         const centerY = selectionTop + selectionHeight * handle.y;

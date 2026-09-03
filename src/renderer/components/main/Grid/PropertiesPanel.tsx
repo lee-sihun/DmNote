@@ -2109,7 +2109,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // 크기 표시·Mixed 판정 전용. resize가 실제로 조절하는 배열에서 그대로 파생시켜
   // 두 집합이 갈릴 수 없게 한다 - 스타일 집합에는 스프라이트가 없어서 그걸 쓰면
   // 키 60·스프라이트 200이 Mixed 없이 60으로 보이고, 그 값을 확정하면
-  // 스프라이트 imageRect와 모든 자세 오프셋까지 배율이 먹는다
+  // 스프라이트의 모든 자세 오프셋까지 배율이 먹는다
   const getSelectedGeometryPositions = () => {
     const found = selectedBatchGeometryElements.map((el) => {
       const byId = <P extends { id?: string | null }>(

@@ -16,12 +16,18 @@ export interface SpritePoseHandleSession {
   /** 요소 상자와 기준점 - 회전·배율 축 P의 근거 */
   width: number;
   height: number;
+  /** 요소의 공통 논리 원점 */
   pivot: SpriteAnchor;
+  /** 상태 이미지 내부 기준점. 연결 상태에서는 pivot과 같다 */
+  imagePivot: SpriteAnchor;
+  followsBasePivot: boolean;
   /** 자세 이미지의 배치 (요소 로컬 px) - 프레임 폴리곤의 원본 */
   placement: SpritePlacement;
   transform: SpriteTransform;
   preview: (transform: SpriteTransform) => void;
   commit: (transform: SpriteTransform) => void;
+  previewPivot: (pivot: SpriteAnchor, transform: SpriteTransform) => void;
+  commitPivot: (pivot: SpriteAnchor, transform: SpriteTransform) => void;
   cancel: () => void;
 }
 
@@ -40,6 +46,27 @@ interface SpritePoseHandleState {
 const ownerKey = (session: SpritePoseHandleSession): string =>
   `${session.positionId}\n${session.poseId}`;
 
+const sameSessionGeometry = (
+  current: SpritePoseHandleSession,
+  next: SpritePoseHandleSession,
+): boolean =>
+  current.origin.dx === next.origin.dx &&
+  current.origin.dy === next.origin.dy &&
+  current.width === next.width &&
+  current.height === next.height &&
+  current.pivot.x === next.pivot.x &&
+  current.pivot.y === next.pivot.y &&
+  current.imagePivot.x === next.imagePivot.x &&
+  current.imagePivot.y === next.imagePivot.y &&
+  current.placement.rect.x === next.placement.rect.x &&
+  current.placement.rect.y === next.placement.rect.y &&
+  current.placement.rect.width === next.placement.rect.width &&
+  current.placement.rect.height === next.placement.rect.height &&
+  current.transform.x === next.transform.x &&
+  current.transform.y === next.transform.y &&
+  current.transform.rotation === next.transform.rotation &&
+  current.transform.scale === next.transform.scale;
+
 export const useSpritePoseHandleStore = create<SpritePoseHandleState>(
   (set) => ({
     session: null,
@@ -57,7 +84,11 @@ export const useSpritePoseHandleStore = create<SpritePoseHandleState>(
             : {};
         }
         const key = ownerKey(session);
-        return key !== state.lastOwnerKey
+        const geometryChanged =
+          state.session !== null &&
+          key === state.lastOwnerKey &&
+          !sameSessionGeometry(state.session, session);
+        return key !== state.lastOwnerKey || geometryChanged
           ? {
               session,
               lastOwnerKey: key,

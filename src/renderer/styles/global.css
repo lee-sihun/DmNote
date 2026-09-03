@@ -258,7 +258,7 @@ input[type='number']::-webkit-outer-spin-button {
  * 사용자 CSS는 공개 --sprite-* 변수나 일반 선언으로 언제든 덮어쓴다
  */
 :where([data-sprite-element] > img) {
-  object-fit: var(--sprite-fit, var(--dmn-sprite-fit-default, contain));
+  object-fit: fill;
   transform: var(--sprite-transform, var(--dmn-sprite-transform-default, none));
   transition: var(
     --sprite-transition,

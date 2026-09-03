@@ -4,25 +4,19 @@ import {
   useFailedImageSrcs,
 } from '@hooks/overlay/useFailedImageSrcs';
 import SpriteImagePlaceholder from '@components/main/common/SpriteImagePlaceholder';
-import {
-  DEFAULT_SPRITE_IMAGE_FIT,
-  type SpriteImageFit,
-} from '@src/types/key/sprites';
 
 interface SpriteImagePreviewCardProps {
   // 저장된 경로 그대로 - 표시용 URL 변환은 카드가 맡는다
   source: string | null;
-  imageFit: SpriteImageFit | null;
   onPick: () => void;
   onReset: () => void;
   t: (key: string) => string;
 }
 
 // 스프라이트 이미지 미리보기 - 전면 선택 버튼과 형제 초기화 버튼 (중첩 버튼 금지).
-// 기본 이미지와 상태 이미지가 같은 문법을 쓴다
+// 기본 이미지와 상태 이미지가 같은 문법을 쓴다. 썸네일은 비트맵을 그대로 담는 맞춤
 const SpriteImagePreviewCard = ({
   source,
-  imageFit,
   onPick,
   onReset,
   t,
@@ -51,8 +45,7 @@ const SpriteImagePreviewCard = ({
           src={imageSrc}
           alt=""
           draggable={false}
-          className="absolute inset-0 block w-full h-full pointer-events-none select-none"
-          style={{ objectFit: imageFit ?? DEFAULT_SPRITE_IMAGE_FIT }}
+          className="absolute inset-0 block w-full h-full pointer-events-none select-none object-contain"
           onError={(event) => {
             if (!isErrorForCurrentSrc(event.currentTarget, imageSrc)) return;
             markFailed(imageSrc);

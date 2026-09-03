@@ -50,7 +50,10 @@ import SmartGuidesOverlay from '../overlays/SmartGuidesOverlay';
 import MarqueeSelectionOverlay from '../overlays/MarqueeSelectionOverlay';
 import ResizeHandles from '../handles/ResizeHandles';
 import GradientAxisOverlay from '../handles/GradientAxisHandle';
-import SpritePoseGizmo from '../handles/SpritePoseGizmo';
+import SpriteCanvasHandles from '../handles/SpriteCanvasHandles';
+import { SELECTION_BORDER_WIDTH } from '../handles/selectionOutline';
+import { matchSpriteAnchorPreset } from '@utils/sprite/spriteGeometry';
+import { useSpritePoseHandleStore } from '@stores/grid/useSpritePoseHandleStore';
 import { useGradientEditStore } from '@stores/grid/useGradientEditStore';
 import GroupResizeHandles from '../handles/GroupResizeHandles';
 import {
@@ -258,6 +261,10 @@ const Grid = ({
   // 선택 상태 관리
   // 온캔버스 그라데이션 편집 중 여부 — 리사이즈 핸들을 잠시 숨김
   const hasGradientEditSession = useGradientEditStore(
+    (state) => state.session !== null,
+  );
+  // 스프라이트 자세 편집 중 여부 - 자세 프레임이 리사이즈 핸들을 대신한다
+  const hasSpritePoseSession = useSpritePoseHandleStore(
     (state) => state.session !== null,
   );
   const selectedElements = useGridSelectionStore(
@@ -1727,11 +1734,11 @@ const Grid = ({
             key={el.id}
             style={{
               position: 'absolute',
-              left: displayBounds.x * zoom + panX - 2,
-              top: displayBounds.y * zoom + panY - 2,
-              width: displayBounds.width * zoom + 4,
-              height: displayBounds.height * zoom + 4,
-              border: '2px solid var(--ui-selection-border)',
+              left: displayBounds.x * zoom + panX - SELECTION_BORDER_WIDTH,
+              top: displayBounds.y * zoom + panY - SELECTION_BORDER_WIDTH,
+              width: displayBounds.width * zoom + SELECTION_BORDER_WIDTH * 2,
+              height: displayBounds.height * zoom + SELECTION_BORDER_WIDTH * 2,
+              border: `${SELECTION_BORDER_WIDTH}px solid var(--ui-selection-border)`,
               borderRadius: '4px',
               pointerEvents: 'none',
               zIndex: 'var(--z-canvas-selection-outline)',
@@ -1787,6 +1794,23 @@ const Grid = ({
           if (!bounds || !elementId) return null;
 
           if (hasGradientEditSession) return null;
+          // 자세 편집 중에는 자세 프레임이 핸들을 맡는다 - 상자 핸들과 겹치지 않게
+          if (hasSpritePoseSession) return null;
+
+          // 기준점 표식이 프리셋 자리에 앉아 있으면 그 자리 핸들은 표식에 자리를 내준다.
+          // 표식 히트 영역이 핸들을 덮어 어차피 잡히지 않고, 비율 고정이라 다른 핸들로 충분하다
+          const spriteAtRest =
+            el.type === 'sprite'
+              ? spritePositions[selectedKeyType]?.find(
+                  (candidate) => candidate.id === el.id,
+                ) ?? null
+              : null;
+          const occupiedHandle =
+            spriteAtRest &&
+            Math.abs(spriteAtRest.idleTransform.x) < 1e-6 &&
+            Math.abs(spriteAtRest.idleTransform.y) < 1e-6
+              ? matchSpriteAnchorPreset(spriteAtRest.pivot)
+              : null;
 
           return (
             <ResizeHandles
@@ -1800,6 +1824,9 @@ const Grid = ({
               onResizeEnd={handleResizeComplete}
               elementId={elementId}
               getOtherElements={getOtherElements}
+              // 스프라이트는 그림 레이어라 늘리지 않는다
+              lockAspect={el.type === 'sprite'}
+              occupiedHandle={occupiedHandle}
             />
           );
         })()}
@@ -1836,8 +1863,15 @@ const Grid = ({
         panX={panX}
         panY={panY}
       />
-      {/* 온캔버스 스프라이트 자세 기즈모 - 자세 팝업이 열려 있을 때만 표시 */}
-      <SpritePoseGizmo zoom={zoom} panX={panX} panY={panY} />
+      {/* 온캔버스 스프라이트 핸들 - 선택 중엔 기준점, 자세 편집 중엔 자세 프레임 */}
+      <SpriteCanvasHandles
+        spritePositions={spritePositions}
+        selectedElements={selectedElements}
+        selectedKeyType={selectedKeyType}
+        zoom={zoom}
+        panX={panX}
+        panY={panY}
+      />
       {/* 우클릭 리스트 팝업 */}
       <div className="relative">
         <ListPopup

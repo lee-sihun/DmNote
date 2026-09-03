@@ -64,7 +64,7 @@ export function isElementResizable(
   } else if (element.type === 'knob') {
     return true;
   } else if (element.type === 'sprite') {
-    // 리사이즈는 활동 영역 박스만 조정한다 - imageRect·poses는 불변
+    // 리사이즈는 resizeSprite op - 상자와 자세 이동값이 함께 비례 스케일된다
     return true;
   } else if (element.type === 'plugin') {
     const pluginEl = pluginElements.find(

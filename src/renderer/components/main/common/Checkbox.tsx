@@ -9,16 +9,18 @@ import {
 interface CheckboxProps {
   checked: boolean;
   onChange: () => void;
+  ariaLabel?: string;
   commitStrategy?: BooleanCommitStrategy;
   /** 드래그로 노브가 넘어간 쪽까지 반영한 표시 값. 확정 전 값이라 표시 전용으로만 쓴다 */
   onDisplayChange?: (value: boolean) => void;
 }
 
-// 토글 스위치 — 이름은 기존 사용처 호환을 위해 유지.
+// 토글 스위치 - 이름은 기존 사용처 호환을 위해 유지
 // 직접 클릭에서 온 변경만 노브 슬라이드, 외부 상태 변경은 즉시 이동
 const Checkbox = ({
   checked,
   onChange,
+  ariaLabel,
   commitStrategy = 'sync',
   onDisplayChange,
 }: CheckboxProps) => {
@@ -62,6 +64,7 @@ const Checkbox = ({
       ref={trackRef}
       role="switch"
       aria-checked={visualChecked}
+      aria-label={ariaLabel}
       className={`dmn-toggle-track relative w-[28px] h-[16px] rounded-full cursor-pointer transition-colors duration-base ease-out-expo ${
         displayChecked ? 'bg-accent' : 'bg-line-strong hover:bg-white/[0.19]'
       }`}

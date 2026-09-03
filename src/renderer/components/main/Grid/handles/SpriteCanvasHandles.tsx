@@ -2,6 +2,7 @@
 // 렌더 중 ref 대입(세션·지오메트리 최신화)이 React Compiler bailout이라
 // 컴파일 대상에서 빠진다. 조용한 제외와 구분되게 명시한다 (GradientAxisHandle과 같은 이유)
 import React, { useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { useTranslation } from '@contexts/useTranslation';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import {
@@ -23,26 +24,48 @@ import {
 import {
   DEG_TO_RAD,
   RAD_TO_DEG,
-  SPRITE_ANCHOR_PRESETS,
+  isSameSpriteAnchor,
+  isSameSpriteTransform,
   spritePivotPx,
 } from '@utils/sprite/spriteGeometry';
-import { spritePivotChangePatch } from '@utils/sprite/spritePlacement';
+import {
+  compensateTransformForPivotDelta,
+  compensateTransformForPosePivotDelta,
+  isSameSpritePlacement,
+  pivotHandleLocalPoint,
+  pivotForHandleTarget,
+  placeSpriteVisual,
+  posePivotHandleLocalPoint,
+  posePivotForHandleTarget,
+  snapPivotToPreset,
+  snapPosePivotToPreset,
+  spriteIdleVisual,
+  spritePivotChangePatch,
+  spritePoseVisual,
+  type SpritePivotHandleFrame,
+  type SpritePosePivotHandleFrame,
+} from '@utils/sprite/spritePlacement';
 import { clamp } from '@utils/core/clamp';
 import { suppressNextClick } from '@utils/dom/suppressNextClick';
 import { createRafLatestScheduler } from '@utils/animation/rafLatestScheduler';
 import { beginDragCursor, endDragCursor } from '@utils/core/dragCursor';
+import { getActiveElement } from '@utils/dom/activeElement';
+import { isHTMLElementNode } from '@utils/dom/isElementNode';
 import {
   releaseDragSession,
   tryAcquireDragSession,
 } from '@hooks/Grid/dragSession';
+import { SELECTION_BORDER_CENTER } from './selectionOutline';
 
 /**
  * 온캔버스 스프라이트 핸들.
  * 스프라이트가 선택돼 있으면 기준점 십자를 그리고 드래그로 옮긴다 (9점 자석 스냅,
- * Ctrl/Cmd로 해제). 기준점을 옮겨도 그림은 움직이지 않는다 - 자세 이동값을 함께 보정.
+ * Ctrl/Cmd로 해제). 기본 그림과 독립 상태는 제자리에 두고 연결 상태는 새 축을 따른다.
  * 자세 팝업이 열려 있으면 자세 이미지 프레임을 그린다: 본체 드래그 = 위치,
  * 위쪽 노브 = 회전(Shift 15° 스냅), 모서리 = 배율(기준점 중심).
- * 배치는 GradientAxisOverlay와 동일한 비스케일 오버레이 층 - zoom/pan을 직접 계산
+ * 배치는 GradientAxisOverlay와 동일한 비스케일 오버레이 층 - zoom/pan을 직접 계산.
+ * 드래그 계산은 전부 요소 로컬 px에서 하므로 도중에 팬·줌이 바뀌어도 포인터가
+ * 가리키는 자리를 그대로 따라간다
  */
 
 interface SpriteCanvasHandlesProps {
@@ -61,42 +84,94 @@ interface Point {
   y: number;
 }
 
+type PivotDragBase =
+  | {
+      kind: 'base';
+      mode: string;
+      id: string;
+      canonical: ReactiveSpritePosition;
+      frame: SpritePivotHandleFrame;
+      grabOffset: Point;
+    }
+  | {
+      kind: 'pose';
+      mode: string;
+      id: string;
+      canonical: ReactiveSpritePosition;
+      poseId: string;
+      frame: SpritePosePivotHandleFrame;
+      grabOffset: Point;
+    };
+
 interface DragState {
   kind: DragKind;
   pointerId: number;
-  start: Point;
+  /** buttons가 유효했던 이동을 본 뒤 0으로 바뀌면 누락된 up으로 판정 */
+  sawPressedMove: boolean;
+  /** 드래그 시작 포인터 (요소 로컬 px) */
+  startLocal: Point;
   /** 드래그 시작 시점 자세 transform (자세 핸들) */
   baseTransform: SpriteTransform;
-  /** 시작 시점 세션 - 스토어 세션이 먼저 닫혀도 cancel 배선을 유지한다 */
-  session: SpritePoseHandleSession | null;
-  /** 기준점 드래그의 canonical 스프라이트와 문서 좌표 */
-  pivotBase: {
-    mode: string;
-    id: string;
-    canonical: ReactiveSpritePosition;
-    /** 십자가 따라가는 이동값 - 자세 편집 중이면 그 자세의 값 */
-    translate: Point;
-  } | null;
-  /** 회전 축의 화면 좌표와 시작 각도·거리 */
-  axisScreen: Point;
+  /** 회전·배율 축의 로컬 위치 - 시작 시점 이동값이 더해진 P */
+  axisLocal: Point;
   startAngle: number;
   startDistance: number;
+  /** 시작 시점 세션 - 스토어 세션이 먼저 닫혀도 cancel 배선을 유지한다 */
+  session: SpritePoseHandleSession | null;
+  /** 기준점 드래그의 canonical 스프라이트 - 도중에 바뀌면 드래그를 포기한다 */
+  pivotBase: PivotDragBase | null;
+  /** 자석에 붙은 프리셋 - 더 넓은 이탈 반경까지 유지해 경계 떨림 방지 */
+  snappedPivot: SpriteAnchor | null;
+}
+
+interface PendingBasePivotLanding {
+  generation: number;
+  mode: string;
+  id: string;
+  pivot: SpriteAnchor;
 }
 
 const KNOB_HIT_SIZE = 22;
 const PIVOT_SNAP_PX = 8;
+const PIVOT_SNAP_RELEASE_PX = 12;
+// 기준점 표식 - 포커스 브래킷: 가운데 점을 네 귀퉁이 꺾쇠가 감싼다. 꺾쇠는 대각선
+// 방향으로만 뻗어 선택 테두리와 겹치지 않고, 호버·드래그에서 안쪽으로 조여든다
+const PIVOT_HIT_SIZE = 26;
+const PIVOT_CENTER = PIVOT_HIT_SIZE / 2;
+const PIVOT_BRACKET_REACH = 8;
+const PIVOT_BRACKET_ARM = 4.5;
+const PIVOT_BRACKET_ACTIVE_SCALE = 0.8125;
+const PIVOT_DOT_RADIUS = 1.75;
+const PIVOT_DOT_ACTIVE_RADIUS = 2;
+const PIVOT_BRACKETS = (() => {
+  const near = PIVOT_CENTER - PIVOT_BRACKET_REACH;
+  const far = PIVOT_CENTER + PIVOT_BRACKET_REACH;
+  const arm = PIVOT_BRACKET_ARM;
+  return [
+    `M${near} ${near + arm}V${near}H${near + arm}`,
+    `M${far - arm} ${near}H${far}V${near + arm}`,
+    `M${far} ${far - arm}V${far}H${far - arm}`,
+    `M${near + arm} ${far}H${near}V${far - arm}`,
+  ].join('');
+})();
 const ROTATE_KNOB_OFFSET_PX = 22;
 const ROTATE_SNAP_DEG = 15;
 // 축과 겹친 모서리는 배율 방향이 정의되지 않아 잡지 않는다
 const MIN_SCALE_ARM_PX = 2;
-
-const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
 
 // atan2 차(-360~360도)를 최단 호 표현(-180~180]으로 접는다
 const wrapDegrees = (deg: number): number => {
   const wrapped = ((deg + 540) % 360) - 180;
   return wrapped === -180 ? 180 : wrapped;
 };
+
+const findCanonicalSprite = (
+  mode: string,
+  id: string,
+): ReactiveSpritePosition | null =>
+  useSpriteStore
+    .getState()
+    .positions[mode]?.find((candidate) => candidate.id === id) ?? null;
 
 const SpriteCanvasHandles = ({
   spritePositions,
@@ -121,12 +196,24 @@ const SpriteCanvasHandles = ({
   const lastPivotPatchRef = useRef<ReturnType<
     typeof spritePivotChangePatch
   > | null>(null);
+  const lastPosePivotRef = useRef<{
+    pivot: SpriteAnchor;
+    transform: SpriteTransform;
+  } | null>(null);
+  const pendingBasePivotGenerationRef = useRef(0);
+  const [pendingBasePivotLanding, setPendingBasePivotLanding] =
+    useState<PendingBasePivotLanding | null>(null);
 
   // 드래그 중 로컬 표시값 - preview 채널과 별개로 핸들을 즉시 따라가게 한다
   const [dragTransform, setDragTransform] = useState<SpriteTransform | null>(
     null,
   );
   const [dragPivot, setDragPivot] = useState<SpriteAnchor | null>(null);
+  // 기준점 드래그 중 표식이 놓일 보정 transform - 오버레이 재합성을 기다리지 않고
+  // 표식이 포인터 아래에 바로 놓이게 한다 (자세 편집 중엔 세션 값이 보정되지 않아 필수)
+  const [dragPivotTransform, setDragPivotTransform] =
+    useState<SpriteTransform | null>(null);
+  const [pivotHover, setPivotHover] = useState(false);
 
   const selected = selectedElements.length === 1 ? selectedElements[0] : null;
   const sprite =
@@ -136,7 +223,7 @@ const SpriteCanvasHandles = ({
         ) ?? null
       : null;
 
-  // 드래그 도중 휠 팬·줌이 좌표를 움직여도 매 이벤트에서 최신 지오메트리로
+  // 드래그 도중 휠 팬·줌이 좌표를 움직여도 매 이벤트에서 최신 뷰로
   // 재계산한다 (GradientAxisHandle과 같은 이유의 렌더 중 ref 대입)
   const viewRef = useRef({ zoom, panX, panY });
   // eslint-disable-next-line react-hooks/refs
@@ -155,8 +242,18 @@ const SpriteCanvasHandles = ({
     : null;
   useEffect(() => {
     if (dragRef.current) cancelDragRef.current?.();
+    if (ownerKey === null) {
+      pendingBasePivotGenerationRef.current += 1;
+      setPendingBasePivotLanding(null);
+    }
   }, [ownerKey]);
-  useEffect(() => () => cancelDragRef.current?.(), []);
+  useEffect(
+    () => () => {
+      pendingBasePivotGenerationRef.current += 1;
+      cancelDragRef.current?.();
+    },
+    [],
+  );
 
   // undo/redo 반영은 대상도 세대도 바꾸지 않아 위 배선에 걸리지 않는다. 그대로 두면
   // 저장값이 되돌아간 뒤 pointerup이 시작 시점 값으로 푼 결과를 다시 커밋한다
@@ -166,13 +263,21 @@ const SpriteCanvasHandles = ({
     if (historyTickRef.current === historyTick) return;
     historyTickRef.current = historyTick;
     if (dragRef.current) cancelDragRef.current?.();
+    pendingBasePivotGenerationRef.current += 1;
+    setPendingBasePivotLanding(null);
   }, [historyTick]);
 
   if (!sprite && !session) {
-    if (dragTransform !== null || dragPivot !== null) {
+    if (
+      dragTransform !== null ||
+      dragPivot !== null ||
+      dragPivotTransform !== null ||
+      pendingBasePivotLanding !== null
+    ) {
       // 대상이 사라지면 로컬 드래그 상태도 함께 비운다 (렌더 중 보정 패턴)
       setDragTransform(null);
       setDragPivot(null);
+      setDragPivotTransform(null);
     }
     return null;
   }
@@ -182,21 +287,61 @@ const SpriteCanvasHandles = ({
   const box = session
     ? { width: session.width, height: session.height }
     : { width: sprite!.width, height: sprite!.height };
-  const pivot = dragPivot ?? (session ? session.pivot : sprite!.pivot);
+  const visiblePendingBasePivot =
+    !session &&
+    pendingBasePivotLanding?.mode === selectedKeyType &&
+    pendingBasePivotLanding.id === sprite?.id
+      ? spritePivotChangePatch(sprite!, pendingBasePivotLanding.pivot)
+      : null;
+  const imagePivot =
+    dragPivot ??
+    visiblePendingBasePivot?.pivot ??
+    (session ? session.imagePivot : sprite!.pivot);
+  const axisPivot = session ? session.pivot : imagePivot;
   const displayTransform =
-    dragTransform ?? (session ? session.transform : sprite!.idleTransform);
-  const axis = spritePivotPx({ ...box, pivot });
+    dragPivotTransform ??
+    dragTransform ??
+    visiblePendingBasePivot?.idleTransform ??
+    (session ? session.transform : sprite!.idleTransform);
+  const axis = spritePivotPx({ ...box, pivot: axisPivot });
 
   const toScreen = (local: Point): Point => ({
     x: (origin.dx + local.x) * zoom + panX,
     y: (origin.dy + local.y) * zoom + panY,
   });
   // 십자는 화면에서 실제로 회전이 일어나는 점 - 축에 이동값이 더해진다
-  const pivotScreen = toScreen({
+  const pivotLocal = {
     x: axis.x + displayTransform.x,
     y: axis.y + displayTransform.y,
-  });
+  };
+  // 선택 테두리와 리사이즈 핸들은 상자 밖 1px 프레임에 그려진다. 상자 핸들이 보이는 동안은
+  // 표식도 그 프레임에 앉혀 모서리·변에서 선·핸들 중심과 정확히 겹치게 한다.
+  // 자세 편집 중에는 자세 프레임 선이 상자 그대로라 보정하지 않는다
+  const frameInset = session ? 0 : SELECTION_BORDER_CENTER;
+  const pivotAxisScreen = toScreen(pivotLocal);
+  const pivotScreen = {
+    x: pivotAxisScreen.x + (2 * axisPivot.x - 1) * frameInset,
+    y: pivotAxisScreen.y + (2 * axisPivot.y - 1) * frameInset,
+  };
 
+  const posePlacement = session
+    ? {
+        rect: {
+          ...session.placement.rect,
+          x:
+            session.placement.rect.x -
+            (imagePivot.x - session.imagePivot.x) *
+              session.placement.rect.width,
+          y:
+            session.placement.rect.y -
+            (imagePivot.y - session.imagePivot.y) *
+              session.placement.rect.height,
+        },
+        pivot: imagePivot,
+      }
+    : null;
+
+  // 뷰(zoom·pan)는 ref에서 읽는다 - 드래그 중 최신 값이어야 팬·줌을 따라간다
   const clientToLocal = (clientX: number, clientY: number): Point | null => {
     const hostRect = rootRef.current?.getBoundingClientRect();
     if (!hostRect) return null;
@@ -207,17 +352,11 @@ const SpriteCanvasHandles = ({
     };
   };
 
-  const clientToScreen = (clientX: number, clientY: number): Point | null => {
-    const hostRect = rootRef.current?.getBoundingClientRect();
-    if (!hostRect) return null;
-    return { x: clientX - hostRect.left, y: clientY - hostRect.top };
-  };
-
   // 자세 프레임 - 배치 rect의 네 모서리에 자세 변환을 적용한 화면 폴리곤.
   // 한 점 u는 t + P + sR(u − P)에 놓인다
   const poseCorners = (() => {
     if (!session) return null;
-    const { rect } = session.placement;
+    const { rect } = posePlacement!;
     const rad = displayTransform.rotation * DEG_TO_RAD;
     const cos = Math.cos(rad) * displayTransform.scale;
     const sin = Math.sin(rad) * displayTransform.scale;
@@ -251,11 +390,12 @@ const SpriteCanvasHandles = ({
     const ux = top.x - bottom.x;
     const uy = top.y - bottom.y;
     const length = Math.hypot(ux, uy);
-    if (length < 1e-3)
+    if (length < 1e-3) {
       return {
         anchor: top,
         knob: { x: top.x, y: top.y - ROTATE_KNOB_OFFSET_PX },
       };
+    }
     return {
       anchor: top,
       knob: {
@@ -266,8 +406,48 @@ const SpriteCanvasHandles = ({
   })();
 
   const generationNow = () => useSpritePoseHandleStore.getState().generation;
-  // 드래그 시작 때 잡은 세대가 아직 유효한지 - preview·커밋의 공통 전제
+  // 드래그 시작 때 잡은 세대가 아직 유효한지 - 자세 preview·커밋의 공통 전제
   const ownsSession = () => ownerGenerationRef.current === generationNow();
+  // 기준점 드래그의 전제 - 시작 시점 canonical이 아직 스토어의 그 객체인지.
+  // 리사이즈 착지·다른 창 편집·undo가 끼어들면 시작 시점 patch는 낡은 값이다
+  const pivotBaseCurrent = (drag: DragState): boolean => {
+    const base = drag.pivotBase;
+    if (!base) return false;
+    const current = findCanonicalSprite(base.mode, base.id);
+    if (!current) return false;
+    if (base.kind === 'base') {
+      const placement = placeSpriteVisual(current, spriteIdleVisual(current));
+      return (
+        current.dx === base.canonical.dx &&
+        current.dy === base.canonical.dy &&
+        current.width === base.frame.box.width &&
+        current.height === base.frame.box.height &&
+        isSameSpriteAnchor(current.pivot, base.frame.pivot) &&
+        isSameSpriteTransform(current.idleTransform, base.frame.transform) &&
+        placement.rect.width === base.frame.rect.width &&
+        placement.rect.height === base.frame.rect.height
+      );
+    }
+    const pose = current.poses.find(
+      (candidate) => candidate.poseId === base.poseId,
+    );
+    if (!pose) return false;
+    const placement = placeSpriteVisual(
+      current,
+      spritePoseVisual(current, pose),
+    );
+    const axis = spritePivotPx(current);
+    return (
+      current.dx === base.canonical.dx &&
+      current.dy === base.canonical.dy &&
+      axis.x === base.frame.axis.x &&
+      axis.y === base.frame.axis.y &&
+      isSameSpriteAnchor(pose.pivot ?? current.pivot, base.frame.pivot) &&
+      isSameSpriteTransform(pose.transform, base.frame.transform) &&
+      placement.rect.width === base.frame.rect.width &&
+      placement.rect.height === base.frame.rect.height
+    );
+  };
 
   const releaseGrabbed = () => {
     const grabbed = grabbedRef.current;
@@ -285,118 +465,148 @@ const SpriteCanvasHandles = ({
     if (!dragRef.current) return;
     cancelDragRef.current = null;
     releaseDragSession();
-    releaseGrabbed();
     moveSchedulerRef.current?.cancel();
     moveSchedulerRef.current = null;
     detachRef.current?.();
     detachRef.current = null;
+    releaseGrabbed();
     dragRef.current = null;
     setDragTransform(null);
     setDragPivot(null);
+    setDragPivotTransform(null);
+    // 캡처 중 leave가 유실되면 호버 채움이 남는다
+    setPivotHover(false);
     lastTransformRef.current = null;
     lastPivotPatchRef.current = null;
+    lastPosePivotRef.current = null;
     suppressNextClick();
   };
 
   const cancelActiveDrag = () => {
     const drag = dragRef.current;
     if (!drag) return;
-    // 스토어 세션이 먼저 닫혔어도 시작 시점 세션으로 preview 제스처를 닫는다
-    if (drag.kind === 'pivot') editGestureController.cancel();
-    else drag.session?.cancel();
+    // 기준점은 드래그 중 저장 프리뷰를 만들지 않아 정리할 세션이 없다
+    if (drag.kind !== 'pivot') {
+      drag.session?.cancel();
+    }
     finishDrag();
   };
 
-  // 기준점 드래그 - 포인터를 이미지 정규화 좌표로 되돌리고 9점에 자석 스냅
+  // 기준점 드래그 - 표식이 포인터(잡은 자리 보정) 아래에 오도록 역변환으로 기준점을
+  // 구한다. 표식은 P + t + sR·Δ에 놓이므로 회전·배율이 있어도 포인터를 그대로 따라간다.
+  // 9점 프리셋은 각 프리셋일 때 표식이 놓일 자리와 화면 px로 비교해 자석 스냅한다 -
+  // 줌과 무관하게 같은 손맛이다
   const pivotFromPointer = (
     drag: DragState,
-    clientX: number,
-    clientY: number,
+    local: Point,
     snapDisabled: boolean,
   ): SpriteAnchor | null => {
-    const local = clientToLocal(clientX, clientY);
-    const screen = clientToScreen(clientX, clientY);
     const base = drag.pivotBase;
-    if (!local || !screen || !base) return null;
-    const { width, height } = base.canonical;
-    const next: SpriteAnchor = {
-      x: clamp01((local.x - base.translate.x) / width),
-      y: clamp01((local.y - base.translate.y) / height),
+    if (!base) return null;
+    const target = {
+      x: local.x - base.grabOffset.x,
+      y: local.y - base.grabOffset.y,
     };
-    if (snapDisabled) return next;
-    const view = viewRef.current;
-    for (const preset of SPRITE_ANCHOR_PRESETS) {
-      const presetScreen = {
-        x:
-          (base.canonical.dx + base.translate.x + preset.x * width) *
-            view.zoom +
-          view.panX,
-        y:
-          (base.canonical.dy + base.translate.y + preset.y * height) *
-            view.zoom +
-          view.panY,
-      };
-      if (
-        Math.hypot(presetScreen.x - screen.x, presetScreen.y - screen.y) <=
-        PIVOT_SNAP_PX
-      ) {
-        return { x: preset.x, y: preset.y };
-      }
+    const next =
+      base.kind === 'pose'
+        ? posePivotForHandleTarget(base.frame, target)
+        : pivotForHandleTarget(base.frame, target);
+    if (snapDisabled) {
+      drag.snappedPivot = null;
+      return next;
     }
-    return next;
+    const held = drag.snappedPivot;
+    if (held) {
+      const at =
+        base.kind === 'pose'
+          ? posePivotHandleLocalPoint(base.frame, held)
+          : pivotHandleLocalPoint(base.frame, held);
+      const releaseRadius = PIVOT_SNAP_RELEASE_PX / viewRef.current.zoom;
+      if (Math.hypot(at.x - target.x, at.y - target.y) <= releaseRadius) {
+        return held;
+      }
+      drag.snappedPivot = null;
+    }
+    const snapped =
+      base.kind === 'pose'
+        ? snapPosePivotToPreset(
+            base.frame,
+            target,
+            PIVOT_SNAP_PX / viewRef.current.zoom,
+          )
+        : snapPivotToPreset(
+            base.frame,
+            target,
+            PIVOT_SNAP_PX / viewRef.current.zoom,
+          );
+    drag.snappedPivot = snapped;
+    return snapped ?? next;
   };
 
-  const previewPivotPatch = (drag: DragState, next: SpriteAnchor) => {
+  const updatePivotDrag = (drag: DragState, next: SpriteAnchor) => {
     const base = drag.pivotBase;
     if (!base) return;
+    if (base.kind === 'pose') {
+      const display = compensateTransformForPosePivotDelta(base.frame, next);
+      if (!display) return;
+      lastPosePivotRef.current = { pivot: next, transform: display };
+      setDragPivot(next);
+      setDragPivotTransform(display);
+      return;
+    }
+    // 보정이 이동값 범위를 넘는 자리는 그림이 움직이므로 받지 않는다 -
+    // 마지막으로 가능했던 자리에 머문다
+    // 커밋 patch(canonical 기준)와 표식 보정(표시 프레임 기준)이 둘 다 성립할 때만 발행
     const patch = spritePivotChangePatch(base.canonical, next);
+    const display = compensateTransformForPivotDelta(base.frame, next);
+    if (!patch || !display) return;
     lastPivotPatchRef.current = patch;
     setDragPivot(next);
-    editGestureController.preview(base.mode, [{ id: base.id, patch }], {
-      domain: 'spritePosition',
-    });
+    setDragPivotTransform(display);
   };
 
   const applyWindowMove = (event: PointerEvent) => {
     const drag = dragRef.current;
     if (!drag) return;
+    const local = clientToLocal(event.clientX, event.clientY);
+    if (!local) return;
     if (drag.kind === 'pivot') {
+      if (!pivotBaseCurrent(drag)) {
+        cancelActiveDrag();
+        return;
+      }
       const next = pivotFromPointer(
         drag,
-        event.clientX,
-        event.clientY,
+        local,
         event.ctrlKey || event.metaKey,
       );
-      if (next) previewPivotPatch(drag, next);
+      if (next) updatePivotDrag(drag, next);
       return;
     }
     const live = sessionRef.current;
     if (!live) return;
     // 소유권이 갈린 뒤의 move는 이미 취소된 preview를 되열 뿐이라 버린다
     if (!ownsSession()) return;
-    const screen = clientToScreen(event.clientX, event.clientY);
-    if (!screen) return;
     const { offset, rotation, scale } = SPRITE_CONSTRAINTS;
     let next: SpriteTransform;
     if (drag.kind === 'move') {
-      const view = viewRef.current;
       next = {
         ...drag.baseTransform,
         x: clamp(
-          drag.baseTransform.x + (screen.x - drag.start.x) / view.zoom,
+          drag.baseTransform.x + (local.x - drag.startLocal.x),
           offset.min,
           offset.max,
         ),
         y: clamp(
-          drag.baseTransform.y + (screen.y - drag.start.y) / view.zoom,
+          drag.baseTransform.y + (local.y - drag.startLocal.y),
           offset.min,
           offset.max,
         ),
       };
     } else if (drag.kind === 'rotate') {
       const angle = Math.atan2(
-        screen.y - drag.axisScreen.y,
-        screen.x - drag.axisScreen.x,
+        local.y - drag.axisLocal.y,
+        local.x - drag.axisLocal.x,
       );
       let deg = wrapDegrees(
         drag.baseTransform.rotation + (angle - drag.startAngle) * RAD_TO_DEG,
@@ -410,8 +620,8 @@ const SpriteCanvasHandles = ({
       };
     } else {
       const distance = Math.hypot(
-        screen.x - drag.axisScreen.x,
-        screen.y - drag.axisScreen.y,
+        local.x - drag.axisLocal.x,
+        local.y - drag.axisLocal.y,
       );
       next = {
         ...drag.baseTransform,
@@ -427,29 +637,66 @@ const SpriteCanvasHandles = ({
     live.preview(next);
   };
 
-  const handleWindowUp = (event: PointerEvent) => {
+  const settleActiveDrag = (pointerId: number) => {
     const drag = dragRef.current;
     if (!drag) return;
     // 다른 포인터의 up이 첫 드래그를 커밋하지 못하게 한다 (멀티터치)
-    if (event.pointerId !== drag.pointerId) return;
+    if (pointerId !== drag.pointerId) return;
     if (drag.kind === 'pivot') {
+      // 시작 시점 canonical이 바뀌었으면 낡은 patch라 커밋하지 않는다
+      if (!pivotBaseCurrent(drag)) {
+        cancelActiveDrag();
+        return;
+      }
       moveSchedulerRef.current?.flush();
-      const patch = lastPivotPatchRef.current;
       const base = drag.pivotBase;
-      if (patch && base) {
+      if (base?.kind === 'pose') {
+        const next = lastPosePivotRef.current;
+        if (next && ownsSession()) {
+          drag.session?.commitPivot(next.pivot, next.transform);
+        }
+        finishDrag();
+        return;
+      }
+      const patch = lastPivotPatchRef.current;
+      if (patch && base && pivotBaseCurrent(drag)) {
+        const landingGeneration = pendingBasePivotGenerationRef.current + 1;
+        pendingBasePivotGenerationRef.current = landingGeneration;
+        setPendingBasePivotLanding({
+          generation: landingGeneration,
+          mode: base.mode,
+          id: base.id,
+          pivot: patch.pivot,
+        });
         const gestureId = editGestureController.activeGestureId() ?? undefined;
         const persisted = spriteItemsApi.patchPosition(
           base.mode,
           base.id,
           patch,
           gestureId,
+          (current) => spritePivotChangePatch(current, patch.pivot),
         );
         editGestureController.settleCommit(persisted);
-        void persisted.catch((error) => {
-          console.error('Failed to move sprite pivot', error);
-        });
-      } else {
-        editGestureController.cancel();
+        void persisted.then(
+          (result) => {
+            if (pendingBasePivotGenerationRef.current === landingGeneration) {
+              setPendingBasePivotLanding(null);
+            }
+            if (result === 'skipped') {
+              console.warn(
+                'Sprite pivot change skipped against the latest base',
+                base.id,
+                patch.pivot,
+              );
+            }
+          },
+          (error) => {
+            if (pendingBasePivotGenerationRef.current === landingGeneration) {
+              setPendingBasePivotLanding(null);
+            }
+            console.error('Failed to move sprite pivot', error);
+          },
+        );
       }
       finishDrag();
       return;
@@ -468,31 +715,68 @@ const SpriteCanvasHandles = ({
     finishDrag();
   };
 
+  const handleWindowUp = (event: PointerEvent) => {
+    settleActiveDrag(event.pointerId);
+  };
+
   const handleWindowMove = (event: PointerEvent) => {
-    if (event.pointerId !== dragRef.current?.pointerId) return;
-    // 창 밖에서 버튼이 이미 떼졌으면 stale 드래그 - 커밋 없이 종료
-    if (event.buttons === 0) {
-      cancelActiveDrag();
-      return;
-    }
+    const drag = dragRef.current;
+    if (event.pointerId !== drag?.pointerId) return;
+    if (event.buttons !== 0) drag.sawPressedMove = true;
     moveSchedulerRef.current?.push(event);
+    // 일부 WebView 합성 입력은 up 없이 마지막 move의 buttons만 0으로 바뀐다
+    // 처음부터 buttons가 0인 합성 드래그는 기존처럼 명시적 up까지 유지한다
+    if (event.buttons === 0 && drag.sawPressedMove) {
+      settleActiveDrag(event.pointerId);
+    }
   };
   const handleWindowCancel = (event: PointerEvent) => {
     if (event.pointerId !== dragRef.current?.pointerId) return;
     cancelActiveDrag();
   };
+  const handleMouseUp = (event: MouseEvent) => {
+    if (event.button !== 0) return;
+    const drag = dragRef.current;
+    if (!drag) return;
+    // 일부 WebView는 마우스 해제를 pointerup으로 올리지 않는다
+    settleActiveDrag(drag.pointerId);
+  };
+  const handleLostPointerCapture = (event: Event) => {
+    const pointerEvent = event as PointerEvent;
+    if (pointerEvent.pointerId !== dragRef.current?.pointerId) return;
+    // 캡처 해제 시점의 buttons는 엔진마다 달라 마지막 유효 위치를 확정한다
+    // 명시적인 중단은 pointercancel과 blur가 맡는다
+    settleActiveDrag(pointerEvent.pointerId);
+  };
   const handleWindowBlur = () => cancelActiveDrag();
 
   const attachWindowListeners = () => {
-    window.addEventListener('pointermove', handleWindowMove);
-    window.addEventListener('pointerup', handleWindowUp);
-    window.addEventListener('pointercancel', handleWindowCancel);
-    window.addEventListener('blur', handleWindowBlur);
+    const captureTarget = grabbedRef.current?.el ?? null;
+    const ownerDocument = captureTarget?.ownerDocument ?? document;
+    const ownerWindow = ownerDocument.defaultView ?? window;
+    ownerWindow.addEventListener('pointermove', handleWindowMove, true);
+    ownerWindow.addEventListener('pointerup', handleWindowUp, true);
+    ownerWindow.addEventListener('pointercancel', handleWindowCancel, true);
+    ownerWindow.addEventListener('mouseup', handleMouseUp, true);
+    ownerWindow.addEventListener('blur', handleWindowBlur);
+    captureTarget?.addEventListener(
+      'lostpointercapture',
+      handleLostPointerCapture,
+    );
     detachRef.current = () => {
-      window.removeEventListener('pointermove', handleWindowMove);
-      window.removeEventListener('pointerup', handleWindowUp);
-      window.removeEventListener('pointercancel', handleWindowCancel);
-      window.removeEventListener('blur', handleWindowBlur);
+      ownerWindow.removeEventListener('pointermove', handleWindowMove, true);
+      ownerWindow.removeEventListener('pointerup', handleWindowUp, true);
+      ownerWindow.removeEventListener(
+        'pointercancel',
+        handleWindowCancel,
+        true,
+      );
+      ownerWindow.removeEventListener('mouseup', handleMouseUp, true);
+      ownerWindow.removeEventListener('blur', handleWindowBlur);
+      captureTarget?.removeEventListener(
+        'lostpointercapture',
+        handleLostPointerCapture,
+      );
     };
   };
 
@@ -507,18 +791,29 @@ const SpriteCanvasHandles = ({
     grabbedRef.current = { el, pointerId: event.pointerId };
   };
 
+  const settleFocusedField = () => {
+    const active = getActiveElement();
+    if (
+      isHTMLElementNode(active) &&
+      active.matches('input, textarea, [contenteditable="true"]')
+    ) {
+      flushSync(() => active.blur());
+    }
+  };
+
   const beginPoseDrag = (
     event: React.PointerEvent<Element>,
     kind: Exclude<DragKind, 'pivot'>,
   ) => {
     if (event.button !== 0 || dragRef.current || !session) return;
-    const screen = clientToScreen(event.clientX, event.clientY);
-    if (!screen) return;
+    settleFocusedField();
+    const local = clientToLocal(event.clientX, event.clientY);
+    if (!local) return;
     const startDistance = Math.hypot(
-      screen.x - pivotScreen.x,
-      screen.y - pivotScreen.y,
+      local.x - pivotLocal.x,
+      local.y - pivotLocal.y,
     );
-    if (kind === 'scale' && startDistance < MIN_SCALE_ARM_PX) return;
+    if (kind === 'scale' && startDistance * zoom < MIN_SCALE_ARM_PX) return;
     event.preventDefault();
     event.stopPropagation();
     if (!tryAcquireDragSession()) return;
@@ -527,70 +822,180 @@ const SpriteCanvasHandles = ({
     dragRef.current = {
       kind,
       pointerId: event.pointerId,
-      start: screen,
+      sawPressedMove: false,
+      startLocal: local,
       baseTransform: session.transform,
+      axisLocal: pivotLocal,
+      startAngle: Math.atan2(local.y - pivotLocal.y, local.x - pivotLocal.x),
+      startDistance,
       session,
       pivotBase: null,
-      axisScreen: pivotScreen,
-      startAngle: Math.atan2(
-        screen.y - pivotScreen.y,
-        screen.x - pivotScreen.x,
-      ),
-      startDistance,
+      snappedPivot: null,
     };
     cancelDragRef.current = cancelActiveDrag;
     moveSchedulerRef.current = createRafLatestScheduler(applyWindowMove);
     attachWindowListeners();
+  };
+
+  // 표시 상태가 canonical과 어긋나 드래그를 거부할 때는 이유를 남긴다 - 조용히 죽은
+  // 핸들처럼 보이지 않게
+  const refusePivotDrag = (reason: string) => {
+    console.warn('Sprite pivot drag refused:', reason);
   };
 
   const beginPivotDrag = (event: React.PointerEvent<Element>) => {
     if (event.button !== 0 || dragRef.current) return;
+    settleFocusedField();
     const id = session ? session.positionId : sprite?.id;
     if (!id || !isNativeElementId(id)) return;
     const locator = resolveElementById('sprite', id);
     if (!locator) return;
-    const canonical = useSpriteStore
-      .getState()
-      .positions[locator.mode]?.find((candidate) => candidate.id === id);
+    const canonical = findCanonicalSprite(locator.mode, id);
     if (!canonical) return;
-    const screen = clientToScreen(event.clientX, event.clientY);
-    if (!screen) return;
+    // 컨트롤러 소유권이 사라진 로컬 프리뷰는 새 조작보다 먼저 회수한다
+    const reclaimedOrphanPreview = session
+      ? false
+      : editGestureController.discardOrphanedLocalPreviews();
+    // 상자 크기는 역변환의 분모라 표시 크기가 canonical과 다르면 기준점이 틀어진다
+    if (
+      !reclaimedOrphanPreview &&
+      (box.width !== canonical.width || box.height !== canonical.height)
+    ) {
+      refusePivotDrag('displayed box differs from canonical');
+      return;
+    }
+    let pivotBase: PivotDragBase;
+    if (session) {
+      const canonicalPose = canonical.poses.find(
+        (candidate) => candidate.poseId === session.poseId,
+      );
+      if (!canonicalPose) {
+        refusePivotDrag('pose missing in canonical');
+        return;
+      }
+      const canonicalImagePivot = canonicalPose.pivot ?? canonical.pivot;
+      if (
+        !isSameSpriteAnchor(session.pivot, canonical.pivot) ||
+        !isSameSpriteAnchor(imagePivot, canonicalImagePivot)
+      ) {
+        refusePivotDrag('session pivot differs from canonical');
+        return;
+      }
+      if (!isSameSpriteTransform(session.transform, canonicalPose.transform)) {
+        refusePivotDrag('pose draft transform differs from canonical');
+        return;
+      }
+      const canonicalPlacement = placeSpriteVisual(
+        canonical,
+        spritePoseVisual(canonical, canonicalPose),
+      );
+      if (!isSameSpritePlacement(session.placement, canonicalPlacement)) {
+        refusePivotDrag('pose placement differs from canonical');
+        return;
+      }
+      pivotBase = {
+        kind: 'pose',
+        mode: locator.mode,
+        id,
+        canonical,
+        poseId: canonicalPose.poseId,
+        frame: {
+          axis: spritePivotPx(canonical),
+          rect: canonicalPlacement.rect,
+          pivot: canonicalImagePivot,
+          transform: displayTransform,
+        },
+        grabOffset: { x: 0, y: 0 },
+      };
+    } else {
+      if (
+        !reclaimedOrphanPreview &&
+        !isSameSpriteAnchor(imagePivot, canonical.pivot)
+      ) {
+        refusePivotDrag('displayed pivot differs from canonical');
+        return;
+      }
+      if (
+        !reclaimedOrphanPreview &&
+        !isSameSpriteTransform(displayTransform, canonical.idleTransform)
+      ) {
+        refusePivotDrag('displayed transform differs from canonical');
+        return;
+      }
+      const rect = placeSpriteVisual(
+        canonical,
+        spriteIdleVisual(canonical),
+      ).rect;
+      pivotBase = {
+        kind: 'base',
+        mode: locator.mode,
+        id,
+        canonical,
+        frame: {
+          box: { width: canonical.width, height: canonical.height },
+          rect,
+          pivot: canonical.pivot,
+          transform: canonical.idleTransform,
+        },
+        grabOffset: { x: 0, y: 0 },
+      };
+    }
+    const local = clientToLocal(event.clientX, event.clientY);
+    if (!local) return;
     event.preventDefault();
     event.stopPropagation();
     if (!tryAcquireDragSession()) return;
     grab(event, 'grabbing');
+    pivotBase.grabOffset = {
+      x: local.x - pivotLocal.x,
+      y: local.y - pivotLocal.y,
+    };
+    if (session) ownerGenerationRef.current = generationNow();
     dragRef.current = {
       kind: 'pivot',
       pointerId: event.pointerId,
-      start: screen,
-      baseTransform: displayTransform,
-      session: null,
-      pivotBase: {
-        mode: locator.mode,
-        id,
-        canonical,
-        translate: { x: displayTransform.x, y: displayTransform.y },
-      },
-      axisScreen: pivotScreen,
+      sawPressedMove: false,
+      startLocal: local,
+      baseTransform: pivotBase.frame.transform,
+      axisLocal: pivotLocal,
       startAngle: 0,
       startDistance: 0,
+      session,
+      pivotBase,
+      snappedPivot: null,
     };
+    if (reclaimedOrphanPreview && pivotBase.kind === 'base') {
+      const recoveredPivot = pivotForHandleTarget(pivotBase.frame, pivotLocal);
+      const recoveredTransform = compensateTransformForPivotDelta(
+        pivotBase.frame,
+        recoveredPivot,
+      );
+      if (recoveredTransform) {
+        setDragPivot(recoveredPivot);
+        setDragPivotTransform(recoveredTransform);
+      }
+    }
     cancelDragRef.current = cancelActiveDrag;
     moveSchedulerRef.current = createRafLatestScheduler(applyWindowMove);
     attachWindowListeners();
   };
 
-  const knobStyle = (center: Point, cursor: string): React.CSSProperties => ({
+  const knobStyle = (
+    center: Point,
+    cursor: string,
+    size = KNOB_HIT_SIZE,
+  ): React.CSSProperties => ({
     position: 'absolute',
-    left: center.x - KNOB_HIT_SIZE / 2,
-    top: center.y - KNOB_HIT_SIZE / 2,
-    width: KNOB_HIT_SIZE,
-    height: KNOB_HIT_SIZE,
+    left: center.x - size / 2,
+    top: center.y - size / 2,
+    width: size,
+    height: size,
     cursor,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
   });
+  const pivotActive = pivotHover || dragPivot !== null;
   const knobDotStyle: React.CSSProperties = {
     width: 10,
     height: 10,
@@ -675,7 +1080,7 @@ const SpriteCanvasHandles = ({
           <div style={knobDotStyle} />
         </div>
       ) : null}
-      {/* 기준점 십자 - 드래그로 옮긴다. 그림은 움직이지 않는다 */}
+      {/* 기준점 표식 - 드래그로 옮긴다. 그림은 움직이지 않는다 */}
       <div
         role="button"
         aria-label={t('propertiesPanel.spritePivot') || '기준점'}
@@ -684,28 +1089,43 @@ const SpriteCanvasHandles = ({
           '드래그: 기준점 이동 · Ctrl/⌘: 스냅 해제'
         }
         onPointerDown={beginPivotDrag}
+        onContextMenu={(event) => event.preventDefault()}
+        onPointerEnter={() => setPivotHover(true)}
+        onPointerLeave={() => setPivotHover(false)}
         className="pointer-events-auto"
         style={{
-          ...knobStyle(pivotScreen, 'grab'),
-          color: 'var(--ui-selection-border)',
-          opacity: dragPivot ? 1 : 0.85,
+          ...knobStyle(pivotScreen, 'grab', PIVOT_HIT_SIZE),
+          color: pivotActive
+            ? 'var(--ui-selection)'
+            : 'var(--ui-selection-border-strong)',
         }}
         data-sprite-pivot-handle="true"
       >
-        <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-          <circle
-            cx="7.5"
-            cy="7.5"
-            r="3"
-            fill="rgba(255, 255, 255, 0.9)"
-            stroke="currentColor"
-            strokeWidth="1.5"
-          />
+        <svg
+          width={PIVOT_HIT_SIZE}
+          height={PIVOT_HIT_SIZE}
+          viewBox={`0 0 ${PIVOT_HIT_SIZE} ${PIVOT_HIT_SIZE}`}
+          fill="none"
+          aria-hidden="true"
+          style={{ overflow: 'visible' }}
+        >
           <path
-            d="M7.5 0.5V3M7.5 12V14.5M0.5 7.5H3M12 7.5H14.5"
+            d={PIVOT_BRACKETS}
             stroke="currentColor"
-            strokeWidth="1.2"
-            strokeLinecap="round"
+            strokeWidth={1.5}
+            style={{
+              transformOrigin: `${PIVOT_CENTER}px ${PIVOT_CENTER}px`,
+              transform: pivotActive
+                ? `scale(${PIVOT_BRACKET_ACTIVE_SCALE})`
+                : undefined,
+              transition: 'transform 150ms cubic-bezier(0.22, 1, 0.36, 1)',
+            }}
+          />
+          <circle
+            cx={PIVOT_CENTER}
+            cy={PIVOT_CENTER}
+            r={pivotActive ? PIVOT_DOT_ACTIVE_RADIUS : PIVOT_DOT_RADIUS}
+            fill="currentColor"
           />
         </svg>
       </div>

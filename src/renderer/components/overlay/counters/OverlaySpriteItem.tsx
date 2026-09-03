@@ -133,18 +133,18 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
 
   // 실패한 src는 baseImage로 폴백, 그것도 실패면 렌더 제외.
   // 배치도 이미지와 한 벌 - 폴백이면 기본 이미지 배치로 함께 돌아간다
+  const idlePlacement = placeSpriteVisual(position, spriteIdleVisual(position));
   let heldImageSrc = heldTarget
     ? resolveImageSource(heldTarget.imageSrc)
     : null;
   let heldPlacement = heldTarget
     ? placeSpriteVisual(position, heldTarget.visual)
-    : null;
+    : idlePlacement;
   if (heldImageSrc && failedImageSrcs.has(heldImageSrc)) {
     heldImageSrc = baseImageSrc;
-    heldPlacement = placeSpriteVisual(position, spriteIdleVisual(position));
+    heldPlacement = idlePlacement;
   }
   if (heldImageSrc && failedImageSrcs.has(heldImageSrc)) heldImageSrc = null;
-  const idlePlacement = placeSpriteVisual(position, spriteIdleVisual(position));
 
   // 첫 자세 전환에서 cold decode가 겹치지 않도록 base와 모든 override를 선행 디코드
   const warmupSrcs = useMemo(() => {
@@ -258,18 +258,19 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
     () =>
       stableStringify({
         baseImage: position.baseImage,
-        imageFit: position.imageFit,
-        imageRect: position.imageRect,
+        width: position.width,
+        height: position.height,
         pivot: position.pivot,
-        imagePlacement: position.imagePlacement,
         referenceNaturalSize: position.referenceNaturalSize,
         idleTransform: position.idleTransform,
         useInlineStyles: position.useInlineStyles,
+        // 자세 기준점·이동값도 재생이 DOM에 직접 쓰는 축·transform을 바꾼다
         poses: position.poses.map((pose) => [
           pose.poseId,
           pose.imageOverride,
-          pose.imagePivot,
           pose.imageOverrideMetrics,
+          pose.pivot,
+          pose.transform,
         ]),
       }),
     [position],
@@ -503,7 +504,7 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
                     position,
                     heldTarget.transform,
                     transitionCss,
-                    heldPlacement ?? undefined,
+                    heldPlacement,
                   ),
                   willChange: 'transform',
                 }}

@@ -31,7 +31,6 @@ import type { KnobItemPosition } from '@src/types/key/knobs';
 import {
   CENTER_SPRITE_ANCHOR,
   DEFAULT_SPRITE_ACTIVATION,
-  NEW_SPRITE_IMAGE_PLACEMENT,
   DEFAULT_SPRITE_PRESS_DURATION_MS,
   DEFAULT_SPRITE_SIZE,
   DEFAULT_SPRITE_TRANSITION_EASING,
@@ -512,15 +511,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
         className: null,
         useInlineStyles: null,
         baseImage: null,
-        // 축 배치는 상자가 비트맵 자체라 상자를 늘리면 그림도 늘어난다(레이어 스케일).
-        // 맞춤이면 비균등 리사이즈마다 여백이 생긴다
-        imageFit: 'fill',
-        imageRect: {
-          x: 0,
-          y: 0,
-          width: DEFAULT_SPRITE_SIZE,
-          height: DEFAULT_SPRITE_SIZE,
-        },
         pivot: { ...CENTER_SPRITE_ANCHOR },
         idleTransform: { ...IDENTITY_SPRITE_TRANSFORM },
         poses: [],
@@ -528,9 +518,7 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
         pressDurationMs: DEFAULT_SPRITE_PRESS_DURATION_MS,
         transitionMs: DEFAULT_SPRITE_TRANSITION_MS,
         transitionEasing: DEFAULT_SPRITE_TRANSITION_EASING,
-        // 새 스프라이트는 축 배치 - 이미지 크기·비율이 달라도 축이 유지된다.
         // 기준 크기는 첫 이미지를 고를 때 패널이 채운다
-        imagePlacement: NEW_SPRITE_IMAGE_PLACEMENT,
         referenceNaturalSize: null,
       },
     );

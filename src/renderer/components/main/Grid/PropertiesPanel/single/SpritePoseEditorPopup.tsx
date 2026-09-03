@@ -1,11 +1,7 @@
 import React from 'react';
 import PickerSurface from '@components/main/Grid/PropertiesPanel/PickerSurface';
-import {
-  PropertyRow,
-  PropertySection,
-} from '@components/main/Grid/PropertiesPanel/PropertyInputs';
-import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
+import Checkbox from '@components/main/common/Checkbox';
 import { NumberInput } from '@components/main/common/NumberInput';
 import {
   AngleGlyph,
@@ -14,13 +10,9 @@ import {
 import {
   SPRITE_CONSTRAINTS,
   type SpriteAnchor,
-  type SpriteImageFit,
-  type SpriteImagePlacement,
   type SpriteTransform,
 } from '@src/types/key/sprites';
-import { SECTION_LABEL_CLASS, SECTION_WRAPPER_CLASS } from '@utils/cardRecipes';
 import { clamp } from '@utils/core/clamp';
-import { anchorToPercent, percentToAnchor } from '@utils/sprite/spriteGeometry';
 import SpriteImagePreviewCard from './SpriteImagePreviewCard';
 
 // 담당 키·이미지 오버라이드 컨트롤 묶음 (삭제·이름 변경은 행 메뉴가 맡는다)
@@ -29,35 +21,9 @@ interface SpritePoseControls {
   triggers: readonly string[];
   isDuplicate: boolean;
   imageOverride: string | null;
-  // 미리보기 표시 방식 - 캔버스 렌더가 스프라이트 imageFit을 따르므로 동일 적용
-  imageFit: SpriteImageFit | null;
   onToggleTrigger: (keyId: string) => void;
   onImagePick: () => void;
   onImageReset: () => void;
-}
-
-// 손끝 핀 컨트롤 묶음 - 값은 캔버스 노브(Alt 드래그)와 같은 contactPoint
-interface SpritePosePinControls {
-  contactPoint: SpriteAnchor;
-  /** 회전·배율 스크럽이 손끝을 제자리에 두도록 x·y를 역산 */
-  pinLock: boolean;
-  /** 캔버스 노브 드래그가 scale까지 역산 */
-  stretch: boolean;
-  onContactPointCommit: (point: SpriteAnchor) => void;
-  onContactPointPreview: (point: SpriteAnchor) => void;
-  onPinLockToggle: () => void;
-  onStretchToggle: () => void;
-}
-
-// 자세 이미지 축 컨트롤 묶음 - 축 배치에서만 뜻이 있다. null이면 스프라이트 기준점 상속
-interface SpritePosePivotControls {
-  placement: SpriteImagePlacement;
-  /** 자세 이미지가 없으면 축은 기본 이미지 것이라 편집 대상이 아니다 */
-  hasOverride: boolean;
-  imagePivot: SpriteAnchor | null;
-  spritePivot: SpriteAnchor;
-  onImagePivotCommit: (point: SpriteAnchor | null) => void;
-  onImagePivotPreview: (point: SpriteAnchor) => void;
 }
 
 interface SpritePoseEditorPopupProps {
@@ -66,22 +32,25 @@ interface SpritePoseEditorPopupProps {
   // 편집 세션 신원 - 내부 subtree 재마운트와 앵커 재측정의 기준
   poseId: string;
   transform: SpriteTransform;
+  pivot: SpriteAnchor;
+  followsBasePivot: boolean;
   referenceRef: React.RefObject<HTMLElement>;
   panelElement: HTMLElement | null;
   poseControls: SpritePoseControls;
-  pinControls: SpritePosePinControls;
-  pivotControls: SpritePosePivotControls;
   // 행 전환 시 바깥닫힘을 거치지 않는 영역 (상태 목록 well)
   interactiveRefs?: React.RefObject<HTMLElement>[];
-  onTransformCommit: (next: SpriteTransform) => void;
+  onTransformCommit: (patch: Partial<SpriteTransform>) => void;
   onTransformPreview: (next: SpriteTransform) => void;
   onTransformCancel: () => void;
+  onPivotCommit: (patch: Partial<SpriteAnchor>) => void;
+  onPivotPreview: (next: SpriteAnchor) => void;
+  onPivotLinkChange: () => void;
   onClose: () => void;
   t: (key: string) => string;
 }
 
-// 상태 하나의 편집 팝업 - 담당 키·변환·상태 이미지를 모아 패널 행을 요약으로 남긴다.
-// 카드 규격·변환 그리드는 이미지 피커와 동일.
+// 상태 하나의 편집 팝업 - 상태 이미지·변환 수치·담당 키. 위치·회전·배율은 캔버스
+// 핸들(본체 드래그·회전 노브·모서리)과 같은 값이라 여기서는 수치 입력만 맡는다.
 // 셸(PickerSurface)은 행 전환 동안 유지하고 편집 subtree만 poseId로 재마운트해
 // 입력 draft·포커스는 대상별로 끊고 전환 자체는 이어지게 한다
 const SpritePoseEditorPopup: React.FC<SpritePoseEditorPopupProps> = ({
@@ -89,23 +58,31 @@ const SpritePoseEditorPopup: React.FC<SpritePoseEditorPopupProps> = ({
   ariaLabel,
   poseId,
   transform,
+  pivot,
+  followsBasePivot,
   referenceRef,
   panelElement,
   poseControls,
-  pinControls,
-  pivotControls,
   interactiveRefs,
   onTransformCommit,
   onTransformPreview,
   onTransformCancel,
+  onPivotCommit,
+  onPivotPreview,
+  onPivotLinkChange,
   onClose,
   t,
 }) => {
-  const { offset, rotation, scale } = SPRITE_CONSTRAINTS;
+  const { offset, rotation, scale, anchor } = SPRITE_CONSTRAINTS;
+  // 커밋은 바뀐 축만 올린다 - 전체를 펼쳐 보내면 저장 큐에 대기 중인 직전 편집을 덮는다
   const commitField = (patch: Partial<SpriteTransform>) =>
-    onTransformCommit({ ...transform, ...patch });
+    onTransformCommit(patch);
   const previewField = (patch: Partial<SpriteTransform>) =>
     onTransformPreview({ ...transform, ...patch });
+  const commitPivotField = (patch: Partial<SpriteAnchor>) =>
+    onPivotCommit(patch);
+  const previewPivotField = (patch: Partial<SpriteAnchor>) =>
+    onPivotPreview({ ...pivot, ...patch });
 
   const keyOptionIds = new Set(
     poseControls.keyOptions.map((option) => option.id),
@@ -121,8 +98,8 @@ const SpritePoseEditorPopup: React.FC<SpritePoseEditorPopupProps> = ({
       referenceRef={referenceRef}
       panelElement={panelElement}
       fallbackWidth={172}
-      // 미리보기 76 + 변환 그리드 50 + 손끝 섹션 127 + 담당 키 23 + 간격·패딩 40
-      fallbackHeight={316}
+      // 미리보기 76 + 변환 그리드 68 + 담당 키 32 + 간격·패딩 32
+      fallbackHeight={followsBasePivot ? 240 : 276}
       cardClassName="flex flex-col p-[8px] gap-[8px] w-[172px] rounded-popup"
       offsetY={-93}
       interactiveRefs={interactiveRefs}
@@ -134,7 +111,6 @@ const SpritePoseEditorPopup: React.FC<SpritePoseEditorPopupProps> = ({
         {/* 상태 이미지 - 비우면 캔버스가 기본 이미지를 그대로 쓴다 */}
         <SpriteImagePreviewCard
           source={poseControls.imageOverride}
-          imageFit={poseControls.imageFit}
           onPick={poseControls.onImagePick}
           onReset={poseControls.onImageReset}
           t={t}
@@ -223,168 +199,75 @@ const SpritePoseEditorPopup: React.FC<SpritePoseEditorPopupProps> = ({
           </div>
         </div>
 
-        {/* 손끝(핀) - 자세 이미지 기준 %. 캔버스 노브·Alt 드래그와 같은 값.
-            X·Y 쌍은 라벨을 옆에 둘 폭이 없어 섹션 라벨 + 설정 카드 레시피로 묶고,
-            토글 행은 이미지 피커의 설정 카드와 같은 행 문법을 따른다 */}
-        <div className={SECTION_WRAPPER_CLASS}>
-          <p className={SECTION_LABEL_CLASS}>
-            {t('propertiesPanel.spriteContactPoint') || '손끝'}
-          </p>
-          <PropertySection>
-            <div className="flex items-center gap-[8px] w-full min-h-[32px]">
+        <div className="flex flex-col gap-[4px]">
+          <div className="flex items-center justify-between min-h-[28px]">
+            <span className="text-fg-muted text-label">
+              {t('propertiesPanel.spriteFollowBasePivot') ||
+                '기본 기준점 따라가기'}
+            </span>
+            <Checkbox
+              checked={followsBasePivot}
+              onChange={onPivotLinkChange}
+              ariaLabel={
+                t('propertiesPanel.spriteFollowBasePivot') ||
+                '기본 기준점 따라가기'
+              }
+              commitStrategy="after-paint"
+            />
+          </div>
+          {!followsBasePivot ? (
+            <div className="flex items-center gap-[8px] w-full">
               <NumberInput
-                value={anchorToPercent(pinControls.contactPoint.x)}
+                value={pivot.x * 100}
                 onChange={(value) =>
-                  pinControls.onContactPointCommit({
-                    ...pinControls.contactPoint,
-                    x: percentToAnchor(value),
+                  commitPivotField({
+                    x: clamp(value / 100, anchor.min, anchor.max),
                   })
                 }
                 onPreview={(value) =>
-                  pinControls.onContactPointPreview({
-                    ...pinControls.contactPoint,
-                    x: percentToAnchor(value),
+                  previewPivotField({
+                    x: clamp(value / 100, anchor.min, anchor.max),
                   })
                 }
                 onCancel={onTransformCancel}
                 prefix="X"
-                suffix="%"
                 ariaLabel={`${
-                  t('propertiesPanel.spriteContactPoint') || '손끝'
+                  t('propertiesPanel.spriteStatePivot') || '상태 기준점'
                 } X`}
+                suffix="%"
                 width="100%"
-                min={0}
-                max={100}
+                min={anchor.min * 100}
+                max={anchor.max * 100}
                 allowDecimal
                 decimalScale={1}
               />
               <NumberInput
-                value={anchorToPercent(pinControls.contactPoint.y)}
+                value={pivot.y * 100}
                 onChange={(value) =>
-                  pinControls.onContactPointCommit({
-                    ...pinControls.contactPoint,
-                    y: percentToAnchor(value),
+                  commitPivotField({
+                    y: clamp(value / 100, anchor.min, anchor.max),
                   })
                 }
                 onPreview={(value) =>
-                  pinControls.onContactPointPreview({
-                    ...pinControls.contactPoint,
-                    y: percentToAnchor(value),
+                  previewPivotField({
+                    y: clamp(value / 100, anchor.min, anchor.max),
                   })
                 }
                 onCancel={onTransformCancel}
                 prefix="Y"
-                suffix="%"
                 ariaLabel={`${
-                  t('propertiesPanel.spriteContactPoint') || '손끝'
+                  t('propertiesPanel.spriteStatePivot') || '상태 기준점'
                 } Y`}
+                suffix="%"
                 width="100%"
-                min={0}
-                max={100}
+                min={anchor.min * 100}
+                max={anchor.max * 100}
                 allowDecimal
                 decimalScale={1}
               />
             </div>
-            <PropertyRow
-              label={t('propertiesPanel.spritePinLock') || '핀 고정'}
-            >
-              <Checkbox
-                checked={pinControls.pinLock}
-                onChange={pinControls.onPinLockToggle}
-              />
-            </PropertyRow>
-            <PropertyRow label={t('propertiesPanel.spriteStretch') || '뻗기'}>
-              <Checkbox
-                checked={pinControls.stretch}
-                onChange={pinControls.onStretchToggle}
-              />
-            </PropertyRow>
-          </PropertySection>
+          ) : null}
         </div>
-
-        {/* 축 - 축 배치에서 자세 이미지의 회전·배율 축. 기본은 스프라이트 기준점 상속이고,
-            그림의 손목 위치가 다른 이미지만 따로 찍는다 */}
-        {pivotControls.placement === 'pivot' && pivotControls.hasOverride ? (
-          <div className={SECTION_WRAPPER_CLASS}>
-            <p className={SECTION_LABEL_CLASS}>
-              {t('propertiesPanel.spriteImagePivot') || '축'}
-            </p>
-            <PropertySection>
-              <PropertyRow
-                label={
-                  t('propertiesPanel.spriteInheritPivot') || '기본 축 사용'
-                }
-              >
-                <Checkbox
-                  checked={pivotControls.imagePivot === null}
-                  onChange={() =>
-                    pivotControls.onImagePivotCommit(
-                      pivotControls.imagePivot === null
-                        ? { ...pivotControls.spritePivot }
-                        : null,
-                    )
-                  }
-                />
-              </PropertyRow>
-              {pivotControls.imagePivot !== null ? (
-                <div className="flex items-center gap-[8px] w-full min-h-[32px]">
-                  <NumberInput
-                    value={anchorToPercent(pivotControls.imagePivot.x)}
-                    onChange={(value) =>
-                      pivotControls.onImagePivotCommit({
-                        ...(pivotControls.imagePivot as SpriteAnchor),
-                        x: percentToAnchor(value),
-                      })
-                    }
-                    onPreview={(value) =>
-                      pivotControls.onImagePivotPreview({
-                        ...(pivotControls.imagePivot as SpriteAnchor),
-                        x: percentToAnchor(value),
-                      })
-                    }
-                    onCancel={onTransformCancel}
-                    prefix="X"
-                    suffix="%"
-                    ariaLabel={`${
-                      t('propertiesPanel.spriteImagePivot') || '축'
-                    } X`}
-                    width="100%"
-                    min={0}
-                    max={100}
-                    allowDecimal
-                    decimalScale={1}
-                  />
-                  <NumberInput
-                    value={anchorToPercent(pivotControls.imagePivot.y)}
-                    onChange={(value) =>
-                      pivotControls.onImagePivotCommit({
-                        ...(pivotControls.imagePivot as SpriteAnchor),
-                        y: percentToAnchor(value),
-                      })
-                    }
-                    onPreview={(value) =>
-                      pivotControls.onImagePivotPreview({
-                        ...(pivotControls.imagePivot as SpriteAnchor),
-                        y: percentToAnchor(value),
-                      })
-                    }
-                    onCancel={onTransformCancel}
-                    prefix="Y"
-                    suffix="%"
-                    ariaLabel={`${
-                      t('propertiesPanel.spriteImagePivot') || '축'
-                    } Y`}
-                    width="100%"
-                    min={0}
-                    max={100}
-                    allowDecimal
-                    decimalScale={1}
-                  />
-                </div>
-              ) : null}
-            </PropertySection>
-          </div>
-        ) : null}
 
         {/* 담당 키 - 미리보기·변환 아래가 정위치, 신규 상태도 카드가 작아 한눈에 보인다 */}
         {poseControls.keyOptions.length === 0 && deadTriggers.length === 0 ? (
