@@ -190,20 +190,17 @@ DM Note에서 스타일링에 사용할 수 있는 모든 CSS 변수를 정리�
 
 | 변수                  | 설명                                              | 타입           | 예시                       |
 | --------------------- | ------------------------------------------------- | -------------- | -------------------------- |
-| `--sprite-fit`        | 스프라이트 이미지 맞춤 교체                       | `<object-fit>` | `cover`, `contain`         |
 | `--sprite-transform`  | 해석된 자세의 변환 교체 (onPress는 이미지만 바뀜) | `<transform>`  | `rotate(15deg) scale(1.2)` |
 | `--sprite-transition` | 자세 전환 트랜지션 교체 (whileHeld에만 적용)      | `<transition>` | `transform 120ms ease-out` |
 
 ```css
 .왼손 [data-sprite-element] > img {
-  --sprite-fit: cover;
   --sprite-transition: transform 90ms cubic-bezier(0.2, 0, 0, 1);
 }
 ```
 
-`--sprite-fit`은 상자 맞춤 배치에서만 뜻이 있습니다. 축 기준 배치는 이미지 요소가
-원본 비율 그대로라 contain·cover가 결과를 바꾸지 않고, 늘리기(fill)에서 바꾸거나
-크기 자체를 CSS로 덮으면 축·손끝 정합은 보장하지 않습니다.
+이미지 요소는 원본 비율 그대로 상자를 채우므로 `object-fit`이 바꿀 것이 없습니다.
+크기 자체를 CSS로 덮으면 자세 이미지의 기준점 정합은 보장하지 않습니다.
 
 ## 선택자 레퍼런스
 
@@ -248,7 +245,7 @@ DM Note에서 스타일링에 사용할 수 있는 모든 CSS 변수를 정리�
 
 | 선택자                                    | 설명                                                  |
 | ----------------------------------------- | ----------------------------------------------------- |
-| `[data-sprite-element]`                   | 모든 스프라이트 활동 영역                             |
+| `[data-sprite-element]`                   | 모든 스프라이트 요소 상자                             |
 | `[data-sprite-element] > img`             | 스프라이트 이미지 층                                  |
 | `[data-sprite-state="inactive"]`          | 트리거 키를 누르지 않은 스프라이트                    |
 | `[data-sprite-state="active"]`            | 트리거 키를 누른 스프라이트 (onPress는 항상 inactive) |

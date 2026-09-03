@@ -84,7 +84,7 @@ type SpritePositions = Record<string, ReactiveSpritePosition[]>;
 
 interface ReactiveSpritePosition {
   id?: string; // stable element identity (UUID)
-  dx: number; // activity area origin and size; feeds overlay window sizing
+  dx: number; // element box origin and size. The box is the base image box and feeds overlay window sizing
   dy: number;
   width: number;
   height: number;
@@ -94,18 +94,19 @@ interface ReactiveSpritePosition {
   groupId?: string | null; // omitted by the backend when unset
   className: string | null;
   useInlineStyles: boolean | null;
-  baseImage: string | null; // image shown when no pose matches
-  imageFit: 'cover' | 'contain' | 'fill' | null; // rendering treats absent as 'contain'
-  imageRect: { x: number; y: number; width: number; height: number }; // image box inside the activity area, coordinates within ±32768
-  pivot: { x: number; y: number }; // normalized transform origin, 0–1 each
+  baseImage: string | null; // image shown when no pose matches; always fills the element box
+  referenceNaturalSize: {
+    source: string | null;
+    width: number;
+    height: number;
+  } | null; // intrinsic pixel size that defines the pixel scale (integers, 1–32768). source must equal baseImage when one is set and be null otherwise; null falls back to drawing every image in the element box
+  pivot: { x: number; y: number }; // normalized shared axis, 0–1 each, default {0.5, 0.5}. Base-image pivot and transform origin for every pose
   idleTransform: SpriteTransform; // base transform when no pose matches
   poses: SpritePose[]; // commits accept at most 64
   activation: 'whileHeld' | 'onPress'; // default whileHeld. onPress plays the pose once on key-down, then returns to idle
   pressDurationMs: number; // onPress playback duration, 1–5000, default 300
   transitionMs: number; // pose transition duration, 0–1000, default 0. Ignored by onPress, which plays for pressDurationMs
   transitionEasing: string; // CSS easing, default 'cubic-bezier(0.4, 0, 0.2, 1)'
-  imagePlacement: 'box' | 'pivot'; // image placement, default box. pivot aligns each image's own anchor to the pivot point and draws it at the reference image's pixel scale
-  referenceNaturalSize: { source: string | null; width: number; height: number } | null; // pixel-scale reference for pivot placement. source must equal baseImage when one is set, and be null otherwise
 }
 
 interface SpritePose {
@@ -113,10 +114,13 @@ interface SpritePose {
   name?: string | null; // omitted by the backend when unset
   triggers: string[]; // key element ids; commits accept at most 512, sorted and deduplicated
   transform: SpriteTransform;
+  pivot?: { x: number; y: number } | null; // independent pivot within the pose image; null or omission follows the sprite's shared pivot
   imageOverride: string | null; // replaces baseImage while this pose is active
-  contactPoint: { x: number; y: number }; // normalized key-contact pin of the pose image, 0–1 each, default {0.5, 1}. Editor helper only; runtime resolution ignores it
-  imagePivot: { x: number; y: number } | null; // anchor of this pose image under pivot placement, 0–1 each. null inherits the sprite pivot; normalized to null when imageOverride is absent
-  imageOverrideMetrics: { source: string; width: number; height: number } | null; // intrinsic pixel size of imageOverride (integers, 1–32768). Required under pivot placement when an override is set, and source must equal the path exactly
+  imageOverrideMetrics: {
+    source: string;
+    width: number;
+    height: number;
+  } | null; // intrinsic pixel size of imageOverride (integers, 1–32768). Optional; when set, source must equal the path exactly. Normalized to null when imageOverride is absent
 }
 
 interface SpriteTransform {
@@ -136,18 +140,24 @@ Poses with two or more triggers never take part in blending, so a sprite whose
 held keys only appear in such poses returns to idle. Two poses of one sprite may
 not share the same trigger set, and commits reject empty trigger lists.
 
-Under `pivot` placement every image puts its own anchor on the pivot point P
-(imageRect origin + pivot × size) and is drawn at intrinsic pixels × the
-reference scale. The reference scale divides imageRect by referenceNaturalSize:
-contain takes the smaller ratio, cover the larger, fill uses each axis. When
-poses blend, anchors are never averaged; the pose whose image was chosen supplies
-its anchor. Under pivot placement a missing or mismatched intrinsic size rejects
-the commit with `VALIDATION_FAILED` and a `details.validationCode` of
-`MISSING_SPRITE_IMAGE_METRICS`, `STALE_SPRITE_IMAGE_METRICS`, or
-`INVALID_SPRITE_IMAGE_METRICS`. A schemaVersion 1 patch that omits
-`imagePlacement`, `referenceNaturalSize`, `imagePivot`, `imageOverrideMetrics`,
-`contactPoint`, `activation`, or `pressDurationMs` on an existing element or
-pose keeps the stored value.
+The element box is the base-image box. The base image always fills it, and the
+shared axis P is the sprite pivot × (width, height). A pose whose pivot is null
+or omitted uses the same normalized point. A pose with a pivot value aligns that
+independent point within its image to P. A pose image with a different intrinsic
+size is drawn at intrinsic pixels × the reference scale, where the reference
+scale is (width, height) ÷ referenceNaturalSize per axis. Without a reference
+size or the pose image's own metrics, the image uses the element-box size.
+Moving the shared pivot keeps the base image in place while linked poses follow
+the new axis. Poses with an independent pivot keep their screen position by
+compensating x/y in the same commit. Moving a pose pivot or switching the link
+also compensates x/y to avoid a sudden image jump. An out-of-range pivot
+rejects the commit with `VALIDATION_FAILED` and a `details.validationCode` of
+`INVALID_SPRITE_PIVOT` or `INVALID_SPRITE_POSE_PIVOT`. Invalid image metrics use
+`STALE_SPRITE_IMAGE_METRICS` or `INVALID_SPRITE_IMAGE_METRICS`. A schemaVersion 1
+patch that omits `pivot`, `referenceNaturalSize`, `imageOverrideMetrics`,
+`activation`, or `pressDurationMs` on an existing element or pose keeps the
+stored value. Sending null for a pose pivot links it to the shared pivot.
+Changing `baseImage` or `imageOverride` while omitting its metrics clears them.
 
 ## Read the Current Document
 
