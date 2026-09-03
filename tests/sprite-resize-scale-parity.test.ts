@@ -4,9 +4,8 @@ import { describe, expect, it } from 'vitest';
 
 import { SPRITE_CONSTRAINTS } from '../src/types/key/sprites';
 import {
-  scaleSpriteResizeValue,
+  scaleSpriteResizeOffset,
   spriteResizeRatio,
-  type SpriteResizeValueField,
 } from '../src/renderer/utils/sprite/resizeProjection';
 
 // Rust 적용기와 같은 fixture를 공유해 resizeSprite 스케일 수학의 f64 결과를
@@ -20,7 +19,7 @@ const FIXTURE_PATH = join(
 
 interface ResizeScaleCase {
   name: string;
-  field: SpriteResizeValueField | 'ratio';
+  field: 'offset' | 'ratio';
   prev: number;
   next: number;
   value?: number;
@@ -30,7 +29,7 @@ interface ResizeScaleCase {
 
 interface ResizeScaleFixture {
   version: number;
-  ranges: Record<SpriteResizeValueField, [number, number]>;
+  ranges: { offset: [number, number] };
   cases: ResizeScaleCase[];
 }
 
@@ -55,21 +54,11 @@ describe('sprite resize scale parity (fixture)', () => {
       SPRITE_CONSTRAINTS.offset.min,
       SPRITE_CONSTRAINTS.offset.max,
     ]);
-    expect(fixture.ranges.coord).toEqual([
-      SPRITE_CONSTRAINTS.imageRect.coordMin,
-      SPRITE_CONSTRAINTS.imageRect.coordMax,
-    ]);
-    expect(fixture.ranges.dimension).toEqual([
-      SPRITE_CONSTRAINTS.resizeMinDimension,
-      SPRITE_CONSTRAINTS.imageRect.dimensionMax,
-    ]);
   });
 
   it('케이스는 비어 있지 않고 필드 종류를 전수 커버한다', () => {
     const fields = new Set(fixture.cases.map((entry) => entry.field));
-    expect([...fields].sort()).toEqual(
-      ['coord', 'dimension', 'offset', 'ratio'].sort(),
-    );
+    expect([...fields].sort()).toEqual(['offset', 'ratio']);
   });
 
   it.each(fixture.cases.map((entry) => [entry.name, entry] as const))(
@@ -79,7 +68,7 @@ describe('sprite resize scale parity (fixture)', () => {
       const actual =
         entry.field === 'ratio'
           ? ratio
-          : scaleSpriteResizeValue(entry.value ?? 0, ratio, entry.field);
+          : scaleSpriteResizeOffset(entry.value ?? 0, ratio);
       expect(bitsHex(actual)).toBe(entry.expectedHex);
     },
   );

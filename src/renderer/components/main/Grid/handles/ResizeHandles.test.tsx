@@ -342,3 +342,24 @@ describe('ResizeHandles 핸들 호버 생명주기', () => {
     expect(hasCursorBodyClass()).toBe(false);
   });
 });
+
+describe('ResizeHandles 자리 양보', () => {
+  it('occupiedHandle 자리의 핸들은 그리지 않고 나머지 7개만 그린다', async () => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    await act(async () => {
+      root.render(
+        <ResizeHandles
+          bounds={{ x: 0, y: 0, width: 100, height: 100 }}
+          occupiedHandle={{ x: 1, y: 0 }}
+        />,
+      );
+    });
+    expect(host.querySelector('[data-resize-handle="ne"]')).toBeNull();
+    expect(host.querySelectorAll('[data-resize-handle]').length).toBe(7);
+    await act(async () => root.unmount());
+    host.remove();
+  });
+});

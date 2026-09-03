@@ -19,12 +19,6 @@
     "min": 0,
     "max": 1000
   },
-  "imageRect": {
-    "coordMin": -32768,
-    "coordMax": 32768,
-    "dimensionMax": 32768
-  },
-  "resizeMinDimension": 1e-06,
   "maxPoses": 64,
   "maxTriggersPerPose": 512,
   "pressDurationMs": {
@@ -35,13 +29,8 @@
   "defaultTransitionEasing": "cubic-bezier(0.4, 0, 0.2, 1)",
   "defaultActivation": "whileHeld",
   "defaultPressDurationMs": 300,
-  "defaultContactPoint": {
-    "x": 0.5,
-    "y": 1
-  },
   "imageMetrics": {
     "dimensionMin": 1,
     "dimensionMax": 32768
-  },
-  "defaultImagePlacement": "box"
+  }
 }

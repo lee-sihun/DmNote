@@ -144,14 +144,10 @@ const spriteAt = (id: string): CanonicalReactiveSpritePosition => ({
   className: null,
   useInlineStyles: null,
   baseImage: null,
-  imageFit: null,
-  imageRect: { x: 4, y: 8, width: 96, height: 64 },
   pivot: { x: 0.5, y: 0.5 },
   idleTransform: { x: 0, y: 0, rotation: 0, scale: 1 },
   poses: [
     {
-      contactPoint: { x: 0.5, y: 1 },
-      imagePivot: null,
       imageOverrideMetrics: null,
       poseId: 'pose-1',
       triggers: [STABLE_KEY_ID],
@@ -161,7 +157,6 @@ const spriteAt = (id: string): CanonicalReactiveSpritePosition => ({
   ],
   transitionMs: 90,
   transitionEasing: 'linear',
-  imagePlacement: 'box',
   referenceNaturalSize: null,
 });
 const keyPosition = {
@@ -504,7 +499,6 @@ describe('useGridSelection compound history gesture', () => {
     expect(pasted.dy).toBe(original.dy + PASTE_OFFSET);
     expect(pasted.width).toBe(original.width);
     expect(pasted.height).toBe(original.height);
-    expect(pasted.imageRect).toEqual(original.imageRect);
     expect(pasted.pivot).toEqual(original.pivot);
     // 사본 poseId는 재발급 - 원본과 공유하면 백엔드 커밋이 중복으로 거부.
     // 트리거·변환·이미지는 원본과 동일
@@ -546,7 +540,6 @@ describe('useGridSelection compound history gesture', () => {
     )!;
     expect(spriteElement.position.id).toBe(pasted.id);
     expect(spriteElement.position.dx).toBe(original.dx + PASTE_OFFSET);
-    expect(spriteElement.position.imageRect).toEqual(original.imageRect);
     // wire payload도 eager 사본과 같은 재발급 poseId를 싣는다
     expect(spriteElement.position.poses).toEqual(pasted.poses);
   });
@@ -561,8 +554,6 @@ describe('useGridSelection compound history gesture', () => {
       ...spriteAt(STABLE_SPRITE_ID),
       poses: [
         {
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
           poseId: 'pose-1',
           // 배치 안 키와 배치 밖 키 참조 혼합

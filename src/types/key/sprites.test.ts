@@ -18,8 +18,6 @@ const backendWireSprite = {
   hidden: false,
   id: '566b0333-494c-4d47-a76d-506b71e5ac4c',
   idleTransform: { rotation: 0, scale: 1, x: 0, y: 0 },
-  imageFit: 'contain',
-  imageRect: { height: 200, width: 200, x: 0, y: 0 },
   pivot: { x: 0.5, y: 0.5 },
   poses: [],
   activation: 'whileHeld',
@@ -68,8 +66,6 @@ describe('reactiveSpritePositionSchema wire 계약', () => {
         triggers: ['566b0333-494c-4d47-a76d-506b71e5ac4c'],
         transform: { x: 0, y: 0, rotation: 0, scale: 1 },
         imageOverride: null,
-        contactPoint: { x: 0.5, y: 1 },
-        imagePivot: null,
         imageOverrideMetrics: null,
         ...pose,
       },
@@ -155,26 +151,28 @@ describe('reactiveSpritePositionSchema wire 계약', () => {
     ).toBe(false);
   });
 
-  it('imageRect가 백엔드 좌표·크기 상한을 넘으면 거부한다', () => {
+  it('상태 기준점은 생략·null·0..1 값을 허용하고 범위 밖은 거부한다', () => {
+    expect(reactiveSpritePositionSchema.safeParse(withPose({})).success).toBe(
+      true,
+    );
     expect(
-      reactiveSpritePositionSchema.safeParse({
-        ...backendWireSprite,
-        imageRect: { x: 40000, y: 0, width: 200, height: 200 },
-      }).success,
-    ).toBe(false);
+      reactiveSpritePositionSchema.safeParse(withPose({ pivot: null })).success,
+    ).toBe(true);
     expect(
-      reactiveSpritePositionSchema.safeParse({
-        ...backendWireSprite,
-        imageRect: { x: 0, y: 0, width: 40000, height: 200 },
-      }).success,
+      reactiveSpritePositionSchema.safeParse(
+        withPose({ pivot: { x: 0, y: 1 } }),
+      ).success,
+    ).toBe(true);
+    expect(
+      reactiveSpritePositionInputSchema.safeParse(
+        withPose({ pivot: { x: -0.001, y: 0.5 } }),
+      ).success,
     ).toBe(false);
   });
 });
 
 describe('findDuplicateTriggerPose', () => {
   const pose = (poseId: string, triggers: string[]): SpritePose => ({
-    contactPoint: { x: 0.5, y: 1 },
-    imagePivot: null,
     imageOverrideMetrics: null,
     poseId,
     triggers,

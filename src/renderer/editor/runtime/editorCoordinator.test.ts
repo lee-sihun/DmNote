@@ -3285,8 +3285,6 @@ describe('commitSemanticOpsInternal', () => {
           className: null,
           useInlineStyles: null,
           baseImage: null,
-          imageFit: null,
-          imageRect: { x: 40, y: -10, width: 160, height: 80 },
           pivot: { x: 0.5, y: 0.5 },
           idleTransform: { x: 12, y: -6, rotation: 15, scale: 1.5 },
           poses: [
@@ -3295,8 +3293,6 @@ describe('commitSemanticOpsInternal', () => {
               triggers: [DEFAULT_KEY_ID],
               transform: { x: -30, y: 44, rotation: -90, scale: 0.5 },
               imageOverride: null,
-              contactPoint: { x: 0.5, y: 1 },
-              imagePivot: null,
               imageOverrideMetrics: null,
             },
           ],
@@ -3304,7 +3300,6 @@ describe('commitSemanticOpsInternal', () => {
           pressDurationMs: 300,
           transitionMs: 90,
           transitionEasing: 'linear',
-          imagePlacement: 'box',
           referenceNaturalSize: null,
         } as never,
       ],
@@ -3331,7 +3326,6 @@ describe('commitSemanticOpsInternal', () => {
     // sx=2, sy=0.5
     const sprite = applied.document.spritePositions['4key'][0];
     expect(sprite).toMatchObject({ dx: 5, dy: 8, width: 400, height: 50 });
-    expect(sprite.imageRect).toEqual({ x: 80, y: -5, width: 320, height: 40 });
     expect(sprite.idleTransform).toEqual({
       x: 24,
       y: -3,
@@ -3387,7 +3381,6 @@ describe('commitSemanticOpsInternal', () => {
       rotation: -90,
       scale: 0.5,
     });
-    expect(sprite.imageRect).toEqual({ x: 80, y: -5, width: 320, height: 40 });
     // canonical과 낙관 로컬이 같은 결과로 수렴
     expect(
       harness.transport.canonical.document.spritePositions['4key'][0],

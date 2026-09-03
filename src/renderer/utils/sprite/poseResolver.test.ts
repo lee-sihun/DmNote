@@ -40,9 +40,7 @@ const makeSprite = (
     width: 200,
     height: 120,
     baseImage: 'base.png',
-    imageRect: { x: 0, y: 0, width: 100, height: 100 },
     transitionEasing: 'linear',
-    imagePlacement: 'box',
     referenceNaturalSize: null,
     poses,
     ...overrides,
@@ -306,22 +304,28 @@ describe('resolveSpriteTarget 진리표', () => {
 });
 
 describe('resolveSpriteTarget visual', () => {
-  it('정확 일치 자세는 자기 이미지·축을, 평균 상태는 첫 override 자세의 축을 쓴다', () => {
+  it('정확 일치 자세는 자기 이미지·원본 크기를, 평균 상태는 첫 override 자세의 것을 쓴다', () => {
     const a = makePose('a', ['k1'], { x: 10 }, 'a.png');
     const b = makePose('b', ['k2'], { x: 30 }, 'b.png');
     const sprite = makeSprite([
-      { ...a, imagePivot: { x: 0.1, y: 0.9 } },
-      { ...b, imagePivot: { x: 0.2, y: 0.8 } },
+      {
+        ...a,
+        imageOverrideMetrics: { source: 'a.png', width: 100, height: 300 },
+      },
+      {
+        ...b,
+        imageOverrideMetrics: { source: 'b.png', width: 200, height: 200 },
+      },
     ]);
     const exact = resolveSpriteTarget(sprite, new Set(['k1']));
     expect(exact.visual.sourcePoseId).toBe('a');
-    expect(exact.visual.pivot).toEqual({ x: 0.1, y: 0.9 });
+    expect(exact.visual.naturalSize).toEqual({ width: 100, height: 300 });
     const mixed = resolveSpriteTarget(sprite, new Set(['k1', 'k2']));
     expect(mixed.imageSrc).toBe('a.png');
     expect(mixed.visual.sourcePoseId).toBe('a');
-    expect(mixed.visual.pivot).toEqual({ x: 0.1, y: 0.9 });
+    expect(mixed.visual.naturalSize).toEqual({ width: 100, height: 300 });
     const idle = resolveSpriteTarget(sprite, new Set());
     expect(idle.visual.sourcePoseId).toBeNull();
-    expect(idle.visual.pivot).toBe(sprite.pivot);
+    expect(idle.visual.naturalSize).toBeNull();
   });
 });

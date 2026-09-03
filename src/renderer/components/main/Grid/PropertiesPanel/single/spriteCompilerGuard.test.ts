@@ -30,9 +30,9 @@ describe('스프라이트 편집 컴파일러 가드', () => {
     expect(compile(path)).toContain('react/compiler-runtime');
   });
 
-  it("SpritePoseGizmo는 'use no memo'로 제외를 명시한다", () => {
+  it("SpriteCanvasHandles는 'use no memo'로 제외를 명시한다", () => {
     const path =
-      'src/renderer/components/main/Grid/handles/SpritePoseGizmo.tsx';
+      'src/renderer/components/main/Grid/handles/SpriteCanvasHandles.tsx';
     expect(readFileSync(resolve(process.cwd(), path), 'utf8')).toMatch(
       /^'use no memo';/,
     );

@@ -52,14 +52,11 @@ const spriteFixture = (id: string): CanonicalReactiveSpritePosition => ({
   className: null,
   useInlineStyles: null,
   baseImage: null,
-  imageFit: null,
-  imageRect: { x: 0, y: 0, width: 100, height: 100 },
   pivot: { x: 0.5, y: 0.5 },
   idleTransform: { x: 0, y: 0, rotation: 0, scale: 1 },
   poses: [],
   transitionMs: 90,
   transitionEasing: 'cubic-bezier(0.4, 0, 0.2, 1)',
-  imagePlacement: 'box',
   referenceNaturalSize: null,
 });
 
@@ -188,6 +185,76 @@ describe('editor API compatibility adapters', () => {
       ),
     ).resolves.toBe('targetMissing');
     expect(generated[0]).toBeNull();
+  });
+
+  it('sprite patchPosition은 대기 뒤 최신 대상에서 의도 patch를 다시 계산한다', async () => {
+    const sprite = {
+      ...spriteFixture('cccccccc-cccc-4ccc-8ccc-cccccccccccc'),
+      poses: [
+        {
+          poseId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+          triggers: ['ffffffff-ffff-4fff-8fff-ffffffffffff'],
+          transform: { x: 42, y: 7, rotation: 0, scale: 1 },
+          imageOverride: null,
+          imageOverrideMetrics: null,
+          pivot: { x: 0.4, y: 0.6 },
+        },
+      ],
+    };
+    const base = {
+      ...structuredClone(document),
+      spritePositions: { '4key': [sprite] },
+    } as CanonicalEditorDocumentV1;
+    let generated: EditorPatchV1 | null = null;
+    commitGeneratedPatch.mockImplementation(
+      async (generate: (base: CanonicalEditorDocumentV1) => unknown) => {
+        generated = generate(base) as EditorPatchV1 | null;
+        return structuredClone(document);
+      },
+    );
+
+    const stalePoses = structuredClone(sprite.poses);
+    stalePoses[0].transform.x = -100;
+    await spriteItemsApi.patchPosition(
+      '4key',
+      sprite.id,
+      { poses: stalePoses },
+      undefined,
+      (current) => ({
+        pivot: { x: 0.25, y: 0.75 },
+        poses: current.poses,
+      }),
+    );
+
+    const patched = generated?.spritePositions?.['4key']?.[0];
+    expect(patched?.pivot).toEqual({ x: 0.25, y: 0.75 });
+    expect(patched?.poses[0].transform.x).toBe(42);
+  });
+
+  it('sprite patchPosition은 최신 상태에서 의도를 적용할 수 없으면 건너뛴다', async () => {
+    const sprite = spriteFixture('cccccccc-cccc-4ccc-8ccc-cccccccccccc');
+    const base = {
+      ...structuredClone(document),
+      spritePositions: { '4key': [sprite] },
+    } as CanonicalEditorDocumentV1;
+    let generated: EditorPatchV1 | null = null;
+    commitGeneratedPatch.mockImplementation(
+      async (generate: (base: CanonicalEditorDocumentV1) => unknown) => {
+        generated = generate(base) as EditorPatchV1 | null;
+        return structuredClone(document);
+      },
+    );
+
+    await expect(
+      spriteItemsApi.patchPosition(
+        '4key',
+        sprite.id,
+        { hidden: true },
+        undefined,
+        () => null,
+      ),
+    ).resolves.toBe('skipped');
+    expect(generated).toBeNull();
   });
 
   it('sprite patchPosition은 gestureId를 editor_commit 메타로 실어 보낸다', async () => {

@@ -53,15 +53,14 @@ const makePose = (
     imageOverride,
   });
 
-// 활동 영역 200x200에 imageRect가 영역 전체, pivot 중앙 (기본 생성값 형태)
+// 활동 영역 200x200, pivot 중앙 (기본 생성값 형태)
 const makeSprite = (
   overrides: Partial<SpriteReachGeometry> = {},
 ): SpriteReachGeometry => ({
   baseImage: 'base.png',
-  imageRect: { x: 0, y: 0, width: 200, height: 200 },
+  width: 200,
+  height: 200,
   pivot: { x: 0.5, y: 0.5 },
-  imageFit: null,
-  imagePlacement: 'box',
   referenceNaturalSize: null,
   idleTransform: makeTransform(),
   poses: [],
@@ -70,7 +69,7 @@ const makeSprite = (
 });
 
 describe('computeSpriteReachAabb', () => {
-  it('변환 없는 스프라이트는 imageRect 그대로', () => {
+  it('변환 없는 스프라이트는 요소 상자 그대로', () => {
     const reach = computeSpriteReachAabb(makeSprite());
     expect(reach).toEqual({ minX: 0, minY: 0, maxX: 200, maxY: 200 });
   });
@@ -583,11 +582,11 @@ describe('easingOvershootExtension', () => {
   });
 });
 
-describe('computeSpriteReachAabb pivot 배치', () => {
+describe('computeSpriteReachAabb 자세 이미지 배치', () => {
   it('자세 이미지의 배치가 상자보다 크면 그만큼 도달 범위가 넓어진다', () => {
     const reach = computeSpriteReachAabb(
       makeSprite({
-        imagePlacement: 'pivot',
+        pivot: { x: 0.5, y: 1 },
         referenceNaturalSize: { source: 'base.png', width: 200, height: 200 },
         poses: [
           makeSpritePose({
@@ -600,19 +599,17 @@ describe('computeSpriteReachAabb pivot 배치', () => {
               width: 200,
               height: 400,
             },
-            imagePivot: { x: 0.5, y: 1 },
           }),
         ],
       }),
     );
-    // 기준 이미지는 상자 그대로(0..200), 자세 이미지는 축(100,100) 위로 400px
-    expect(reach).toEqual({ minX: 0, minY: -300, maxX: 200, maxY: 200 });
+    // 기준 이미지는 상자 그대로(0..200), 자세 이미지는 바닥 기준점(100,200) 위로 400px
+    expect(reach).toEqual({ minX: 0, minY: -200, maxX: 200, maxY: 200 });
   });
 
-  it('원본 크기가 없는 자세는 box 배치로 세어 상자 밖으로 나가지 않는다', () => {
+  it('원본 크기가 없는 자세는 상자 배치로 세어 상자 밖으로 나가지 않는다', () => {
     const reach = computeSpriteReachAabb(
       makeSprite({
-        imagePlacement: 'pivot',
         referenceNaturalSize: { source: 'base.png', width: 200, height: 200 },
         poses: [makePose('p', {}, 'hand.png')],
       }),

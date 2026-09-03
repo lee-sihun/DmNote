@@ -25,7 +25,6 @@ describe('SpriteImagePreviewCard', () => {
       root.render(
         <SpriteImagePreviewCard
           source={source}
-          imageFit={null}
           onPick={vi.fn()}
           onReset={vi.fn()}
           t={(key) => key}

@@ -34,14 +34,11 @@ const makeSprite = (
   className: null,
   useInlineStyles: null,
   baseImage: 'base.png',
-  imageFit: null,
-  imageRect: { x: 0, y: 0, width: 200, height: 200 },
   pivot: { x: 0.5, y: 0.5 },
   idleTransform: makeTransform(),
   poses: [],
   transitionMs: 90,
   transitionEasing: DEFAULT_SPRITE_TRANSITION_EASING,
-  imagePlacement: 'box',
   referenceNaturalSize: null,
   ...overrides,
 });
@@ -165,8 +162,6 @@ describe('computeLayout 도달 범위 열거 게이트', () => {
       id: 'co',
       poses: [
         {
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
           poseId: 'a',
           triggers: ['k1'],
@@ -174,8 +169,6 @@ describe('computeLayout 도달 범위 열거 게이트', () => {
           imageOverride: null,
         },
         {
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
           poseId: 'b',
           triggers: ['k2'],
@@ -190,8 +183,6 @@ describe('computeLayout 도달 범위 열거 게이트', () => {
     makeSprite({
       id: 'over-cap',
       poses: Array.from({ length: 11 }, (_, index) => ({
-        contactPoint: { x: 0.5, y: 1 },
-        imagePivot: null,
         imageOverrideMetrics: null,
         poseId: `cap-${index}`,
         triggers: [`c${index}`],
@@ -238,8 +229,6 @@ describe('computeLayout 도달 범위 열거 게이트', () => {
     makeSprite({
       id,
       poses: Array.from({ length: 10 }, (_, index) => ({
-        contactPoint: { x: 0.5, y: 1 },
-        imagePivot: null,
         imageOverrideMetrics: null,
         poseId: `${id}-${index}`,
         triggers: [`c${index}`],

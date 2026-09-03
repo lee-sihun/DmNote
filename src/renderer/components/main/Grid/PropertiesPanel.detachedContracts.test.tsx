@@ -960,7 +960,7 @@ describe('PropertiesPanel canonical native contract', () => {
 
     // 크기 입력은 resize가 실제로 조절하는 집합을 그대로 읽어야 한다.
     // 스타일 집합에는 스프라이트가 없어서 그걸 쓰면 키 값이 대표로 뜨고,
-    // 그 값을 확정하면 스프라이트 imageRect와 모든 자세 오프셋까지 배율이 먹는다
+    // 그 값을 확정하면 스프라이트의 모든 자세 오프셋까지 배율이 먹는다
     it('키와 스프라이트를 함께 고르면 크기 getter가 Mixed를 낸다', () => {
       const key = { ...createDefaultKeyPosition(), id: MIXED_KEY_ID };
       useKeyStore.setState({
@@ -1007,7 +1007,7 @@ describe('PropertiesPanel canonical native contract', () => {
       });
     });
 
-    // 커밋은 resizeSprite로 imageRect와 자세까지 스케일한다. 미리보기가 원시
+    // 커밋은 resizeSprite로 자세까지 스케일한다. 미리보기가 원시
     // bounds만 얹으면 드래그 중엔 활동 영역만 줄다가 놓는 순간 튄다
     it('스프라이트 크기 미리보기는 이미지와 자세까지 커밋과 같게 투영한다', () => {
       const key = { ...createDefaultKeyPosition(), id: MIXED_KEY_ID };
@@ -1025,7 +1025,6 @@ describe('PropertiesPanel canonical native contract', () => {
               groupId: null,
               width: 200,
               height: 200,
-              imageRect: { x: 0, y: 0, width: 200, height: 200 },
               poses: [
                 makeSpritePose({
                   poseId: 'pose-1',
@@ -1067,7 +1066,6 @@ describe('PropertiesPanel canonical native contract', () => {
       )[0].patch;
       // 200 -> 100 이므로 배율 0.5가 콘텐츠에도 그대로 걸린다
       expect(patch.width).toBe(100);
-      expect(patch.imageRect).toMatchObject({ width: 100 });
       expect(
         (patch.poses as Array<{ transform: { x: number } }>)[0].transform.x,
       ).toBe(-30);

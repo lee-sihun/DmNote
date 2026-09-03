@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DEFAULT_SPRITE_ACTIVATION,
-  DEFAULT_SPRITE_CONTACT_POINT,
   DEFAULT_SPRITE_PRESS_DURATION_MS,
   DEFAULT_SPRITE_TRANSITION_EASING,
   DEFAULT_SPRITE_TRANSITION_MS,
@@ -12,7 +11,7 @@ import {
   reactiveSpritePositionInputSchema,
   reactiveSpritePositionSchema,
   spriteAnchorSchema,
-  spriteRectSchema,
+  spriteImageMetricsSchema,
   spriteTransformSchema,
 } from '../src/types/key/sprites';
 
@@ -31,8 +30,6 @@ interface SpriteConstraintFixture {
   scale: { min: number; max: number };
   anchor: { min: number; max: number };
   transitionMs: { min: number; max: number };
-  imageRect: { coordMin: number; coordMax: number; dimensionMax: number };
-  resizeMinDimension: number;
   maxPoses: number;
   maxTriggersPerPose: number;
   pressDurationMs: { min: number; max: number };
@@ -40,7 +37,7 @@ interface SpriteConstraintFixture {
   defaultTransitionEasing: string;
   defaultActivation: string;
   defaultPressDurationMs: number;
-  defaultContactPoint: { x: number; y: number };
+  imageMetrics: { dimensionMin: number; dimensionMax: number };
 }
 
 const fixture = JSON.parse(
@@ -58,8 +55,6 @@ const baseSprite = () => ({
   className: null,
   useInlineStyles: null,
   baseImage: null,
-  imageFit: null,
-  imageRect: { x: 0, y: 0, width: 200, height: 200 },
   pivot: { x: 0.5, y: 0.5 },
   idleTransform: { x: 0, y: 0, rotation: 0, scale: 1 },
   poses: [] as unknown[],
@@ -67,6 +62,7 @@ const baseSprite = () => ({
   pressDurationMs: 300,
   transitionMs: 90,
   transitionEasing: 'cubic-bezier(0.4, 0, 0.2, 1)',
+  referenceNaturalSize: null,
 });
 
 const pose = (poseId: string, triggers: string[]) => ({
@@ -74,7 +70,7 @@ const pose = (poseId: string, triggers: string[]) => ({
   triggers,
   transform: { x: 0, y: 0, rotation: 0, scale: 1 },
   imageOverride: null,
-  contactPoint: { x: 0.5, y: 1 },
+  imageOverrideMetrics: null,
 });
 
 describe('sprite constraint parity (fixture)', () => {
@@ -96,10 +92,7 @@ describe('sprite constraint parity (fixture)', () => {
     expect(SPRITE_CONSTRAINTS.scale).toEqual(fixture.scale);
     expect(SPRITE_CONSTRAINTS.anchor).toEqual(fixture.anchor);
     expect(SPRITE_CONSTRAINTS.transitionMs).toEqual(fixture.transitionMs);
-    expect(SPRITE_CONSTRAINTS.imageRect).toEqual(fixture.imageRect);
-    expect(SPRITE_CONSTRAINTS.resizeMinDimension).toBe(
-      fixture.resizeMinDimension,
-    );
+    expect(SPRITE_CONSTRAINTS.imageMetrics).toEqual(fixture.imageMetrics);
     expect(SPRITE_CONSTRAINTS.maxPoses).toBe(fixture.maxPoses);
     expect(SPRITE_CONSTRAINTS.maxTriggersPerPose).toBe(
       fixture.maxTriggersPerPose,
@@ -116,7 +109,6 @@ describe('sprite constraint parity (fixture)', () => {
     expect(DEFAULT_SPRITE_PRESS_DURATION_MS).toBe(
       fixture.defaultPressDurationMs,
     );
-    expect(DEFAULT_SPRITE_CONTACT_POINT).toEqual(fixture.defaultContactPoint);
   });
 
   it('transform 스칼라는 fixture 경계에서 통과하고 근소 초과에서 거부된다', () => {
@@ -145,7 +137,7 @@ describe('sprite constraint parity (fixture)', () => {
     }
   });
 
-  it('pivot·imageRect·transitionMs도 fixture 경계를 그대로 강제한다', () => {
+  it('pivot·원본 크기·transitionMs도 fixture 경계를 그대로 강제한다', () => {
     expect(
       spriteAnchorSchema.safeParse({ x: fixture.anchor.max, y: 0 }).success,
     ).toBe(true);
@@ -154,26 +146,28 @@ describe('sprite constraint parity (fixture)', () => {
         .success,
     ).toBe(false);
 
-    const rect = { x: 0, y: 0, width: 200, height: 200 };
+    const metrics = { source: 'a.png', width: 100, height: 100 };
     expect(
-      spriteRectSchema.safeParse({ ...rect, x: fixture.imageRect.coordMax })
-        .success,
+      spriteImageMetricsSchema.safeParse({
+        ...metrics,
+        width: fixture.imageMetrics.dimensionMax,
+      }).success,
     ).toBe(true);
     expect(
-      spriteRectSchema.safeParse({ ...rect, x: fixture.imageRect.coordMax + 1 })
-        .success,
+      spriteImageMetricsSchema.safeParse({
+        ...metrics,
+        width: fixture.imageMetrics.dimensionMax + 1,
+      }).success,
     ).toBe(false);
     expect(
-      spriteRectSchema.safeParse({
-        ...rect,
-        width: fixture.imageRect.dimensionMax,
+      spriteImageMetricsSchema.safeParse({
+        ...metrics,
+        height: fixture.imageMetrics.dimensionMin - 1,
       }).success,
-    ).toBe(true);
+    ).toBe(false);
+    // Rust u32 계약 - 소수 픽셀은 거부
     expect(
-      spriteRectSchema.safeParse({
-        ...rect,
-        width: fixture.imageRect.dimensionMax + 1,
-      }).success,
+      spriteImageMetricsSchema.safeParse({ ...metrics, width: 100.5 }).success,
     ).toBe(false);
 
     expect(
@@ -220,12 +214,32 @@ describe('sprite constraint parity (fixture)', () => {
       pressDurationMs: _pressDurationMs,
       ...legacySprite
     } = baseSprite();
-    const { contactPoint: _contactPoint, ...legacyPose } = pose('p', ['t']);
-    const legacy = { ...legacySprite, poses: [legacyPose] };
+    const legacy = { ...legacySprite, poses: [pose('p', ['t'])] };
     expect(reactiveSpritePositionSchema.safeParse(legacy).success).toBe(false);
     expect(reactiveSpritePositionInputSchema.safeParse(legacy).success).toBe(
       true,
     );
+  });
+
+  it('제거된 필드(imageRect·imageFit·imagePlacement·contactPoint·imagePivot)는 무시된다', () => {
+    const legacy = {
+      ...baseSprite(),
+      imageFit: 'contain',
+      imageRect: { x: 10, y: 10, width: 100, height: 100 },
+      imagePlacement: 'box',
+      poses: [
+        {
+          ...pose('p', ['t']),
+          contactPoint: { x: 0.5, y: 1 },
+          imagePivot: null,
+        },
+      ],
+    };
+    const parsed = reactiveSpritePositionSchema.safeParse(legacy);
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect('imageRect' in parsed.data).toBe(false);
+    expect('contactPoint' in parsed.data.poses[0]).toBe(false);
   });
 
   it('input 스키마 컬렉션 상한은 fixture 값에서 통과하고 +1에서 거부된다', () => {

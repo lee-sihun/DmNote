@@ -152,14 +152,11 @@ const spriteAt = (id: string): ReactiveSpritePosition & { id: string } => ({
   className: null,
   useInlineStyles: null,
   baseImage: null,
-  imageFit: null,
-  imageRect: { x: 0, y: 0, width: 100, height: 100 },
   pivot: { x: 0.5, y: 0.5 },
   idleTransform: { x: 0, y: 0, rotation: 0, scale: 1 },
   poses: [],
   transitionMs: 90,
   transitionEasing: 'linear',
-  imagePlacement: 'box',
   referenceNaturalSize: null,
 });
 
@@ -450,8 +447,6 @@ describe('elementOps', () => {
       ...spriteAt(crypto.randomUUID()),
       poses: [
         {
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
           poseId: 'pose-src-1',
           triggers: [ID_A],
@@ -459,8 +454,6 @@ describe('elementOps', () => {
           imageOverride: 'sprites/override.png',
         },
         {
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
           poseId: 'pose-src-2',
           triggers: [ID_A, ID_B],
@@ -782,7 +775,6 @@ describe('elementOps', () => {
       dy: 10,
       width: 200,
       height: 120,
-      imageRect: { x: 4, y: 8, width: 96, height: 64 },
       idleTransform: { x: 12, y: -6, rotation: 15, scale: 1.5 },
     };
     useKeyStore.setState({
@@ -823,7 +815,6 @@ describe('elementOps', () => {
     // eager: sx=2, sy=1로 스프라이트 콘텐츠 동반 스케일
     const eager = useSpriteStore.getState().positions['4key'][0];
     expect(eager).toMatchObject({ width: 400, height: 120 });
-    expect(eager.imageRect).toEqual({ x: 8, y: 8, width: 192, height: 64 });
     expect(eager.idleTransform).toEqual({
       x: 24,
       y: -6,
@@ -1485,7 +1476,6 @@ describe('elementOps', () => {
   it('단일 sprite bounds는 resizeSprite op으로 콘텐츠까지 eager 스케일한다', async () => {
     const sprite = {
       ...spriteAt(ID_B),
-      imageRect: { x: 4, y: 8, width: 96, height: 64 },
       idleTransform: { x: 12, y: -6, rotation: 15, scale: 1.5 },
       poses: [
         {
@@ -1493,8 +1483,6 @@ describe('elementOps', () => {
           triggers: [ID_A],
           transform: { x: -30, y: 44, rotation: -90, scale: 0.5 },
           imageOverride: null,
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
         },
       ],
@@ -1523,7 +1511,6 @@ describe('elementOps', () => {
     // eager: 200x120 → 400x60 (sx=2, sy=0.5)
     const eager = useSpriteStore.getState().positions['4key'][0];
     expect(eager).toMatchObject({ dx: 5, dy: 8, width: 400, height: 60 });
-    expect(eager.imageRect).toEqual({ x: 8, y: 4, width: 192, height: 32 });
     expect(eager.idleTransform).toEqual({
       x: 24,
       y: -3,
@@ -1537,13 +1524,11 @@ describe('elementOps', () => {
       scale: 0.5,
     });
     expect(eager.pivot).toBe(sprite.pivot);
-    expect(eager.poses[0].contactPoint).toEqual({ x: 0.5, y: 1 });
   });
 
   it('sprite bounds의 편입 전 실패는 콘텐츠 필드까지 CAS 복원한다', async () => {
     const sprite = {
       ...spriteAt(ID_B),
-      imageRect: { x: 4, y: 8, width: 96, height: 64 },
       idleTransform: { x: 12, y: -6, rotation: 15, scale: 1.5 },
       poses: [
         {
@@ -1551,8 +1536,6 @@ describe('elementOps', () => {
           triggers: [ID_A],
           transform: { x: -30, y: 44, rotation: -90, scale: 0.5 },
           imageOverride: null,
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
         },
       ],
@@ -1571,7 +1554,6 @@ describe('elementOps', () => {
 
     const restored = useSpriteStore.getState().positions['4key'][0];
     expect(restored).toMatchObject({ dx: 0, dy: 0, width: 200, height: 120 });
-    expect(restored.imageRect).toEqual(sprite.imageRect);
     expect(restored.idleTransform).toEqual(sprite.idleTransform);
     expect(restored.poses).toEqual(sprite.poses);
   });

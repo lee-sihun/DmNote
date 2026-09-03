@@ -3095,7 +3095,7 @@
     },
     {
       "name": "resizesprite-scale-with-setbounds-batch",
-      "comment": "resizeSprite는 bounds 교체 + 이전 bounds 대비 배율(sx=2, sy=0.5)로 imageRect·idleTransform·poses 오프셋을 스케일한다. rotation·scale·pivot·contactPoint 불변. 같은 배치의 다른 요소 setBounds와 원자 커밋",
+      "comment": "resizeSprite는 bounds 교체 + 이전 bounds 대비 배율(sx=2, sy=0.5)로 idleTransform·poses 오프셋을 스케일한다. rotation·scale·pivot 불변. 같은 배치의 다른 요소 setBounds와 원자 커밋",
       "initialDocument": {
         "schemaVersion": 1,
         "keys": { "4key": ["A"] },
@@ -3130,8 +3130,6 @@
               "className": null,
               "useInlineStyles": null,
               "baseImage": null,
-              "imageFit": null,
-              "imageRect": { "x": 40, "y": -10, "width": 160, "height": 80 },
               "pivot": { "x": 0.5, "y": 0.5 },
               "idleTransform": {
                 "x": 12,
@@ -3149,8 +3147,7 @@
                     "rotation": -90,
                     "scale": 0.5
                   },
-                  "imageOverride": null,
-                  "contactPoint": { "x": 0.5, "y": 1 }
+                  "imageOverride": null
                 }
               ],
               "activation": "whileHeld",
@@ -3208,8 +3205,6 @@
               "className": null,
               "useInlineStyles": null,
               "baseImage": null,
-              "imageFit": null,
-              "imageRect": { "x": 80, "y": -5, "width": 320, "height": 40 },
               "pivot": { "x": 0.5, "y": 0.5 },
               "idleTransform": {
                 "x": 24,
@@ -3227,8 +3222,7 @@
                     "rotation": -90,
                     "scale": 0.5
                   },
-                  "imageOverride": null,
-                  "contactPoint": { "x": 0.5, "y": 1 }
+                  "imageOverride": null
                 }
               ],
               "activation": "whileHeld",
@@ -3277,8 +3271,6 @@
               "className": null,
               "useInlineStyles": null,
               "baseImage": null,
-              "imageFit": null,
-              "imageRect": { "x": 40, "y": -10, "width": 160, "height": 80 },
               "pivot": { "x": 0.5, "y": 0.5 },
               "idleTransform": {
                 "x": 12,
@@ -3296,8 +3288,7 @@
                     "rotation": -90,
                     "scale": 0.5
                   },
-                  "imageOverride": null,
-                  "contactPoint": { "x": 0.5, "y": 1 }
+                  "imageOverride": null
                 }
               ],
               "activation": "whileHeld",
@@ -3349,8 +3340,6 @@
               "className": null,
               "useInlineStyles": null,
               "baseImage": null,
-              "imageFit": null,
-              "imageRect": { "x": 40, "y": -10, "width": 160, "height": 80 },
               "pivot": { "x": 0.5, "y": 0.5 },
               "idleTransform": {
                 "x": 12,
@@ -3368,8 +3357,7 @@
                     "rotation": -90,
                     "scale": 0.5
                   },
-                  "imageOverride": null,
-                  "contactPoint": { "x": 0.5, "y": 1 }
+                  "imageOverride": null
                 }
               ],
               "activation": "whileHeld",

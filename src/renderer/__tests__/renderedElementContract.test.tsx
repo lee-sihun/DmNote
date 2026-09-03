@@ -359,14 +359,10 @@ describe('렌더 DOM 계약', () => {
               className: null,
               useInlineStyles: null,
               baseImage: 'data:image/png;base64,base',
-              imageFit: null,
-              imageRect: { x: 0, y: 0, width: 60, height: 60 },
               pivot: { x: 0.5, y: 0.5 },
               idleTransform: { x: 0, y: 0, rotation: 0, scale: 1 },
               poses: [
                 {
-                  contactPoint: { x: 0.5, y: 1 },
-                  imagePivot: null,
                   imageOverrideMetrics: null,
                   poseId: 'pose-contract',
                   triggers: ['el-contract'],
@@ -376,7 +372,6 @@ describe('렌더 DOM 계약', () => {
               ],
               transitionMs: 90,
               transitionEasing: 'cubic-bezier(0.4, 0, 0.2, 1)',
-              imagePlacement: 'box',
               referenceNaturalSize: null,
             }}
             keyCanonicalMap={new Map()}

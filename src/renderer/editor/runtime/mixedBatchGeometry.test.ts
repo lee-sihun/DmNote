@@ -333,7 +333,7 @@ describe('commitMixedBatchGeometry', () => {
         dy: 0,
         width: 80,
         height: 40,
-        imageRect: { x: 10, y: 4, width: 40, height: 20 },
+        idleTransform: { x: 10, y: 4, rotation: 0, scale: 1 },
       }),
     });
 
@@ -364,7 +364,7 @@ describe('commitMixedBatchGeometry', () => {
     const eager = useSpriteStore.getState().positions['4key'][0];
     expect(eager).toMatchObject({ dx: 0, dy: 0, width: 80, height: 40 });
     // 이동만이라 배율 1 - 콘텐츠는 그대로다
-    expect(eager.imageRect).toEqual({ x: 10, y: 4, width: 40, height: 20 });
+    expect(eager.idleTransform).toEqual({ x: 10, y: 4, rotation: 0, scale: 1 });
   });
 
   it('desired projection은 plugin position만 바꾸고 다른 영속 필드는 보존한다', async () => {

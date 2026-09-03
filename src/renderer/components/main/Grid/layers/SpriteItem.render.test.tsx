@@ -49,7 +49,6 @@ const spritePosition = (
     dy: 20,
     layerName: null,
     groupId: null,
-    imageFit: 'contain',
     ...overrides,
   });
 
@@ -76,8 +75,8 @@ const renderSprite = (
   return container.querySelector<HTMLElement>('[data-sprite-element="true"]');
 };
 
-const activityGuide = () =>
-  container.querySelector<HTMLElement>('[data-sprite-activity-guide="true"]');
+const idleGhost = () =>
+  container.querySelector<HTMLImageElement>('[data-sprite-idle-ghost="true"]');
 
 describe('SpriteItem 렌더', () => {
   beforeEach(() => {
@@ -92,33 +91,21 @@ describe('SpriteItem 렌더', () => {
     useSpriteEditPreviewStore.setState({ preview: null });
   });
 
-  it('활동 영역 가이드는 이미지 유무에 따라 상시·호버로 갈린다', () => {
-    // 이미지 없는 스프라이트는 가이드가 유일한 실체 - 점선 상시 표시
+  it('이미지가 없으면 자리표시자만 그리고 선택 표식은 공통 아웃라인이 맡는다', () => {
     const idle = renderSprite(spritePosition());
     expect(idle).not.toBeNull();
-    expect(activityGuide()?.className).toContain('border-dashed');
-    expect(activityGuide()?.className).not.toContain('border-transparent');
     expect(idle?.dataset.selected).toBeUndefined();
-    // 이미지가 없으면 자리표시자 렌더
     expect(
       idle?.querySelector('[data-sprite-placeholder="true"]'),
     ).not.toBeNull();
+    // 상자가 곧 이미지라 별도 가이드·표식이 없다 - 핸들은 오버레이 층 몫
+    expect(
+      idle?.querySelector('[data-sprite-activity-guide="true"]'),
+    ).toBeNull();
+    expect(idle?.querySelector('[data-sprite-pivot-marker="true"]')).toBeNull();
 
-    // 이미지가 있으면 점선은 소음이라 기본 투명, 호버에만 드러난다.
-    // 호버는 캡처를 받는 루트(group) 기준이라 눌린 동안에도 유지된다
-    renderSprite(spritePosition({ baseImage: 'hand.png' }));
-    expect(activityGuide()?.className).toContain('border-transparent');
-    // 호버 색도 고스트와 같은 토큰
-    expect(activityGuide()?.className).toContain(
-      'group-hover/sprite:border-[color:var(--ui-guide-activity)]',
-    );
-  });
-
-  it('선택 상태는 공통 아웃라인이 전담해 내부 가이드를 그리지 않는다', () => {
     const selected = renderSprite(spritePosition(), { isSelected: true });
     expect(selected?.dataset.selected).toBe('true');
-    // 그리드 아웃라인과 겹쳐 이중선이 되던 자리 - 아예 그리지 않는다
-    expect(activityGuide()).toBeNull();
   });
 
   it('이미지 호스트는 보더가 없어 오버레이와 같은 원점을 쓴다', () => {
@@ -128,10 +115,24 @@ describe('SpriteItem 렌더', () => {
     expect(host?.className).not.toContain('border');
   });
 
-  it('가이드 굵기와 radius는 줌에 반비례해 화면 px로 고정된다', () => {
-    renderSprite(spritePosition(), { zoom: 4 });
-    expect(activityGuide()?.style.borderWidth).toBe('0.25px');
-    expect(activityGuide()?.style.borderRadius).toBe('1px');
+  it('기본 이미지는 요소 상자를 그대로 채운다', () => {
+    const host = renderSprite(
+      spritePosition({
+        baseImage: 'hand.png',
+        width: 120,
+        height: 80,
+        pivot: { x: 0.25, y: 1 },
+        referenceNaturalSize: { source: 'hand.png', width: 60, height: 40 },
+      }),
+    );
+    const img = host?.querySelector<HTMLImageElement>(
+      'img:not([data-sprite-idle-ghost])',
+    );
+    expect(img?.style.left).toBe('0px');
+    expect(img?.style.top).toBe('0px');
+    expect(img?.style.width).toBe('120px');
+    expect(img?.style.height).toBe('80px');
+    expect(img?.style.transformOrigin).toBe('25% 100%');
   });
 
   it('hidden 스프라이트는 렌더하지 않는다', () => {
@@ -148,13 +149,12 @@ describe('SpriteItem 렌더', () => {
       }),
     );
 
-    const img = node?.querySelector('img');
+    const img = node?.querySelector<HTMLImageElement>(
+      'img:not([data-sprite-idle-ghost])',
+    );
     // 인라인 선언이 비어야 사용자 CSS가 !important 없이 이긴다
     expect(img?.style.transform).toBe('');
     expect(img?.style.objectFit).toBe('');
-    expect(img?.style.getPropertyValue('--dmn-sprite-fit-default')).toBe(
-      'contain',
-    );
     expect(img?.style.getPropertyValue('--dmn-sprite-transform-default')).toBe(
       'translate(4px, -2px) rotate(30deg) scale(1.5)',
     );
@@ -176,11 +176,14 @@ describe('SpriteItem 렌더', () => {
       }),
     );
 
-    const img = node?.querySelector('img');
+    const img = node?.querySelector<HTMLImageElement>(
+      'img:not([data-sprite-idle-ghost])',
+    );
     expect(img?.style.transform).toBe(
       'translate(4px, -2px) rotate(30deg) scale(1.5)',
     );
-    expect(img?.style.objectFit).toBe('contain');
+    // 상자가 비트맵 비율이라 늘리기가 곧 맞춤 - 인라인 모드는 fill로 승격
+    expect(img?.style.objectFit).toBe('fill');
     expect(img?.style.getPropertyValue('--dmn-sprite-transform-default')).toBe(
       '',
     );
@@ -192,8 +195,6 @@ describe('SpriteItem 자세 편집 프리뷰', () => {
     poseId: string,
     overrides: Partial<SpritePose> = {},
   ): SpritePose => ({
-    contactPoint: { x: 0.5, y: 1 },
-    imagePivot: null,
     imageOverrideMetrics: null,
     poseId,
     triggers: ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'],
@@ -238,51 +239,104 @@ describe('SpriteItem 자세 편집 프리뷰', () => {
       }),
     );
 
-    const img = node?.querySelector('img');
+    const img = node?.querySelector<HTMLImageElement>(
+      'img:not([data-sprite-idle-ghost])',
+    );
     expect(img?.style.transform).toBe(
       'translate(10px, 5px) rotate(45deg) scale(2)',
     );
     expect(img?.getAttribute('src')).toContain('override');
   });
 
-  it('이미지 설정 발행은 기준점 마커를 그리고 회수하면 사라진다', () => {
+  it('자세 편집 중에는 기본 자세를 반투명 고스트로 뒤에 남긴다', () => {
     act(() =>
-      useSpriteEditPreviewStore
-        .getState()
-        .publish({ kind: 'pivot', positionId: SPRITE_ID }),
+      useSpriteEditPreviewStore.getState().publish({
+        kind: 'pose',
+        positionId: SPRITE_ID,
+        poseId: 'pose-1',
+        fallbackPose: pose('pose-1'),
+        preferFallback: false,
+      }),
     );
     const node = renderSprite(
       spritePosition({
-        pivot: { x: 0.25, y: 1 },
-        imageRect: { x: 10, y: 20, width: 100, height: 80 },
+        baseImage: 'data:image/png;base64,base',
+        useInlineStyles: true,
+        poses: [pose('pose-1')],
       }),
     );
 
-    const marker = node?.querySelector<HTMLElement>(
-      '[data-sprite-pivot-marker="true"]',
+    const ghost = idleGhost();
+    expect(ghost).not.toBeNull();
+    expect(ghost?.getAttribute('src')).toContain('base');
+    expect(ghost?.style.opacity).toBe('0.3');
+    // 고스트는 기본 자세 그대로, 실제 이미지는 자세 변환
+    expect(ghost?.style.transform).toBe(
+      'translate(0px, 0px) rotate(0deg) scale(1)',
     );
-    expect(marker).not.toBeNull();
-    expect(marker?.style.left).toBe('35px');
-    expect(marker?.style.top).toBe('100px');
-    expect(marker?.style.transform).toBe('translate(-50%, -50%) scale(1)');
+    expect(node?.querySelectorAll('img').length).toBe(2);
 
+    // 발행을 거두면 고스트도 사라진다
     act(() => useSpriteEditPreviewStore.getState().clear());
-    expect(node?.querySelector('[data-sprite-pivot-marker="true"]')).toBeNull();
+    expect(idleGhost()).toBeNull();
   });
 
-  it('기준점 마커도 줌 보정으로 화면 크기를 유지한다', () => {
+  it('기본 자세와 같은 그림이면 고스트를 겹쳐 그리지 않는다', () => {
     act(() =>
-      useSpriteEditPreviewStore
-        .getState()
-        .publish({ kind: 'pivot', positionId: SPRITE_ID }),
+      useSpriteEditPreviewStore.getState().publish({
+        kind: 'pose',
+        positionId: SPRITE_ID,
+        poseId: 'pose-1',
+        fallbackPose: pose('pose-1', {
+          transform: { x: 0, y: 0, rotation: 0, scale: 1 },
+        }),
+        preferFallback: true,
+      }),
     );
-    const node = renderSprite(spritePosition(), { zoom: 4 });
+    renderSprite(spritePosition({ baseImage: 'data:image/png;base64,base' }));
+    expect(idleGhost()).toBeNull();
+  });
 
-    const marker = node?.querySelector<HTMLElement>(
-      '[data-sprite-pivot-marker="true"]',
+  it('크기가 다른 자세 이미지는 같은 기준점을 축에 맞춰 원본 비율로 그린다', () => {
+    act(() =>
+      useSpriteEditPreviewStore.getState().publish({
+        kind: 'pose',
+        positionId: SPRITE_ID,
+        poseId: 'pose-1',
+        fallbackPose: pose('pose-1', {
+          transform: { x: 0, y: 0, rotation: 0, scale: 1 },
+          imageOverride: 'data:image/png;base64,override',
+          imageOverrideMetrics: {
+            source: 'data:image/png;base64,override',
+            width: 50,
+            height: 200,
+          },
+        }),
+        preferFallback: true,
+      }),
     );
-    // 중심은 축 위치에 남고 크기만 줄어든다
-    expect(marker?.style.transform).toBe('translate(-50%, -50%) scale(0.25)');
+    const node = renderSprite(
+      spritePosition({
+        baseImage: 'data:image/png;base64,base',
+        width: 200,
+        height: 200,
+        pivot: { x: 0.5, y: 1 },
+        referenceNaturalSize: {
+          source: 'data:image/png;base64,base',
+          width: 100,
+          height: 100,
+        },
+      }),
+    );
+    const img = node?.querySelector<HTMLImageElement>(
+      'img:not([data-sprite-idle-ghost])',
+    );
+    // 배율 2 → 100x400, 기준점(0.5, 1)이 P(100, 200)에 놓인다 → left 50, top -200
+    expect(img?.getAttribute('src')).toContain('override');
+    expect((img as HTMLElement | null)?.style.width).toBe('100px');
+    expect((img as HTMLElement | null)?.style.height).toBe('400px');
+    expect((img as HTMLElement | null)?.style.left).toBe('50px');
+    expect((img as HTMLElement | null)?.style.top).toBe('-200px');
   });
 
   it('무효 draft 편집은 canonical 값 대신 스냅샷을 우선한다', () => {
@@ -306,7 +360,9 @@ describe('SpriteItem 자세 편집 프리뷰', () => {
       }),
     );
 
-    const img = node?.querySelector('img');
+    const img = node?.querySelector<HTMLImageElement>(
+      'img:not([data-sprite-idle-ghost])',
+    );
     expect(img?.style.transform).toBe(
       'translate(3px, 4px) rotate(0deg) scale(1)',
     );
@@ -333,7 +389,9 @@ describe('SpriteItem 자세 편집 프리뷰', () => {
       }),
     );
 
-    const img = node?.querySelector('img');
+    const img = node?.querySelector<HTMLImageElement>(
+      'img:not([data-sprite-idle-ghost])',
+    );
     expect(img?.style.transform).toBe(
       'translate(7px, 0px) rotate(0deg) scale(1)',
     );
@@ -357,7 +415,10 @@ describe('SpriteItem 자세 편집 프리뷰', () => {
         idleTransform: { x: 1, y: 2, rotation: 0, scale: 1 },
       }),
     );
-    const img = () => node?.querySelector('img');
+    const img = () =>
+      node?.querySelector<HTMLImageElement>(
+        'img:not([data-sprite-idle-ghost])',
+      );
     expect(img()?.style.transform).toBe(
       'translate(1px, 2px) rotate(0deg) scale(1)',
     );
@@ -390,7 +451,10 @@ describe('SpriteItem 자세 편집 프리뷰', () => {
         poses: [pose('pose-1', { imageOverride: '/override.png' })],
       }),
     );
-    const img = () => node?.querySelector('img');
+    const img = () =>
+      node?.querySelector<HTMLImageElement>(
+        'img:not([data-sprite-idle-ghost])',
+      );
 
     act(() =>
       useSpriteEditPreviewStore.getState().publish({
@@ -416,7 +480,6 @@ describe('SpriteItem 자세 편집 프리뷰', () => {
     expect(
       node?.querySelector('[data-sprite-placeholder="true"]'),
     ).not.toBeNull();
-    expect(activityGuide()?.className).not.toContain('border-transparent');
   });
 
   // 스키마가 빈 문자열을 막지 않아 플러그인·임포트로 들어온다.
@@ -439,7 +502,11 @@ describe('SpriteItem 자세 편집 프리뷰', () => {
       }),
     );
 
-    expect(node?.querySelector('img')?.getAttribute('src')).toBe('/base.png');
+    expect(
+      node
+        ?.querySelector<HTMLImageElement>('img:not([data-sprite-idle-ghost])')
+        ?.getAttribute('src'),
+    ).toBe('/base.png');
     expect(node?.querySelector('[data-sprite-placeholder="true"]')).toBeNull();
   });
 });

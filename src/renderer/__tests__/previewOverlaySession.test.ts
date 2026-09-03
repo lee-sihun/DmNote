@@ -324,6 +324,38 @@ describe('editGestureController', () => {
     );
   });
 
+  it('새 게스처는 남은 로컬 프리뷰를 교체하고 브로커에도 종료를 알린다', () => {
+    const staleSessionId = '11111111-1111-4111-8111-111111111111';
+    previewOverlay.applyLocalPatch(staleSessionId, '4key', [0], {
+      backgroundColor: '#111111',
+    });
+
+    editGestureController.preview('4key', [
+      { id: KEY_ID_A, patch: { backgroundColor: '#abcdef' } },
+    ]);
+
+    expect(previewApi.cancel).toHaveBeenCalledWith(staleSessionId);
+    expect(useKeyStore.getState().positions['4key'][0].backgroundColor).toBe(
+      '#abcdef',
+    );
+  });
+
+  it('활성 게스처가 없어도 cancel은 남은 로컬 프리뷰를 회수한다', () => {
+    const staleSessionId = '11111111-1111-4111-8111-111111111111';
+    const canonicalColor =
+      useKeyStore.getState().positions['4key'][0].backgroundColor;
+    previewOverlay.applyLocalPatch(staleSessionId, '4key', [0], {
+      backgroundColor: '#111111',
+    });
+
+    editGestureController.cancel();
+
+    expect(previewApi.cancel).toHaveBeenCalledWith(staleSessionId);
+    expect(useKeyStore.getState().positions['4key'][0].backgroundColor).toBe(
+      canonicalColor,
+    );
+  });
+
   it('preview는 coalescing 후 채널로 발행됨', async () => {
     editGestureController.preview('4key', [
       { id: KEY_ID_A, patch: { backgroundColor: '#111111' } },
@@ -445,6 +477,29 @@ describe('editGestureController', () => {
 
     expect(editGestureController.hasActiveGesture()).toBe(true);
     expect(useKeyStore.getState().positions['4key'][0].width).toBe(100);
+  });
+
+  it('새 조작이 교체한 정산 대기 세션은 늦게 실패해도 되살아나지 않는다', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    let rejectFirst!: (reason: Error) => void;
+    const firstCommit = new Promise<void>((_resolve, reject) => {
+      rejectFirst = reject;
+    });
+
+    editGestureController.preview('4key', [
+      { id: KEY_ID_A, patch: { width: 100 } },
+    ]);
+    editGestureController.settleCommit(firstCommit);
+
+    editGestureController.preview('4key', [
+      { id: KEY_ID_A, patch: { width: 120 } },
+    ]);
+    editGestureController.cancel();
+    rejectFirst(new Error('late io'));
+    await flushPromises();
+
+    expect(editGestureController.hasActiveGesture()).toBe(false);
+    expect(useKeyStore.getState().positions['4key'][0].width).toBe(60);
   });
 
   it('settleCommit 실패 뒤 편집 대상이 갈렸으면 세션을 되살리지 않는다', async () => {

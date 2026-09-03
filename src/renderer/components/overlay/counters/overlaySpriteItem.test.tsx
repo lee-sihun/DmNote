@@ -52,7 +52,6 @@ const makeSprite = (
     layerName: null,
     groupId: null,
     baseImage: BASE_IMAGE,
-    imageRect: { x: 10, y: 20, width: 120, height: 80 },
     pivot: { x: 0.5, y: 1 },
     poses: [makePose('p1', ['el-a'])],
     ...overrides,
@@ -145,16 +144,13 @@ describe('OverlaySpriteItem', () => {
   });
 
   it('useInlineStyles=false는 외관 채널을 인라인 선언 없이 변수로만 싣는다', () => {
-    render(makeSprite({ useInlineStyles: false, imageFit: 'cover' }));
+    render(makeSprite({ useInlineStyles: false }));
 
     const img = imgEl();
     // 인라인 선언이 비어야 사용자 CSS가 !important 없이 이긴다
     expect(img?.style.transform).toBe('');
     expect(img?.style.transition).toBe('');
     expect(img?.style.objectFit).toBe('');
-    expect(img?.style.getPropertyValue('--dmn-sprite-fit-default')).toBe(
-      'cover',
-    );
     expect(img?.style.getPropertyValue('--dmn-sprite-transform-default')).toBe(
       'translate(0px, 0px) rotate(0deg) scale(1)',
     );
@@ -162,7 +158,7 @@ describe('OverlaySpriteItem', () => {
       'transform 90ms cubic-bezier(0.4, 0, 0.2, 1)',
     );
     // 배치·기준점은 모드와 무관하게 인라인
-    expect(img?.style.left).toBe('10px');
+    expect(img?.style.width).toBe('300px');
     expect(img?.style.transformOrigin).toBe('50% 100%');
   });
 
@@ -210,7 +206,7 @@ describe('OverlaySpriteItem', () => {
   });
 
   it('useInlineStyles=true는 외관 채널을 인라인 선언으로 승격한다', () => {
-    render(makeSprite({ useInlineStyles: true, imageFit: 'cover' }));
+    render(makeSprite({ useInlineStyles: true }));
 
     const img = imgEl();
     expect(img?.style.transform).toBe(
@@ -219,7 +215,7 @@ describe('OverlaySpriteItem', () => {
     expect(img?.style.transition).toBe(
       'transform 90ms cubic-bezier(0.4, 0, 0.2, 1)',
     );
-    expect(img?.style.objectFit).toBe('cover');
+    expect(img?.style.objectFit).toBe('fill');
     expect(img?.style.getPropertyValue('--dmn-sprite-transform-default')).toBe(
       '',
     );
@@ -554,13 +550,34 @@ describe('OverlaySpriteItem onPress', () => {
 
     // 상자가 바뀌면 React는 idle 스타일 차이만 다시 쓴다 - 직접 쓴 자세 배치가 남지 않게
     // 재생을 취소하고 한 벌로 복원한다
+    render({ ...sprite, width: sprite.width + 10 });
+    expect(animations[0].cancelled).toBe(true);
+    expect(img.src).not.toContain(OVERRIDE_IMAGE);
+    expect(img.style.width).toBe(`${sprite.width + 10}px`);
+  });
+
+  it('재생 중 자세 기준점·이동값이 바뀌면 진행 중 재생을 끊고 기본 이미지로 되돌린다', () => {
+    const sprite = oneShotSprite();
+    render(sprite);
+    const img = imgEl()!;
+    act(() => applyEventKeyState('KeyA', true));
+    expect(img.src).toContain(OVERRIDE_IMAGE);
+
+    // 이미지·상자는 그대로, 자세 기준점과 보정 이동값만 바뀐 문서 - 재생이 직접 쓴
+    // 축·transform이 낡으므로 상자 변경과 같은 규칙으로 재생을 끊는다
+    const pose = sprite.poses[0];
     render({
       ...sprite,
-      imageRect: { ...sprite.imageRect, width: sprite.imageRect.width + 10 },
+      poses: [
+        {
+          ...pose,
+          pivot: { x: 0.25, y: 0.75 },
+          transform: { ...pose.transform, x: pose.transform.x + 12 },
+        },
+      ],
     });
     expect(animations[0].cancelled).toBe(true);
     expect(img.src).not.toContain(OVERRIDE_IMAGE);
-    expect(img.style.width).toBe(`${sprite.imageRect.width + 10}px`);
   });
 
   it('트리거의 canonical이 실제로 바뀌면 새 키로 재구독한다', () => {

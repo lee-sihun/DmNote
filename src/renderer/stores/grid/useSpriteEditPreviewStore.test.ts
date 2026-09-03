@@ -30,23 +30,14 @@ describe('useSpriteEditPreviewStore', () => {
     useSpriteEditPreviewStore.getState().publish({ ...payload });
     expect(listener).toHaveBeenCalledTimes(1);
 
-    useSpriteEditPreviewStore
-      .getState()
-      .publish({ kind: 'pivot', positionId: 'sprite-1' });
-    expect(listener).toHaveBeenCalledTimes(2);
-    useSpriteEditPreviewStore
-      .getState()
-      .publish({ kind: 'pivot', positionId: 'sprite-1' });
-    expect(listener).toHaveBeenCalledTimes(2);
-
     useSpriteEditPreviewStore.getState().clear();
-    expect(listener).toHaveBeenCalledTimes(3);
+    expect(listener).toHaveBeenCalledTimes(2);
     useSpriteEditPreviewStore.getState().clear();
-    expect(listener).toHaveBeenCalledTimes(3);
+    expect(listener).toHaveBeenCalledTimes(2);
     unsubscribe();
   });
 
-  it('자세 전환·preferFallback·종류 변경은 발행을 갱신한다', () => {
+  it('자세 전환·preferFallback 변경은 발행을 갱신한다', () => {
     const store = useSpriteEditPreviewStore.getState();
     store.publish({
       kind: 'pose',
@@ -63,7 +54,7 @@ describe('useSpriteEditPreviewStore', () => {
       preferFallback: false,
     });
     let preview = useSpriteEditPreviewStore.getState().preview;
-    expect(preview?.kind === 'pose' && preview.poseId).toBe('b');
+    expect(preview?.poseId).toBe('b');
 
     store.publish({
       kind: 'pose',
@@ -73,9 +64,6 @@ describe('useSpriteEditPreviewStore', () => {
       preferFallback: true,
     });
     preview = useSpriteEditPreviewStore.getState().preview;
-    expect(preview?.kind === 'pose' && preview.preferFallback).toBe(true);
-
-    store.publish({ kind: 'pivot', positionId: 'sprite-1' });
-    expect(useSpriteEditPreviewStore.getState().preview?.kind).toBe('pivot');
+    expect(preview?.preferFallback).toBe(true);
   });
 });

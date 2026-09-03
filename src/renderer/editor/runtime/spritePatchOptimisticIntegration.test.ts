@@ -88,14 +88,11 @@ const spriteFixture = (): CanonicalReactiveSpritePosition => ({
   className: null,
   useInlineStyles: null,
   baseImage: null,
-  imageFit: null,
-  imageRect: { x: 0, y: 0, width: 100, height: 100 },
   pivot: { x: 0.5, y: 0.5 },
   idleTransform: { x: 0, y: 0, rotation: 0, scale: 1 },
   poses: [],
   transitionMs: 90,
   transitionEasing: 'cubic-bezier(0.4, 0, 0.2, 1)',
-  imagePlacement: 'box',
   referenceNaturalSize: null,
 });
 
@@ -197,8 +194,6 @@ describe('스프라이트 필드 패치 낙관 적용 통합', () => {
       triggers: [B_ID, A_ID],
       transform: { x: 0, y: 0, rotation: 0, scale: 1 },
       imageOverride: null,
-      contactPoint: { x: 0.5, y: 1 },
-      imagePivot: null,
       imageOverrideMetrics: null,
     };
 

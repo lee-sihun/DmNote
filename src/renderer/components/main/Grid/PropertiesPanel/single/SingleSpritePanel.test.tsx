@@ -7,9 +7,9 @@ import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useSpriteEditPreviewStore } from '@stores/grid/useSpriteEditPreviewStore';
 import {
-  useSpritePoseGizmoStore,
-  type SpritePoseGizmoSession,
-} from '@stores/grid/useSpritePoseGizmoStore';
+  useSpritePoseHandleStore,
+  type SpritePoseHandleSession,
+} from '@stores/grid/useSpritePoseHandleStore';
 import { makeSpritePose } from '@utils/sprite/spriteFixtures';
 import { projectSpriteResize } from '@utils/sprite/resizeProjection';
 import type { CanonicalReactiveSpritePosition } from '@src/types/editor';
@@ -23,8 +23,13 @@ class ResizeObserverStub {
 
 const mocks = vi.hoisted(() => ({
   patchPosition: vi.fn(
-    (_mode: string, _id: string, _patch: unknown, _gestureId?: string) =>
-      Promise.resolve(undefined),
+    (
+      _mode: string,
+      _id: string,
+      _patch: unknown,
+      _gestureId?: string,
+      _generatePatch?: unknown,
+    ) => Promise.resolve(undefined),
   ),
   preview: vi.fn(),
   gestureCancel: vi.fn(),
@@ -37,6 +42,16 @@ const mocks = vi.hoisted(() => ({
   ),
   canDecodeImage: vi.fn(() => Promise.resolve(true)),
   probeImageSize: vi.fn(() => Promise.resolve({ width: 64, height: 32 })),
+  commitBounds: vi.fn(
+    (_type: string, _id: string, _bounds: unknown, _gestureId?: string) =>
+      Promise.resolve(true),
+  ),
+}));
+
+// 요소 상자(위치·크기)는 resizeSprite op 경로 - 커밋 인자만 검증한다
+vi.mock('@src/renderer/editor/runtime/elementOps', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  commitSingleElementBoundsById: mocks.commitBounds,
 }));
 
 vi.mock('@api/modules/itemsApi', () => ({
@@ -126,14 +141,11 @@ const spritePosition = (
   className: null,
   useInlineStyles: null,
   baseImage: null,
-  imageFit: null,
-  imageRect: { x: 0, y: 0, width: 100, height: 100 },
   pivot: { x: 0.5, y: 0.5 },
   idleTransform: { x: 0, y: 0, rotation: 0, scale: 1 },
   poses: [],
   transitionMs: 90,
   transitionEasing: 'cubic-bezier(0.4, 0, 0.2, 1)',
-  imagePlacement: 'box',
   referenceNaturalSize: null,
   ...overrides,
 });
@@ -328,20 +340,21 @@ describe('SingleSpritePanel 자세 편집', () => {
         name: 'propertiesPanel.spritePose 1',
         triggers: [KEY_ID_A],
         transform: { x: 0, y: 0, rotation: 0, scale: 1 },
+        pivot: null,
         imageOverride: null,
-        contactPoint: { x: 0.5, y: 1 },
-        imagePivot: null,
         imageOverrideMetrics: null,
       },
     ]);
+    const generatePatch = mocks.patchPosition.mock.calls[0][4] as (
+      current: CanonicalReactiveSpritePosition,
+    ) => Partial<CanonicalReactiveSpritePosition>;
+    expect(generatePatch(position).poses).toEqual(patch.poses);
   });
 
   it('중복 트리거 집합은 커밋을 막고 경고를 표시한다', async () => {
     const position = spritePosition({
       poses: [
         {
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
@@ -377,8 +390,6 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [],
@@ -419,8 +430,6 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
@@ -436,7 +445,7 @@ describe('SingleSpritePanel 자세 편집', () => {
     expect(posePopup()!.getAttribute('aria-label')).toBe(
       'propertiesPanel.spritePose 1',
     );
-    expect(posePopup()!.dataset.fallbackHeight).toBe('316');
+    expect(posePopup()!.dataset.fallbackHeight).toBe('240');
 
     // 같은 행 재클릭 - 토글 닫힘
     act(() => poseEditButtons()[0].click());
@@ -447,8 +456,6 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
@@ -456,8 +463,6 @@ describe('SingleSpritePanel 자세 편집', () => {
           imageOverride: null,
         },
         {
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
           poseId: 'pose-2',
           triggers: [KEY_ID_B],
@@ -506,8 +511,6 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
@@ -515,8 +518,6 @@ describe('SingleSpritePanel 자세 편집', () => {
           imageOverride: null,
         },
         {
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
           poseId: 'pose-2',
           triggers: [KEY_ID_B],
@@ -552,8 +553,6 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
           poseId: 'pose-1',
           name: '왼손',
@@ -562,8 +561,6 @@ describe('SingleSpritePanel 자세 편집', () => {
           imageOverride: 'override.png',
         },
         {
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
           poseId: 'pose-2',
           triggers: [KEY_ID_B],
@@ -614,8 +611,6 @@ describe('SingleSpritePanel 자세 편집', () => {
         triggers: [KEY_ID_C],
         transform: { x: 10, y: -6, rotation: 15, scale: 1.2 },
         imageOverride: 'override.png',
-        contactPoint: { x: 0.5, y: 1 },
-        imagePivot: null,
         imageOverrideMetrics: null,
       },
       // 구조 변경 시 무명 상태는 보이던 번호가 이름으로 고정된다
@@ -628,8 +623,6 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
           poseId: 'pose-1',
           name: '왼손 common.copySuffix',
@@ -661,8 +654,6 @@ describe('SingleSpritePanel 자세 편집', () => {
       triggers: [key],
       transform: { x: 0, y: 0, rotation: 0, scale: 1 },
       imageOverride: null,
-      contactPoint: { x: 0.5, y: 1 },
-      imagePivot: null,
       imageOverrideMetrics: null,
     });
     const position = spritePosition({
@@ -702,8 +693,6 @@ describe('SingleSpritePanel 자세 편집', () => {
       triggers: [`key-${index}`],
       transform: { x: 0, y: 0, rotation: 0, scale: 1 },
       imageOverride: null,
-      contactPoint: { x: 0.5, y: 1 },
-      imagePivot: null,
       imageOverrideMetrics: null,
     }));
     const position = spritePosition({ poses });
@@ -744,8 +733,6 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
           poseId: 'pose-1',
           name: 'propertiesPanel.spritePose 1',
@@ -776,8 +763,6 @@ describe('SingleSpritePanel 자세 편집', () => {
       triggers: [key],
       transform: { x: 0, y: 0, rotation: 0, scale: 1 },
       imageOverride: null,
-      contactPoint: { x: 0.5, y: 1 },
-      imagePivot: null,
       imageOverrideMetrics: null,
     });
     const position = spritePosition({
@@ -813,8 +798,6 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
           poseId: 'pose-1',
           name: 'propertiesPanel.spritePose 1',
@@ -823,8 +806,6 @@ describe('SingleSpritePanel 자세 편집', () => {
           imageOverride: null,
         },
         {
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
           poseId: 'pose-2',
           triggers: [KEY_ID_B],
@@ -855,8 +836,6 @@ describe('SingleSpritePanel 자세 편집', () => {
       triggers: [`key-${index}`],
       transform: { x: 0, y: 0, rotation: 0, scale: 1 },
       imageOverride: null,
-      contactPoint: { x: 0.5, y: 1 },
-      imagePivot: null,
       imageOverrideMetrics: null,
     }));
     const position = spritePosition({ poses });
@@ -879,8 +858,6 @@ describe('SingleSpritePanel 자세 편집', () => {
       triggers: [KEY_ID_A],
       transform: { x: 10, y: -6, rotation: 15, scale: 1.2 },
       imageOverride: null,
-      contactPoint: { x: 0.5, y: 1 },
-      imagePivot: null,
       imageOverrideMetrics: null,
     };
     const position = spritePosition({ poses: [basePose] });
@@ -905,8 +882,6 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
@@ -942,8 +917,6 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
@@ -973,8 +946,6 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
@@ -1009,8 +980,6 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A, KEY_ID_B],
@@ -1039,8 +1008,6 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A, deadId],
@@ -1071,8 +1038,6 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
@@ -1093,17 +1058,16 @@ describe('SingleSpritePanel 자세 편집', () => {
     expect(trigger.className).toContain('w-full');
   });
 
-  it('이미지 설정 팝업의 미리보기로 선택과 초기화를 커밋한다', async () => {
+  it('기본 이미지 카드로 선택과 초기화를 커밋하고 상자를 이미지 비율로 맞춘다', async () => {
     const position = spritePosition({ baseImage: 'hand.png' });
     seed(position);
     render(position);
 
-    act(() => buttonByText('propertiesPanel.configure').click());
-    const popup = popupByLabel('propertiesPanel.spriteBaseImage');
-    expect(popup).toBeTruthy();
+    // 카드는 팝업 없이 패널 상단에 산다
+    expect(posePopup()).toBeNull();
 
     // 초기화 칩은 baseImage null 커밋
-    const reset = popup!.querySelector<HTMLButtonElement>(
+    const reset = container.querySelector<HTMLButtonElement>(
       'button[aria-label="imagePicker.reset"]',
     )!;
     act(() => reset.click());
@@ -1113,44 +1077,45 @@ describe('SingleSpritePanel 자세 편집', () => {
       referenceNaturalSize: null,
     });
 
-    // 미리보기 전면 선택 버튼은 파일창 결과를 baseImage로 커밋
+    // 전면 선택 버튼은 파일창 결과를 baseImage로 커밋
     mocks.imageLoad.mockResolvedValue({
       success: true,
       imagePath: 'body.png',
     });
-    const select = popup!.querySelector<HTMLButtonElement>(
+    const select = container.querySelector<HTMLButtonElement>(
       'button[aria-label="propertiesPanel.spriteImageSelect"]',
     )!;
     await act(async () => select.click());
     expect(mocks.patchPosition).toHaveBeenCalledTimes(2);
-    // 원본 크기는 디코드 확인이 읽은 값을 경로와 한 커밋으로 싣는다
+    // 원본 크기는 디코드 확인이 읽은 값을 경로와 한 커밋으로 싣고, 요소 상자를
+    // 그 비율로 줄인다: 200x150에 64x32 → 200x100, 가운데 기준점 유지 → dy 25
     expect(mocks.patchPosition.mock.calls[1][2]).toEqual({
       baseImage: 'body.png',
       referenceNaturalSize: { source: 'body.png', width: 64, height: 32 },
+      dx: 0,
+      dy: 25,
+      width: 200,
+      height: 100,
     });
-  });
-
-  it('축 배치에서 기본 이미지를 고르면 상자를 이미지 비율로 맞추고 기준점은 제자리에 둔다', async () => {
-    const position = spritePosition({
-      baseImage: 'hand.png',
-      imagePlacement: 'pivot',
-      referenceNaturalSize: { source: 'hand.png', width: 10, height: 10 },
-    });
-    seed(position);
-    render(position);
-
-    act(() => buttonByText('propertiesPanel.configure').click());
-    const popup = popupByLabel('propertiesPanel.spriteBaseImage')!;
-    mocks.imageLoad.mockResolvedValue({ success: true, imagePath: 'body.png' });
-    const select = popup.querySelector<HTMLButtonElement>(
-      'button[aria-label="propertiesPanel.spriteImageSelect"]',
-    )!;
-    await act(async () => select.click());
-    // 상자 100x100, 이미지 64x32 → 100x50, 가운데 기준점(50,50) 유지 → y 25
-    expect(mocks.patchPosition.mock.calls.at(-1)?.[2]).toEqual({
+    const generatePatch = mocks.patchPosition.mock.calls[1][4] as (
+      current: CanonicalReactiveSpritePosition,
+    ) => Partial<CanonicalReactiveSpritePosition>;
+    expect(
+      generatePatch(
+        spritePosition({
+          dx: 0,
+          dy: 0,
+          width: 300,
+          height: 300,
+          pivot: { x: 0.25, y: 0.75 },
+        }),
+      ),
+    ).toMatchObject({
       baseImage: 'body.png',
-      referenceNaturalSize: { source: 'body.png', width: 64, height: 32 },
-      imageRect: { x: 0, y: 25, width: 100, height: 50 },
+      dx: 0,
+      dy: 112.5,
+      width: 300,
+      height: 150,
     });
   });
 
@@ -1161,12 +1126,9 @@ describe('SingleSpritePanel 자세 편집', () => {
     seed(position);
     render(position);
 
-    act(() => buttonByText('propertiesPanel.configure').click());
-    const popup = popupByLabel('propertiesPanel.spriteBaseImage')!;
+    expect(container.querySelector('img')).toBeNull();
 
-    expect(popup.querySelector('img')).toBeNull();
-
-    const reset = popup.querySelector<HTMLButtonElement>(
+    const reset = container.querySelector<HTMLButtonElement>(
       'button[aria-label="imagePicker.reset"]',
     )!;
     expect(reset).toBeTruthy();
@@ -1177,29 +1139,37 @@ describe('SingleSpritePanel 자세 편집', () => {
     });
   });
 
-  it('이미지 설정 팝업의 위치·기준점 입력은 imageRect·pivot 패치로 커밋한다', () => {
-    const position = spritePosition();
+  it('위치 입력은 요소 상자 커밋, 기준점 입력은 이동값 보정을 실은 패치로 커밋한다', () => {
+    const position = spritePosition({
+      poses: [
+        {
+          imageOverrideMetrics: null,
+          poseId: 'pose-1',
+          triggers: [KEY_ID_A],
+          transform: { x: 10, y: 0, rotation: 90, scale: 1 },
+          imageOverride: null,
+        },
+      ],
+    });
     seed(position);
     render(position);
 
-    act(() => buttonByText('propertiesPanel.configure').click());
-    const popup = popupByLabel('propertiesPanel.spriteBaseImage')!;
-    // 표시 드롭다운도 팝업으로 이동했다
-    expect(popup.querySelector('button[aria-haspopup="listbox"]')).toBeTruthy();
-
-    const xInput = popup.querySelector<HTMLInputElement>(
-      'input[aria-label="propertiesPanel.spriteImageRect X"]',
+    const xInput = container.querySelector<HTMLInputElement>(
+      'input[aria-label="propertiesPanel.position X"]',
     )!;
     act(() => {
       xInput.focus();
       setInputValue(xInput, '12');
     });
     act(() => xInput.blur());
-    expect(mocks.patchPosition.mock.calls.at(-1)?.[2]).toEqual({
-      imageRect: { x: 12, y: 0, width: 100, height: 100 },
-    });
+    expect(mocks.commitBounds).toHaveBeenLastCalledWith(
+      'sprite',
+      SPRITE_ID,
+      { dx: 12, dy: 0, width: 200, height: 150 },
+      undefined,
+    );
 
-    // 기준점은 팝업이 아니라 패널의 기본 이미지 행 아래에 산다
+    // 연결 상태는 x/y를 유지해 기본 기준점의 화면 이동을 그대로 따라간다
     const pivotY = container.querySelector<HTMLInputElement>(
       'input[aria-label="propertiesPanel.spritePivot Y"]',
     )!;
@@ -1208,17 +1178,22 @@ describe('SingleSpritePanel 자세 편집', () => {
       setInputValue(pivotY, '25');
     });
     act(() => pivotY.blur());
-    expect(mocks.patchPosition.mock.calls.at(-1)?.[2]).toEqual({
-      pivot: { x: 0.5, y: 0.25 },
-    });
+    const patch = mocks.patchPosition.mock.calls.at(-1)?.[2] as {
+      pivot: { x: number; y: number };
+      idleTransform: { x: number; y: number };
+      poses: Array<{ transform: { x: number; y: number; rotation: number } }>;
+    };
+    expect(patch.pivot).toEqual({ x: 0.5, y: 0.25 });
+    expect(patch.idleTransform).toEqual({ x: 0, y: 0, rotation: 0, scale: 1 });
+    expect(patch.poses[0].transform.x).toBe(10);
+    expect(patch.poses[0].transform.y).toBe(0);
+    expect(patch.poses[0].transform.rotation).toBe(90);
   });
 
-  it('이미지 팝업과 자세 팝업은 배타 전환되고 자세 프리뷰는 발행·회수된다', () => {
+  it('자세 행 클릭은 자세 팝업을 열어 프리뷰를 발행하고 재클릭은 닫는다', () => {
     const position = spritePosition({
       poses: [
         {
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
@@ -1230,29 +1205,69 @@ describe('SingleSpritePanel 자세 편집', () => {
     seed(position);
     render(position);
 
-    act(() => buttonByText('propertiesPanel.configure').click());
-    expect(popupByLabel('propertiesPanel.spriteBaseImage')).toBeTruthy();
-    // 이미지 설정 팝업은 캔버스 보조 표시가 없다
     expect(useSpriteEditPreviewStore.getState().preview).toBeNull();
-
-    // 자세 행 클릭 - 이미지 팝업이 닫히고 자세 팝업으로 전환, 프리뷰 발행
     act(() => poseEditButtons()[0].click());
-    expect(popupByLabel('propertiesPanel.spriteBaseImage')).toBeNull();
     expect(popupByLabel('propertiesPanel.spritePose 1')).toBeTruthy();
     expect(useSpriteEditPreviewStore.getState().preview).toMatchObject({
       kind: 'pose',
       positionId: SPRITE_ID,
       poseId: 'pose-1',
     });
+    // 캔버스 자세 핸들 세션도 같은 자세로 발행된다
+    expect(useSpritePoseHandleStore.getState().session).toMatchObject({
+      positionId: SPRITE_ID,
+      poseId: 'pose-1',
+      width: 200,
+      height: 150,
+    });
 
-    // 이미지 팝업으로 되돌아가면 자세 프리뷰는 회수
-    act(() => buttonByText('propertiesPanel.configure').click());
-    expect(useSpriteEditPreviewStore.getState().preview).toBeNull();
-    expect(popupByLabel('propertiesPanel.spriteBaseImage')).toBeTruthy();
-
-    // 같은 버튼 재클릭 토글로 닫기
-    act(() => buttonByText('propertiesPanel.configure').click());
+    // 같은 행 재클릭 토글로 닫기 - 프리뷰·세션 회수
+    act(() => poseEditButtons()[0].click());
     expect(posePopup()).toBeNull();
+    expect(useSpriteEditPreviewStore.getState().preview).toBeNull();
+    expect(useSpritePoseHandleStore.getState().session).toBeNull();
+  });
+
+  it('자세 이동 프리뷰는 상태 배열 IPC 없이 선택한 자세 스냅샷만 갱신하고 확정 때 한 번 저장한다', () => {
+    const position = spritePosition({
+      poses: [
+        {
+          imageOverrideMetrics: null,
+          poseId: 'pose-1',
+          triggers: [KEY_ID_A],
+          transform: { x: 0, y: 0, rotation: 0, scale: 1 },
+          imageOverride: null,
+        },
+      ],
+    });
+    seed(position);
+    render(position);
+
+    act(() => poseEditButtons()[0].click());
+    const session = useSpritePoseHandleStore.getState().session!;
+    mocks.preview.mockClear();
+    mocks.patchPosition.mockClear();
+
+    const moved = { x: 24, y: -12, rotation: 15, scale: 1.2 };
+    act(() => session.preview(moved));
+
+    expect(mocks.preview).not.toHaveBeenCalled();
+    expect(mocks.patchPosition).not.toHaveBeenCalled();
+    expect(useSpriteEditPreviewStore.getState().preview).toMatchObject({
+      poseId: 'pose-1',
+      preferFallback: true,
+      fallbackPose: { transform: moved },
+    });
+
+    act(() => session.commit(moved));
+
+    expect(mocks.patchPosition).toHaveBeenCalledOnce();
+    const patch = mocks.patchPosition.mock.calls[0][2] as {
+      poses: Array<{ poseId: string; transform: typeof moved }>;
+    };
+    expect(patch.poses).toEqual([
+      expect.objectContaining({ poseId: 'pose-1', transform: moved }),
+    ]);
   });
 
   it('canonical 착지 전 draft 자세도 프리뷰 스냅샷으로 발행된다', () => {
@@ -1277,8 +1292,6 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
@@ -1309,11 +1322,8 @@ describe('SingleSpritePanel 자세 편집', () => {
 
   it('리사이즈 착지 시 무효 draft 자세가 같은 배율로 rebase된다', async () => {
     const position = spritePosition({
-      imageRect: { x: 4, y: 8, width: 96, height: 64 },
       poses: [
         {
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
@@ -1356,8 +1366,6 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
@@ -1379,8 +1387,6 @@ describe('SingleSpritePanel 자세 편집', () => {
     const undone = spritePosition({
       poses: [
         {
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
@@ -1411,11 +1417,8 @@ describe('SingleSpritePanel 자세 편집', () => {
 
   it('자세 팝업이 열린 채 리사이즈가 착지하면 진행 중 편집 게스처를 취소한다', async () => {
     const position = spritePosition({
-      imageRect: { x: 4, y: 8, width: 96, height: 64 },
       poses: [
         {
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
@@ -1433,7 +1436,7 @@ describe('SingleSpritePanel 자세 편집', () => {
       '[data-testid="pose-popup"]',
     );
     expect(popupBefore).not.toBeNull();
-    const generationBefore = useSpritePoseGizmoStore.getState().generation;
+    const generationBefore = useSpritePoseHandleStore.getState().generation;
 
     const resized = projectSpriteResize(position, {
       dx: 0,
@@ -1452,7 +1455,7 @@ describe('SingleSpritePanel 자세 편집', () => {
       container.querySelector('[data-testid="pose-popup"]'),
     ).not.toBeNull();
     // 기즈모 소유권 세대 무효화 - 진행 중 캔버스 드래그의 pointerup 커밋 차단
-    expect(useSpritePoseGizmoStore.getState().generation).toBeGreaterThan(
+    expect(useSpritePoseHandleStore.getState().generation).toBeGreaterThan(
       generationBefore,
     );
   });
@@ -1467,7 +1470,7 @@ describe('SingleSpritePanel 자세 편집', () => {
       triggers: [KEY_ID_A],
       transform: { x: 0, y: 0, rotation: 0, scale: 1 },
     });
-    let capturedSession: SpritePoseGizmoSession | null = null;
+    let capturedSession: SpritePoseHandleSession | null = null;
     // 기즈모처럼 트리상 앞에서 passive effect로 시작 시점 세션의 취소를 부르는 탐침
     const CancelOnTick = ({ tick }: { tick: number }) => {
       useEffect(() => {
@@ -1511,7 +1514,7 @@ describe('SingleSpritePanel 자세 편집', () => {
       seed(position);
       renderWithProbe(position, 0);
       act(() => buttonByText('propertiesPanel.spriteAddPose').click());
-      capturedSession = useSpritePoseGizmoStore.getState().session;
+      capturedSession = useSpritePoseHandleStore.getState().session;
       expect(capturedSession).not.toBeNull();
       const draftPoseId = capturedSession!.poseId;
       expect(useSpriteEditPreviewStore.getState().preview).toMatchObject({
@@ -1559,11 +1562,8 @@ describe('SingleSpritePanel 자세 편집', () => {
 
   it('박스만 바뀌는 변경은 draft 자세를 건드리지 않는다', async () => {
     const position = spritePosition({
-      imageRect: { x: 4, y: 8, width: 96, height: 64 },
       poses: [
         {
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
@@ -1579,7 +1579,7 @@ describe('SingleSpritePanel 자세 편집', () => {
     await act(async () => triggerDropdownByText('A').click());
     await act(async () => menuOptionByText('A').click());
 
-    // legacy patch 계열: 박스 치수만 바뀌고 imageRect·자세는 그대로
+    // legacy patch 계열: 상자 치수만 바뀌고 자세는 그대로
     const boxOnly = { ...position, width: 100, height: 300 };
     seed(boxOnly);
     render(boxOnly);
@@ -1590,30 +1590,10 @@ describe('SingleSpritePanel 자세 편집', () => {
     ).toEqual({ x: 12, y: -6, rotation: 15, scale: 1.2 });
   });
 
-  it('기준점 행을 만지는 동안 축 마커가 발행되고 벗어나면 회수된다', () => {
-    const position = spritePosition();
-    seed(position);
-    render(position);
-
-    const pivotX = container.querySelector<HTMLInputElement>(
-      'input[aria-label="propertiesPanel.spritePivot X"]',
-    )!;
-    act(() => pivotX.focus());
-    expect(useSpriteEditPreviewStore.getState().preview).toEqual({
-      kind: 'pivot',
-      positionId: SPRITE_ID,
-    });
-
-    act(() => pivotX.blur());
-    expect(useSpriteEditPreviewStore.getState().preview).toBeNull();
-  });
-
   it('스프라이트 전환 시 자세 프리뷰가 회수된다', () => {
     const position = spritePosition({
       poses: [
         {
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
@@ -1637,16 +1617,13 @@ describe('SingleSpritePanel 자세 편집', () => {
     seed(position);
     render(position);
 
-    act(() => buttonByText('propertiesPanel.configure').click());
     let resolveLoad!: (value: { success: boolean; imagePath?: string }) => void;
     mocks.imageLoad.mockReturnValue(
       new Promise((resolve) => {
         resolveLoad = resolve;
       }) as never,
     );
-    const select = popupByLabel(
-      'propertiesPanel.spriteBaseImage',
-    )!.querySelector<HTMLButtonElement>(
+    const select = container.querySelector<HTMLButtonElement>(
       'button[aria-label="propertiesPanel.spriteImageSelect"]',
     )!;
     act(() => select.click());
@@ -1660,15 +1637,13 @@ describe('SingleSpritePanel 자세 편집', () => {
     expect(mocks.patchPosition).not.toHaveBeenCalled();
   });
 
-  it('이미지 설정 입력은 preview로 흐르고 Escape는 게스처를 취소한다', async () => {
+  it('위치 입력은 이동 필드만 preview에 흐르고 Escape는 게스처를 취소한다', async () => {
     const position = spritePosition();
     seed(position);
     render(position);
 
-    act(() => buttonByText('propertiesPanel.configure').click());
-    const popup = popupByLabel('propertiesPanel.spriteBaseImage')!;
-    const xInput = popup.querySelector<HTMLInputElement>(
-      'input[aria-label="propertiesPanel.spriteImageRect X"]',
+    const xInput = container.querySelector<HTMLInputElement>(
+      'input[aria-label="propertiesPanel.position X"]',
     )!;
     act(() => {
       xInput.focus();
@@ -1680,7 +1655,8 @@ describe('SingleSpritePanel 자세 편집', () => {
       (call) => (call[1] as Array<{ patch: Record<string, unknown> }>)[0].patch,
     );
     expect(previewPatches.at(-1)).toEqual({
-      imageRect: { x: 12, y: 0, width: 100, height: 100 },
+      dx: 12,
+      dy: 0,
     });
 
     act(() => {
@@ -1691,47 +1667,155 @@ describe('SingleSpritePanel 자세 편집', () => {
     expect(mocks.gestureCancel).toHaveBeenCalled();
   });
 
-  it('크기 입력은 1 미만을 막고 표시 변경은 imageFit으로 커밋한다', async () => {
+  it('오래된 표시 기준점에서 한 축만 바꿔도 다른 축은 canonical 값을 보존한다', () => {
+    const canonical = spritePosition({ pivot: { x: 0.8, y: 0.7 } });
+    const staleDisplay = spritePosition({ pivot: { x: 0.1, y: 0.2 } });
+    seed(canonical);
+    render(staleDisplay);
+
+    const pivotX = container.querySelector<HTMLInputElement>(
+      'input[aria-label="propertiesPanel.spritePivot X"]',
+    )!;
+    act(() => {
+      pivotX.focus();
+      setInputValue(pivotX, '40');
+    });
+    act(() => pivotX.blur());
+
+    const patch = mocks.patchPosition.mock.calls.at(-1)?.[2] as {
+      pivot: { x: number; y: number };
+    };
+    expect(patch.pivot).toEqual({ x: 0.4, y: 0.7 });
+  });
+
+  it('오래된 상태 변환에서 한 축만 바꿔도 나머지는 canonical 값을 보존한다', () => {
+    const canonical = spritePosition({
+      poses: [
+        {
+          imageOverrideMetrics: null,
+          poseId: 'pose-1',
+          triggers: [KEY_ID_A],
+          transform: { x: 10, y: 20, rotation: 15, scale: 1.2 },
+          imageOverride: null,
+        },
+      ],
+    });
+    const staleDisplay = {
+      ...canonical,
+      poses: [
+        {
+          ...canonical.poses[0],
+          transform: { x: -5, y: -6, rotation: -10, scale: 0.8 },
+        },
+      ],
+    };
+    seed(canonical);
+    render(staleDisplay);
+    act(() => poseEditButtons()[0].click());
+
+    const transformX = posePopup()!.querySelector<HTMLInputElement>(
+      'input[aria-label="propertiesPanel.position X"]',
+    )!;
+    act(() => {
+      transformX.focus();
+      setInputValue(transformX, '30');
+    });
+    act(() => transformX.blur());
+
+    const patch = mocks.patchPosition.mock.calls.at(-1)?.[2] as {
+      poses: Array<{ transform: unknown }>;
+    };
+    expect(patch.poses[0].transform).toEqual({
+      x: 30,
+      y: 20,
+      rotation: 15,
+      scale: 1.2,
+    });
+  });
+
+  it('오래된 상태 기준점에서 한 축만 바꿔도 다른 축은 canonical 값을 보존한다', () => {
+    const canonical = spritePosition({
+      poses: [
+        {
+          imageOverrideMetrics: null,
+          poseId: 'pose-1',
+          triggers: [KEY_ID_A],
+          transform: { x: 10, y: 20, rotation: 15, scale: 1.2 },
+          pivot: { x: 0.8, y: 0.7 },
+          imageOverride: null,
+        },
+      ],
+    });
+    const staleDisplay = {
+      ...canonical,
+      poses: [
+        {
+          ...canonical.poses[0],
+          pivot: { x: 0.1, y: 0.2 },
+        },
+      ],
+    };
+    seed(canonical);
+    render(staleDisplay);
+    act(() => poseEditButtons()[0].click());
+
+    const pivotX = posePopup()!.querySelector<HTMLInputElement>(
+      'input[aria-label="propertiesPanel.spriteStatePivot X"]',
+    )!;
+    act(() => {
+      pivotX.focus();
+      setInputValue(pivotX, '40');
+    });
+    act(() => pivotX.blur());
+
+    const patch = mocks.patchPosition.mock.calls.at(-1)?.[2] as {
+      poses: Array<{ pivot: { x: number; y: number } }>;
+    };
+    expect(patch.poses[0].pivot).toEqual({ x: 0.4, y: 0.7 });
+  });
+
+  it('크기 입력은 비율을 고정하고 하한을 막는다', () => {
     const position = spritePosition();
     seed(position);
     render(position);
 
-    act(() => buttonByText('propertiesPanel.configure').click());
-    const popup = popupByLabel('propertiesPanel.spriteBaseImage')!;
-    const wInput = popup.querySelector<HTMLInputElement>(
-      'input[aria-label="propertiesPanel.spriteImageSize W"]',
+    // 200x150 → W 0은 하한 10으로, H는 비율(0.75)을 따라 7.5
+    const wInput = container.querySelector<HTMLInputElement>(
+      'input[aria-label="propertiesPanel.size W"]',
     )!;
     act(() => {
       wInput.focus();
       setInputValue(wInput, '0');
     });
     act(() => wInput.blur());
-    expect(mocks.patchPosition.mock.calls.at(-1)?.[2]).toEqual({
-      imageRect: { x: 0, y: 0, width: 1, height: 100 },
-    });
+    expect(mocks.commitBounds).toHaveBeenLastCalledWith(
+      'sprite',
+      SPRITE_ID,
+      { dx: 0, dy: 0, width: 10, height: 7.5 },
+      undefined,
+    );
 
-    // 설정 카드의 드롭다운은 배치·표시 순서 - 표시는 두 번째
-    await act(async () =>
-      popup
-        .querySelectorAll<HTMLButtonElement>(
-          'button[aria-haspopup="listbox"]',
-        )[1]
-        .click(),
-    );
-    await act(async () =>
-      menuOptionByText('propertiesPanel.imageFitFill').click(),
-    );
-    expect(mocks.patchPosition.mock.calls.at(-1)?.[2]).toEqual({
-      imageFit: 'fill',
+    // H 300 → W 400 (비율 유지, 상자 원점은 그대로)
+    const hInput = container.querySelector<HTMLInputElement>(
+      'input[aria-label="propertiesPanel.size H"]',
+    )!;
+    act(() => {
+      hInput.focus();
+      setInputValue(hInput, '300');
     });
+    act(() => hInput.blur());
+    expect(mocks.commitBounds).toHaveBeenLastCalledWith(
+      'sprite',
+      SPRITE_ID,
+      { dx: 0, dy: 0, width: 400, height: 300 },
+      undefined,
+    );
   });
 
   it('자세 이미지 선택은 파일창 결과를 자세에 커밋한다', async () => {
     const position = spritePosition({
       poses: [
         {
-          contactPoint: { x: 0.5, y: 1 },
-          imagePivot: null,
           imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
@@ -1765,5 +1849,60 @@ describe('SingleSpritePanel 자세 편집', () => {
       width: 64,
       height: 32,
     });
+    const generatePatch = mocks.patchPosition.mock.calls[0][4] as (
+      current: CanonicalReactiveSpritePosition,
+    ) => Partial<CanonicalReactiveSpritePosition> | null;
+    expect(generatePatch(spritePosition({ poses: [] }))).toBeNull();
+  });
+
+  it('기준점 커밋 착지는 무효 draft를 같은 보정으로 rebase해 편집 중인 값을 지키지 않는다', async () => {
+    const position = spritePosition({
+      poses: [
+        {
+          imageOverrideMetrics: null,
+          poseId: 'pose-1',
+          triggers: [KEY_ID_A],
+          transform: { x: 10, y: 0, rotation: 90, scale: 1 },
+          imageOverride: null,
+        },
+      ],
+    });
+    seed(position);
+    render(position);
+
+    act(() => poseEditButtons()[0].click());
+    // 유일한 담당 키 해제 - 커밋이 막힌 빈 트리거 draft가 transform을 들고 있다
+    await act(async () => triggerDropdownByText('A').click());
+    await act(async () => menuOptionByText('A').click());
+    mocks.patchPosition.mockClear();
+
+    // 기준점 프리셋 (0.5, 0.25)는 없으니 Y 입력으로 - canonical 자세를 보정한 patch
+    const pivotY = container.querySelector<HTMLInputElement>(
+      'input[aria-label="propertiesPanel.spritePivot Y"]',
+    )!;
+    act(() => {
+      pivotY.focus();
+      setInputValue(pivotY, '25');
+    });
+    act(() => pivotY.blur());
+    const patch = mocks.patchPosition.mock.calls.at(-1)?.[2] as Pick<
+      CanonicalReactiveSpritePosition,
+      'pivot' | 'idleTransform' | 'poses'
+    >;
+    expect(patch.pivot).toEqual({ x: 0.5, y: 0.25 });
+    // draft(빈 트리거)가 아니라 canonical 자세가 실린다
+    expect(patch.poses[0].triggers).toEqual([KEY_ID_A]);
+
+    // 낙관 착지 - canonical이 보정된 자세와 새 기준점으로 바뀐다
+    const landed = { ...position, ...patch };
+    seed(landed);
+    render(landed);
+
+    // draft는 버려지지 않고 같은 보정을 받는다: 트리거는 여전히 비어 있고
+    // transform은 canonical과 같은 값으로 이동했다
+    const preview = useSpriteEditPreviewStore.getState().preview;
+    expect(preview?.preferFallback).toBe(true);
+    expect(preview?.fallbackPose.triggers).toEqual([]);
+    expect(preview?.fallbackPose.transform).toEqual(patch.poses[0].transform);
   });
 });

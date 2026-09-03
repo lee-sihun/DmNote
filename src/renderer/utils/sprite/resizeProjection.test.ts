@@ -12,15 +12,12 @@ const basePosition = () => ({
   dy: 20,
   width: 200,
   height: 100,
-  imageRect: { x: 40, y: -10, width: 160, height: 80 },
   pivot: { x: 0.5, y: 0.5 },
   idleTransform: { x: 12, y: -6, rotation: 15, scale: 1.5 },
   poses: [
     {
       poseId: 'pose-1',
       transform: { x: -30, y: 44, rotation: -90, scale: 0.5 },
-      contactPoint: { x: 0.5, y: 1 },
-      imagePivot: null,
       imageOverrideMetrics: null,
     },
   ],
@@ -28,7 +25,7 @@ const basePosition = () => ({
 });
 
 describe('projectSpriteResize', () => {
-  it('bounds 교체와 함께 imageRect·transform 오프셋을 축별 배율로 스케일한다', () => {
+  it('bounds 교체와 함께 transform 오프셋을 축별 배율로 스케일한다', () => {
     const next = projectSpriteResize(basePosition(), {
       dx: 5,
       dy: 8,
@@ -40,7 +37,6 @@ describe('projectSpriteResize', () => {
     expect(next.width).toBe(400);
     expect(next.height).toBe(50);
     // sx=2, sy=0.5
-    expect(next.imageRect).toEqual({ x: 80, y: -5, width: 320, height: 40 });
     expect(next.idleTransform).toEqual({
       x: 24,
       y: -3,
@@ -55,7 +51,7 @@ describe('projectSpriteResize', () => {
     });
   });
 
-  it('rotation·scale·pivot·contactPoint와 나머지 필드는 불변이다', () => {
+  it('rotation·scale·pivot과 나머지 필드는 불변이다', () => {
     const position = basePosition();
     const next = projectSpriteResize(position, {
       dx: 0,
@@ -64,7 +60,6 @@ describe('projectSpriteResize', () => {
       height: 50,
     });
     expect(next.pivot).toEqual(position.pivot);
-    expect(next.poses[0].contactPoint).toEqual(position.poses[0].contactPoint);
     expect(next.poses[0].poseId).toBe('pose-1');
     expect(next.id).toBe(position.id);
     expect(next.transitionMs).toBe(90);
@@ -89,15 +84,13 @@ describe('projectSpriteResize', () => {
       width: 200,
       height: 100,
     });
-    expect(next.imageRect).toEqual(position.imageRect);
     expect(next.idleTransform).toEqual(position.idleTransform);
     expect(next.poses[0].transform).toEqual(position.poses[0].transform);
   });
 
-  it('배율 1은 클램프 없는 passthrough - 하한 미만 치수·범위 밖 오프셋 보존', () => {
+  it('배율 1은 클램프 없는 passthrough - 범위 밖 오프셋 보존', () => {
     const position = {
       ...basePosition(),
-      imageRect: { x: 40, y: -10, width: 1e-7, height: 80 },
       idleTransform: { x: 5000, y: -6, rotation: 0, scale: 1 },
     };
     const next = projectSpriteResize(position, {
@@ -106,11 +99,10 @@ describe('projectSpriteResize', () => {
       width: 200,
       height: 100,
     });
-    expect(next.imageRect.width).toBe(1e-7);
     expect(next.idleTransform.x).toBe(5000);
   });
 
-  it('스케일 결과는 offset·imageRect 한계에 클램프된다', () => {
+  it('스케일 결과는 offset 한계에 클램프된다', () => {
     const position = {
       ...basePosition(),
       idleTransform: { x: 1500, y: -1500, rotation: 0, scale: 1 },
@@ -135,8 +127,7 @@ describe('projectSpriteResize', () => {
       height: 100,
     });
     expect(next.width).toBe(300);
-    expect(next.imageRect.x).toBe(40);
-    expect(next.imageRect.width).toBe(160);
+    expect(next.idleTransform).toEqual(position.idleTransform);
   });
 });
 

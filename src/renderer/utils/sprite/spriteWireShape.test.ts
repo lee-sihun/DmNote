@@ -122,7 +122,7 @@ describe('toSpriteWireShape', () => {
     expect(shaped.className).toBeNull();
     expect(shaped.useInlineStyles).toBeNull();
     expect(shaped.zIndex).toBeNull();
-    expect(shaped.imageFit).toBeNull();
+    expect(shaped.referenceNaturalSize).toBeNull();
     expect(shaped.groupId).toBe('group-1');
   });
 });

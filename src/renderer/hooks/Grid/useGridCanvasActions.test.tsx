@@ -98,14 +98,11 @@ const sprite = (id: string): ReactiveSpritePosition & { id: string } => ({
   className: null,
   useInlineStyles: null,
   baseImage: null,
-  imageFit: 'contain',
-  imageRect: { x: 0, y: 0, width: 200, height: 200 },
   pivot: { ...CENTER_SPRITE_ANCHOR },
   idleTransform: { ...IDENTITY_SPRITE_TRANSFORM },
   poses: [],
   transitionMs: DEFAULT_SPRITE_TRANSITION_MS,
   transitionEasing: DEFAULT_SPRITE_TRANSITION_EASING,
-  imagePlacement: 'box',
   referenceNaturalSize: null,
 });
 
@@ -213,14 +210,11 @@ describe('useGridCanvasActions create와 ghost duplicate', () => {
       className: null,
       useInlineStyles: null,
       baseImage: null,
-      imageFit: 'fill',
-      imageRect: { x: 0, y: 0, width: 200, height: 200 },
       pivot: CENTER_SPRITE_ANCHOR,
       idleTransform: IDENTITY_SPRITE_TRANSFORM,
       poses: [],
       transitionMs: DEFAULT_SPRITE_TRANSITION_MS,
       transitionEasing: DEFAULT_SPRITE_TRANSITION_EASING,
-      imagePlacement: 'pivot',
       referenceNaturalSize: null,
     });
     // wire 정규화 계약: nullish layerName·groupId는 키 부재

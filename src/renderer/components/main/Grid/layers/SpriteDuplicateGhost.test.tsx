@@ -24,8 +24,6 @@ const position = (
     className: null,
     useInlineStyles: null,
     baseImage: 'hand.png',
-    imageFit: 'contain',
-    imageRect: { x: 10, y: 20, width: 100, height: 80 },
     pivot: { x: 0.5, y: 0.5 },
     idleTransform: { x: 0, y: 0, rotation: 0, scale: 1 },
     poses: [],
@@ -33,7 +31,6 @@ const position = (
     pressDurationMs: 300,
     transitionMs: 90,
     transitionEasing: 'linear',
-    imagePlacement: 'box',
     referenceNaturalSize: null,
     ...overrides,
   } as ReactiveSpritePosition);
@@ -87,10 +84,12 @@ describe('SpriteDuplicateGhost', () => {
     expect(guide?.style.borderColor).toBe(ACTIVITY_AREA_GUIDE_COLOR);
   });
 
-  it('이미지 원점은 활동 영역 좌상단 기준이다 (아이템과 같은 규칙)', () => {
+  it('이미지는 활동 영역 상자를 그대로 채운다 (아이템과 같은 규칙)', () => {
     const image = renderGhost()?.querySelector<HTMLImageElement>('img');
-    expect(image?.style.left).toBe('10px');
-    expect(image?.style.top).toBe('20px');
+    expect(image?.style.left).toBe('0px');
+    expect(image?.style.top).toBe('0px');
+    expect(image?.style.width).toBe('200px');
+    expect(image?.style.height).toBe('120px');
   });
 
   it('이미지 로드 실패는 깨진 img 대신 아이템과 같은 자리표시자를 그린다', () => {
