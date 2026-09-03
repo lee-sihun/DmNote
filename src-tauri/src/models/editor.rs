@@ -146,15 +146,15 @@ impl EditorDocumentV1 {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SpritePosePatchPresence {
-    image_pivot: bool,
+    pivot: bool,
+    image_override: bool,
     image_override_metrics: bool,
-    contact_point: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SpritePositionPatchPresence {
-    image_placement: bool,
+    base_image: bool,
     reference_natural_size: bool,
     activation: bool,
     press_duration_ms: bool,
@@ -187,8 +187,11 @@ impl SpritePositionsPatchPresence {
                                             .map(|pose| {
                                                 let pose = pose.as_object();
                                                 SpritePosePatchPresence {
-                                                    image_pivot: pose.is_some_and(|pose| {
-                                                        pose.contains_key("imagePivot")
+                                                    pivot: pose.is_some_and(|pose| {
+                                                        pose.contains_key("pivot")
+                                                    }),
+                                                    image_override: pose.is_some_and(|pose| {
+                                                        pose.contains_key("imageOverride")
                                                     }),
                                                     image_override_metrics: pose.is_some_and(
                                                         |pose| {
@@ -197,18 +200,14 @@ impl SpritePositionsPatchPresence {
                                                             )
                                                         },
                                                     ),
-                                                    contact_point: pose.is_some_and(|pose| {
-                                                        pose.contains_key("contactPoint")
-                                                    }),
                                                 }
                                             })
                                             .collect()
                                     })
                                     .unwrap_or_default();
                                 SpritePositionPatchPresence {
-                                    image_placement: object.is_some_and(|sprite| {
-                                        sprite.contains_key("imagePlacement")
-                                    }),
+                                    base_image: object
+                                        .is_some_and(|sprite| sprite.contains_key("baseImage")),
                                     reference_natural_size: object.is_some_and(|sprite| {
                                         sprite.contains_key("referenceNaturalSize")
                                     }),
@@ -362,11 +361,27 @@ impl EditorPatchV1 {
                     continue;
                 };
 
-                if !sprite_presence.image_placement {
-                    sprite.image_placement = current_sprite.image_placement;
+                if !sprite_presence.base_image {
+                    sprite.base_image = current_sprite.base_image.clone();
                 }
                 if !sprite_presence.reference_natural_size {
-                    sprite.reference_natural_size = current_sprite.reference_natural_size.clone();
+                    sprite.reference_natural_size = if sprite_presence.base_image
+                        && sprite.base_image != current_sprite.base_image
+                    {
+                        if sprite.base_image.is_none() {
+                            current_sprite
+                                .reference_natural_size
+                                .clone()
+                                .map(|mut reference| {
+                                    reference.source = None;
+                                    reference
+                                })
+                        } else {
+                            None
+                        }
+                    } else {
+                        current_sprite.reference_natural_size.clone()
+                    };
                 }
                 if !sprite_presence.activation {
                     sprite.activation = current_sprite.activation;
@@ -386,14 +401,20 @@ impl EditorPatchV1 {
                     else {
                         continue;
                     };
-                    if !pose_presence.image_pivot {
-                        pose.image_pivot = current_pose.image_pivot;
+                    if !pose_presence.pivot {
+                        pose.pivot = current_pose.pivot;
+                    }
+                    if !pose_presence.image_override {
+                        pose.image_override = current_pose.image_override.clone();
                     }
                     if !pose_presence.image_override_metrics {
-                        pose.image_override_metrics = current_pose.image_override_metrics.clone();
-                    }
-                    if !pose_presence.contact_point {
-                        pose.contact_point = current_pose.contact_point;
+                        pose.image_override_metrics = if pose_presence.image_override
+                            && pose.image_override != current_pose.image_override
+                        {
+                            None
+                        } else {
+                            current_pose.image_override_metrics.clone()
+                        };
                     }
                 }
             }
@@ -1115,8 +1136,8 @@ pub struct EditorTransactionResult<T> {
 mod tests {
     use super::*;
     use crate::models::{
-        ReactiveSpritePosition, SpriteActivation, SpriteAnchor, SpriteImageMetrics,
-        SpriteImagePlacement, SpritePose, SpriteReferenceNaturalSize,
+        ReactiveSpritePosition, SpriteActivation, SpriteAnchor, SpriteImageMetrics, SpritePose,
+        SpriteReferenceNaturalSize,
     };
 
     // TS canonical 배열과 공유하는 property 태그 fixture
@@ -1196,7 +1217,7 @@ mod tests {
             let pose_id = uuid::Uuid::new_v4().to_string();
             let current_sprite = ReactiveSpritePosition {
                 id: sprite_id,
-                image_placement: SpriteImagePlacement::Pivot,
+                base_image: Some("/images/base.png".to_string()),
                 reference_natural_size: Some(SpriteReferenceNaturalSize {
                     source: Some("/images/base.png".to_string()),
                     width: 800,
@@ -1206,9 +1227,8 @@ mod tests {
                 press_duration_ms: 900,
                 poses: vec![SpritePose {
                     pose_id,
+                    pivot: Some(SpriteAnchor { x: 0.2, y: 0.8 }),
                     image_override: Some("/images/pose.png".to_string()),
-                    contact_point: SpriteAnchor { x: 0.1, y: 0.9 },
-                    image_pivot: Some(SpriteAnchor { x: 0.2, y: 0.8 }),
                     image_override_metrics: Some(SpriteImageMetrics {
                         source: "/images/pose.png".to_string(),
                         width: 320,
@@ -1233,7 +1253,7 @@ mod tests {
                 .and_then(Value::as_object_mut)
                 .unwrap();
             for field in [
-                "imagePlacement",
+                "baseImage",
                 "referenceNaturalSize",
                 "activation",
                 "pressDurationMs",
@@ -1241,29 +1261,29 @@ mod tests {
                 sprite.remove(field);
             }
             let pose = sprite["poses"][0].as_object_mut().unwrap();
-            for field in ["imagePivot", "imageOverrideMetrics", "contactPoint"] {
-                pose.remove(field);
-            }
+            pose.remove("pivot");
+            pose.remove("imageOverride");
+            pose.remove("imageOverrideMetrics");
 
             let mut patch: EditorPatchV1 = serde_json::from_value(raw).unwrap();
             patch.merge_omitted_sprite_fields(&current);
             let merged = &patch.sprite_positions.as_ref().unwrap()["4key"][0];
             let expected = &current["4key"][0];
-            assert_eq!(merged.image_placement, expected.image_placement);
+            assert_eq!(merged.base_image, expected.base_image);
             assert_eq!(
                 merged.reference_natural_size,
                 expected.reference_natural_size
             );
             assert_eq!(merged.activation, expected.activation);
             assert_eq!(merged.press_duration_ms, expected.press_duration_ms);
-            assert_eq!(merged.poses[0].image_pivot, expected.poses[0].image_pivot);
+            assert_eq!(merged.poses[0].pivot, expected.poses[0].pivot);
+            assert_eq!(
+                merged.poses[0].image_override,
+                expected.poses[0].image_override
+            );
             assert_eq!(
                 merged.poses[0].image_override_metrics,
                 expected.poses[0].image_override_metrics
-            );
-            assert_eq!(
-                merged.poses[0].contact_point,
-                expected.poses[0].contact_point
             );
             assert_eq!(merged.transition_easing, "linear");
         }
@@ -1277,7 +1297,9 @@ mod tests {
             width: 800,
             height: 600,
         });
-        existing.poses[0].image_pivot = Some(SpriteAnchor { x: 0.2, y: 0.8 });
+        existing.base_image = Some("/images/base.png".to_string());
+        existing.poses[0].image_override = Some("/images/pose.png".to_string());
+        existing.poses[0].pivot = Some(SpriteAnchor { x: 0.2, y: 0.8 });
         existing.poses[0].image_override_metrics = Some(SpriteImageMetrics {
             source: "/images/pose.png".to_string(),
             width: 320,
@@ -1298,36 +1320,134 @@ mod tests {
         let existing_raw = sprites[0].as_object_mut().unwrap();
         existing_raw.insert("referenceNaturalSize".to_string(), Value::Null);
         let existing_pose = existing_raw["poses"][0].as_object_mut().unwrap();
-        existing_pose.insert("imagePivot".to_string(), Value::Null);
+        existing_pose.insert("pivot".to_string(), Value::Null);
         existing_pose.insert("imageOverrideMetrics".to_string(), Value::Null);
         let new_raw = sprites[1].as_object_mut().unwrap();
-        for field in [
-            "imagePlacement",
-            "referenceNaturalSize",
-            "activation",
-            "pressDurationMs",
-        ] {
+        for field in ["referenceNaturalSize", "activation", "pressDurationMs"] {
             new_raw.remove(field);
         }
         let new_pose = new_raw["poses"][0].as_object_mut().unwrap();
-        for field in ["imagePivot", "imageOverrideMetrics", "contactPoint"] {
-            new_pose.remove(field);
-        }
+        new_pose.remove("imageOverrideMetrics");
 
         let mut patch: EditorPatchV1 = serde_json::from_value(raw).unwrap();
         patch.merge_omitted_sprite_fields(&current);
         let sprites = &patch.sprite_positions.as_ref().unwrap()["4key"];
         assert_eq!(sprites[0].reference_natural_size, None);
-        assert_eq!(sprites[0].poses[0].image_pivot, None);
+        assert_eq!(sprites[0].poses[0].pivot, None);
         assert_eq!(sprites[0].poses[0].image_override_metrics, None);
-        assert_eq!(sprites[1].image_placement, SpriteImagePlacement::Box);
         assert_eq!(sprites[1].reference_natural_size, None);
         assert_eq!(sprites[1].activation, SpriteActivation::WhileHeld);
         assert_eq!(sprites[1].press_duration_ms, 300);
-        assert_eq!(
-            sprites[1].poses[0].contact_point,
-            SpriteAnchor { x: 0.5, y: 1.0 }
-        );
+    }
+
+    #[test]
+    fn changes_presence_clears_omitted_metrics_when_image_paths_change() {
+        for schema_version in [EDITOR_SCHEMA_VERSION, EDITOR_COMMIT_SCHEMA_VERSION_V2] {
+            let mut existing = sprite_with_pose();
+            existing.base_image = Some("/images/base-a.png".to_string());
+            existing.reference_natural_size = Some(SpriteReferenceNaturalSize {
+                source: Some("/images/base-a.png".to_string()),
+                width: 800,
+                height: 600,
+            });
+            existing.poses[0].image_override = Some("/images/pose-a.png".to_string());
+            existing.poses[0].image_override_metrics = Some(SpriteImageMetrics {
+                source: "/images/pose-a.png".to_string(),
+                width: 320,
+                height: 240,
+            });
+            let current = HashMap::from([("4key".to_string(), vec![existing.clone()])]);
+
+            let mut changed = existing;
+            changed.base_image = Some("/images/base-b.png".to_string());
+            changed.poses[0].image_override = Some("/images/pose-b.png".to_string());
+            let mut raw = serde_json::to_value(EditorPatchV1 {
+                schema_version,
+                sprite_positions: Some(HashMap::from([("4key".to_string(), vec![changed])])),
+                ..EditorPatchV1::default()
+            })
+            .unwrap();
+            raw["spritePositions"]["4key"][0]
+                .as_object_mut()
+                .unwrap()
+                .remove("referenceNaturalSize");
+            raw["spritePositions"]["4key"][0]["poses"][0]
+                .as_object_mut()
+                .unwrap()
+                .remove("imageOverrideMetrics");
+
+            let mut patch: EditorPatchV1 = serde_json::from_value(raw).unwrap();
+            patch.merge_omitted_sprite_fields(&current);
+            let sprite = &patch.sprite_positions.unwrap()["4key"][0];
+            assert_eq!(sprite.reference_natural_size, None);
+            assert_eq!(sprite.poses[0].image_override_metrics, None);
+        }
+    }
+
+    #[test]
+    fn changes_presence_clears_omitted_reference_when_base_image_becomes_whitespace() {
+        for schema_version in [EDITOR_SCHEMA_VERSION, EDITOR_COMMIT_SCHEMA_VERSION_V2] {
+            let mut existing = sprite_with_pose();
+            existing.base_image = Some("/images/base.png".to_string());
+            existing.reference_natural_size = Some(SpriteReferenceNaturalSize {
+                source: Some("/images/base.png".to_string()),
+                width: 100,
+                height: 100,
+            });
+            let current = HashMap::from([("4key".to_string(), vec![existing.clone()])]);
+            existing.base_image = Some("   ".to_string());
+            let mut raw = serde_json::to_value(EditorPatchV1 {
+                schema_version,
+                sprite_positions: Some(HashMap::from([("4key".to_string(), vec![existing])])),
+                ..EditorPatchV1::default()
+            })
+            .unwrap();
+            raw["spritePositions"]["4key"][0]
+                .as_object_mut()
+                .unwrap()
+                .remove("referenceNaturalSize");
+
+            let mut patch: EditorPatchV1 = serde_json::from_value(raw).unwrap();
+            patch.merge_omitted_sprite_fields(&current);
+            assert_eq!(
+                patch.sprite_positions.unwrap()["4key"][0].reference_natural_size,
+                None
+            );
+        }
+    }
+
+    #[test]
+    fn changes_presence_keeps_size_with_null_source_when_base_image_is_cleared() {
+        for schema_version in [EDITOR_SCHEMA_VERSION, EDITOR_COMMIT_SCHEMA_VERSION_V2] {
+            let mut existing = sprite_with_pose();
+            existing.base_image = Some("/images/base.png".to_string());
+            existing.reference_natural_size = Some(SpriteReferenceNaturalSize {
+                source: Some("/images/base.png".to_string()),
+                width: 800,
+                height: 600,
+            });
+            let current = HashMap::from([("4key".to_string(), vec![existing.clone()])]);
+            existing.base_image = None;
+            let mut raw = serde_json::to_value(EditorPatchV1 {
+                schema_version,
+                sprite_positions: Some(HashMap::from([("4key".to_string(), vec![existing])])),
+                ..EditorPatchV1::default()
+            })
+            .unwrap();
+            raw["spritePositions"]["4key"][0]
+                .as_object_mut()
+                .unwrap()
+                .remove("referenceNaturalSize");
+
+            let mut patch: EditorPatchV1 = serde_json::from_value(raw).unwrap();
+            patch.merge_omitted_sprite_fields(&current);
+            let reference = patch.sprite_positions.unwrap()["4key"][0]
+                .reference_natural_size
+                .clone()
+                .unwrap();
+            assert_eq!(reference.source, None);
+            assert_eq!((reference.width, reference.height), (800, 600));
+        }
     }
 
     #[test]
@@ -1340,10 +1460,8 @@ mod tests {
         .unwrap();
 
         for pointer in [
-            "/spritePositions/4key/0/imagePlacement",
             "/spritePositions/4key/0/activation",
             "/spritePositions/4key/0/pressDurationMs",
-            "/spritePositions/4key/0/poses/0/contactPoint",
         ] {
             let mut invalid = raw.clone();
             *invalid.pointer_mut(pointer).unwrap() = Value::Null;
@@ -1388,14 +1506,6 @@ mod tests {
             .unwrap();
         sprite.remove("activation");
         sprite.remove("pressDurationMs");
-        sprite
-            .get_mut("poses")
-            .and_then(serde_json::Value::as_array_mut)
-            .and_then(|poses| poses.first_mut())
-            .and_then(serde_json::Value::as_object_mut)
-            .unwrap()
-            .remove("contactPoint");
-
         let restored: EditorPatchV1 = serde_json::from_value(value).unwrap();
         let serialized = serde_json::to_value(restored).unwrap();
         let sprite = serialized
@@ -1405,10 +1515,6 @@ mod tests {
 
         assert_eq!(sprite["activation"], serde_json::json!("whileHeld"));
         assert_eq!(sprite["pressDurationMs"], serde_json::json!(300));
-        assert_eq!(
-            sprite["poses"][0]["contactPoint"],
-            serde_json::json!({ "x": 0.5, "y": 1.0 })
-        );
     }
 
     fn paint(color: &str) -> EditorPaintDescriptorV1 {

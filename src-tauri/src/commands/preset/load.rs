@@ -31,6 +31,7 @@ use crate::{
     services::settings::apply_patch_to_store,
     state::{
         image_asset::{import_image_bytes, import_image_file},
+        migration::{fill_missing_sprite_image_metrics, migrate_legacy_sprite_wire},
         AppState,
     },
 };
@@ -46,6 +47,7 @@ fn read_preset_file(path: &Path) -> CmdResult<PresetFile> {
     let content = fs::read_to_string(path)?;
     let mut value: serde_json::Value =
         serde_json::from_str(&content).map_err(|_| CommandError::msg("invalid-preset"))?;
+    migrate_legacy_sprite_wire(&mut value);
     scrub_removed_text_outline_fields(&mut value);
     if let Some(detail) = invalid_position_style_detail(&value) {
         return Err(CommandError::msg(format!("invalid-preset: {detail}")));
@@ -1512,6 +1514,8 @@ fn restore_preset_local_images_in_dir(
         }
     }
 
+    fill_missing_sprite_image_metrics(sprite_positions);
+
     Ok(())
 }
 
@@ -1858,10 +1862,120 @@ mod tests {
         defaults::{default_keys, default_positions},
         models::{
             CustomCssHistoryEntry, CustomFont, FontWeightRange, GraphPosition, GraphStatType,
-            GraphType, JsPlugin, KnobPosition, ReactiveSpritePosition, SpriteImageMetrics,
-            SpriteImagePlacement, SpritePose, SpriteReferenceNaturalSize, StatPosition, StatType,
+            GraphType, JsPlugin, KnobPosition, ReactiveSpritePosition, SpriteAnchor,
+            SpriteImageMetrics, SpritePose, SpriteReferenceNaturalSize, StatPosition, StatType,
         },
     };
+
+    fn png_header(width: u32, height: u32) -> Vec<u8> {
+        let mut bytes = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec();
+        bytes.extend_from_slice(&width.to_be_bytes());
+        bytes.extend_from_slice(&height.to_be_bytes());
+        bytes
+    }
+
+    #[test]
+    fn preset_image_restore_fills_missing_sprite_metrics() {
+        let root = std::env::temp_dir().join(format!(
+            "dmnote-preset-sprite-metrics-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let mut sprites = SpritePositions::from([(
+            "4key".to_string(),
+            vec![ReactiveSpritePosition {
+                base_image: Some(format!("{PRESET_LOCAL_IMAGE_PREFIX}base")),
+                poses: vec![SpritePose {
+                    image_override: Some(format!("{PRESET_LOCAL_IMAGE_PREFIX}pose")),
+                    ..SpritePose::default()
+                }],
+                ..ReactiveSpritePosition::default()
+            }],
+        )]);
+        let embedded = [
+            EmbeddedLocalImage {
+                image_id: "base".to_string(),
+                extension: Some("png".to_string()),
+                data_base64: BASE64_STANDARD.encode(png_header(640, 360)),
+            },
+            EmbeddedLocalImage {
+                image_id: "pose".to_string(),
+                extension: Some("png".to_string()),
+                data_base64: BASE64_STANDARD.encode(png_header(320, 240)),
+            },
+        ];
+
+        restore_preset_local_images_in_dir(
+            &root.join("images"),
+            &mut KeyPositions::new(),
+            &mut StatPositions::new(),
+            &mut GraphPositions::new(),
+            &mut KnobPositions::new(),
+            &mut sprites,
+            Some(&embedded),
+        )
+        .unwrap();
+
+        let sprite = &sprites["4key"][0];
+        assert_eq!(
+            sprite
+                .reference_natural_size
+                .as_ref()
+                .map(|size| (size.width, size.height)),
+            Some((640, 360))
+        );
+        assert_eq!(
+            sprite.poses[0]
+                .image_override_metrics
+                .as_ref()
+                .map(|size| (size.width, size.height)),
+            Some((320, 240))
+        );
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn preset_reader_migrates_legacy_sprite_wire_before_deserialization() {
+        let root = std::env::temp_dir().join(format!(
+            "dmnote-preset-sprite-wire-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let path = root.join("preset.json");
+        std::fs::create_dir_all(&root).unwrap();
+        let mut value = serde_json::to_value(PresetFile {
+            sprite_positions: Some(SpritePositions::from([(
+                "4key".to_string(),
+                vec![ReactiveSpritePosition {
+                    dx: 10.0,
+                    dy: 20.0,
+                    poses: vec![SpritePose::default()],
+                    ..ReactiveSpritePosition::default()
+                }],
+            )])),
+            ..PresetFile::default()
+        })
+        .unwrap();
+        let sprite = value["spritePositions"]["4key"][0].as_object_mut().unwrap();
+        sprite.insert(
+            "imageRect".to_string(),
+            serde_json::json!({ "x": 5.0, "y": -2.0, "width": 320.0, "height": 180.0 }),
+        );
+        sprite.insert("imagePlacement".to_string(), serde_json::json!("pivot"));
+        sprite["poses"][0]["contactPoint"] = serde_json::json!({ "x": 0.5, "y": 1.0 });
+        std::fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+
+        let preset = read_preset_file(&path).unwrap();
+        let sprite = &preset.sprite_positions.unwrap()["4key"][0];
+        assert_eq!((sprite.dx, sprite.dy), (15.0, 18.0));
+        assert_eq!((sprite.width, sprite.height), (320.0, 180.0));
+        let wire = serde_json::to_value(sprite).unwrap();
+        for field in ["imageRect", "imagePlacement"] {
+            assert!(wire.get(field).is_none());
+        }
+        assert!(wire["poses"][0].get("contactPoint").is_none());
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     fn pivot_sprite_with_local_images(
         base_image: &Path,
@@ -1872,7 +1986,6 @@ mod tests {
         ReactiveSpritePosition {
             id: uuid::Uuid::new_v4().to_string(),
             base_image: Some(base_image.clone()),
-            image_placement: SpriteImagePlacement::Pivot,
             reference_natural_size: Some(SpriteReferenceNaturalSize {
                 source: Some(base_image),
                 width: 800,
@@ -1881,6 +1994,7 @@ mod tests {
             poses: vec![SpritePose {
                 pose_id: uuid::Uuid::new_v4().to_string(),
                 triggers: vec![uuid::Uuid::new_v4().to_string()],
+                pivot: Some(SpriteAnchor { x: 0.25, y: 0.75 }),
                 image_override: Some(pose_image.clone()),
                 image_override_metrics: Some(SpriteImageMetrics {
                     source: pose_image,
@@ -1998,7 +2112,10 @@ mod tests {
         assert_eq!(restored.id, sprite_id);
         assert_eq!(restored.poses[0].pose_id, pose_id);
         assert_eq!(restored.poses[0].triggers, [trigger_id]);
-        assert_eq!(restored.image_placement, SpriteImagePlacement::Pivot);
+        assert_eq!(
+            restored.poses[0].pivot,
+            Some(SpriteAnchor { x: 0.25, y: 0.75 })
+        );
         let restored_base = Path::new(restored.base_image.as_deref().unwrap());
         let restored_pose = Path::new(restored.poses[0].image_override.as_deref().unwrap());
         assert_eq!(
@@ -2074,7 +2191,10 @@ mod tests {
         .unwrap();
 
         let restored = &imported_sprites["target-tab"][0];
-        assert_eq!(restored.image_placement, SpriteImagePlacement::Pivot);
+        assert_eq!(
+            restored.poses[0].pivot,
+            Some(SpriteAnchor { x: 0.25, y: 0.75 })
+        );
         assert_eq!(
             restored.reference_natural_size.as_ref().unwrap().source,
             restored.base_image
@@ -2184,13 +2304,6 @@ mod tests {
             .unwrap();
         sprite.remove("activation");
         sprite.remove("pressDurationMs");
-        sprite
-            .get_mut("poses")
-            .and_then(serde_json::Value::as_array_mut)
-            .and_then(|poses| poses.first_mut())
-            .and_then(serde_json::Value::as_object_mut)
-            .unwrap()
-            .remove("contactPoint");
         std::fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
 
         let imported = read_preset_file(&path).unwrap();
@@ -2201,10 +2314,6 @@ mod tests {
             serde_json::json!("whileHeld")
         );
         assert_eq!(sprite.press_duration_ms, 300);
-        assert_eq!(
-            serde_json::to_value(sprite.poses[0].contact_point).unwrap(),
-            serde_json::json!({ "x": 0.5, "y": 1.0 })
-        );
         let _ = std::fs::remove_dir_all(root);
     }
 

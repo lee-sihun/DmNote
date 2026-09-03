@@ -887,7 +887,6 @@ pub const SPRITE_TRANSFORM_ROTATION_MIN: f64 = -180.0;
 pub const SPRITE_TRANSFORM_ROTATION_MAX: f64 = 180.0;
 pub const SPRITE_TRANSFORM_SCALE_MIN: f64 = 0.1;
 pub const SPRITE_TRANSFORM_SCALE_MAX: f64 = 10.0;
-pub const SPRITE_RESIZE_MIN_DIMENSION: f64 = 0.000_001;
 pub const SPRITE_TRANSITION_MS_MAX: u32 = 1_000;
 pub const SPRITE_PRESS_DURATION_MS_MIN: u32 = 1;
 pub const SPRITE_PRESS_DURATION_MS_MAX: u32 = 5_000;
@@ -895,26 +894,6 @@ pub const SPRITE_IMAGE_DIMENSION_MIN: u32 = 1;
 pub const SPRITE_IMAGE_DIMENSION_MAX: u32 = 32_768;
 pub const MAX_SPRITE_POSES: usize = 64;
 pub const MAX_SPRITE_POSE_TRIGGERS: usize = 512;
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct SpriteRect {
-    pub x: f64,
-    pub y: f64,
-    pub width: f64,
-    pub height: f64,
-}
-
-impl Default for SpriteRect {
-    fn default() -> Self {
-        Self {
-            x: 0.0,
-            y: 0.0,
-            width: 200.0,
-            height: 200.0,
-        }
-    }
-}
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -947,22 +926,6 @@ impl Default for SpriteTransform {
             scale: 1.0,
         }
     }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
-pub enum SpriteImageFit {
-    Cover,
-    Contain,
-    Fill,
-}
-
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub enum SpriteImagePlacement {
-    #[default]
-    Box,
-    Pivot,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1029,11 +992,7 @@ pub(crate) fn default_sprite_press_duration_ms() -> u32 {
     300
 }
 
-pub(crate) fn default_sprite_contact_point() -> SpriteAnchor {
-    SpriteAnchor { x: 0.5, y: 1.0 }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SpritePose {
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -1043,28 +1002,11 @@ pub struct SpritePose {
     pub triggers: Vec<String>,
     pub transform: SpriteTransform,
     #[serde(default)]
-    pub image_override: Option<String>,
-    #[serde(default = "default_sprite_contact_point")]
-    pub contact_point: SpriteAnchor,
+    pub pivot: Option<SpriteAnchor>,
     #[serde(default)]
-    pub image_pivot: Option<SpriteAnchor>,
+    pub image_override: Option<String>,
     #[serde(default)]
     pub image_override_metrics: Option<SpriteImageMetrics>,
-}
-
-impl Default for SpritePose {
-    fn default() -> Self {
-        Self {
-            pose_id: String::new(),
-            name: None,
-            triggers: Vec::new(),
-            transform: SpriteTransform::default(),
-            image_override: None,
-            contact_point: default_sprite_contact_point(),
-            image_pivot: None,
-            image_override_metrics: None,
-        }
-    }
 }
 
 impl SpritePose {
@@ -1135,12 +1077,7 @@ pub struct ReactiveSpritePosition {
     #[serde(default)]
     pub base_image: Option<String>,
     #[serde(default)]
-    pub image_fit: Option<SpriteImageFit>,
-    #[serde(default)]
-    pub image_placement: SpriteImagePlacement,
-    #[serde(default)]
     pub reference_natural_size: Option<SpriteReferenceNaturalSize>,
-    pub image_rect: SpriteRect,
     pub pivot: SpriteAnchor,
     pub idle_transform: SpriteTransform,
     #[serde(default)]
@@ -1170,10 +1107,7 @@ impl Default for ReactiveSpritePosition {
             class_name: None,
             use_inline_styles: None,
             base_image: None,
-            image_fit: None,
-            image_placement: SpriteImagePlacement::default(),
             reference_natural_size: None,
-            image_rect: SpriteRect::default(),
             pivot: SpriteAnchor::default(),
             idle_transform: SpriteTransform::default(),
             poses: Vec::new(),
@@ -3408,14 +3342,13 @@ pub struct SettingsPatch {
 #[cfg(test)]
 mod tests {
     use super::{
-        compact_canonical_rgba, default_sprite_contact_point, note_border_representative_hex,
+        compact_canonical_rgba, note_border_representative_hex,
         rewrite_coupled_sprite_image_reference, scrub_removed_text_outline_fields, FadePosition,
         GradientSpec, GraphPosition, GraphStatType, GraphType, KeyCounterAlign,
         KeyCounterAlignMode, KeyCounterColor, KeyCounterPlacement, KeyCounterSettings, KeyMappings,
         KeyPosition, KeySlot, KnobPosition, NoteColor, NoteSettings, ReactiveSpritePosition,
-        SlotMatch, SpriteAnchor, SpriteImageFit, SpriteImagePlacement, SpritePose,
-        SpriteReferenceNaturalSize, SpriteTransform, StatPosition, StatType, MAX_SLOT_KEYS,
-        POSITION_COLLECTION_FIELDS,
+        SlotMatch, SpriteAnchor, SpritePose, SpriteReferenceNaturalSize, SpriteTransform,
+        StatPosition, StatType, MAX_SLOT_KEYS, POSITION_COLLECTION_FIELDS,
     };
     use serde::Deserialize;
 
@@ -3446,7 +3379,7 @@ mod tests {
     }
 
     #[test]
-    fn sprite_pose_name_round_trips_and_none_is_omitted() {
+    fn sprite_pose_optional_fields_round_trip_with_canonical_pivot_null() {
         let pose = SpritePose {
             name: Some("왼팔".to_string()),
             ..SpritePose::default()
@@ -3461,6 +3394,7 @@ mod tests {
 
         let unnamed = serde_json::to_value(SpritePose::default()).unwrap();
         assert!(unnamed.get("name").is_none());
+        assert_eq!(unnamed["pivot"], serde_json::Value::Null);
     }
 
     #[test]
@@ -3494,26 +3428,16 @@ mod tests {
     }
 
     #[test]
-    fn sprite_image_fit_wire_values_remain_single_word() {
-        for (fit, wire) in [
-            (SpriteImageFit::Cover, "cover"),
-            (SpriteImageFit::Contain, "contain"),
-            (SpriteImageFit::Fill, "fill"),
-        ] {
-            assert_eq!(serde_json::to_value(fit).unwrap(), wire);
-            assert_eq!(
-                serde_json::from_value::<SpriteImageFit>(serde_json::json!(wire)).unwrap(),
-                fit
-            );
-        }
-    }
-
-    #[test]
-    fn sprite_pivot_fields_follow_wire_defaults_and_null_contract() {
+    fn sprite_fields_follow_single_model_wire_contract() {
         let mut raw = serde_json::to_value(ReactiveSpritePosition::default()).unwrap();
         let sprite = raw.as_object_mut().unwrap();
+        sprite.insert("imageFit".to_string(), serde_json::json!("contain"));
         sprite.remove("imagePlacement");
         sprite.remove("referenceNaturalSize");
+        sprite.insert(
+            "imageRect".to_string(),
+            serde_json::json!({ "x": 10, "y": 20, "width": 40, "height": 50 }),
+        );
         sprite.insert(
             "poses".to_string(),
             serde_json::json!([{
@@ -3521,30 +3445,33 @@ mod tests {
                 "triggers": [],
                 "transform": SpriteTransform::default(),
                 "imageOverride": null,
-                "contactPoint": default_sprite_contact_point()
+                "contactPoint": { "x": 0.5, "y": 1.0 },
+                "imagePivot": { "x": 0.25, "y": 0.75 }
             }]),
         );
 
         let defaulted: ReactiveSpritePosition = serde_json::from_value(raw).unwrap();
-        assert_eq!(defaulted.image_placement, SpriteImagePlacement::Box);
+        assert_eq!((defaulted.width, defaulted.height), (200.0, 200.0));
+        assert_eq!(defaulted.pivot, SpriteAnchor { x: 0.5, y: 0.5 });
         assert_eq!(defaulted.reference_natural_size, None);
-        assert_eq!(defaulted.poses[0].image_pivot, None);
         assert_eq!(defaulted.poses[0].image_override_metrics, None);
 
         let serialized = serde_json::to_value(&defaulted).unwrap();
-        assert_eq!(serialized["imagePlacement"], "box");
+        for field in ["imageFit", "imagePlacement", "imageRect"] {
+            assert!(serialized.get(field).is_none());
+        }
+        for field in ["contactPoint", "imagePivot"] {
+            assert!(serialized["poses"][0].get(field).is_none());
+        }
         assert!(serialized["referenceNaturalSize"].is_null());
-        assert!(serialized["poses"][0]["imagePivot"].is_null());
         assert!(serialized["poses"][0]["imageOverrideMetrics"].is_null());
         let null_round_trip: ReactiveSpritePosition =
             serde_json::from_value(serialized.clone()).unwrap();
         assert_eq!(null_round_trip.reference_natural_size, None);
-        assert_eq!(null_round_trip.poses[0].image_pivot, None);
         assert_eq!(null_round_trip.poses[0].image_override_metrics, None);
 
         let mut valued_raw = serde_json::to_value(ReactiveSpritePosition::default()).unwrap();
         let valued_object = valued_raw.as_object_mut().unwrap();
-        valued_object.insert("imagePlacement".to_string(), serde_json::json!("pivot"));
         valued_object.insert(
             "referenceNaturalSize".to_string(),
             serde_json::json!({ "source": null, "width": 1920, "height": 1080 }),
@@ -3556,8 +3483,6 @@ mod tests {
                 "triggers": [],
                 "transform": SpriteTransform::default(),
                 "imageOverride": "/images/pose.png",
-                "contactPoint": default_sprite_contact_point(),
-                "imagePivot": { "x": 0.25, "y": 0.75 },
                 "imageOverrideMetrics": {
                     "source": "/images/pose.png",
                     "width": 640,
@@ -3566,12 +3491,7 @@ mod tests {
             }]),
         );
         let valued: ReactiveSpritePosition = serde_json::from_value(valued_raw).unwrap();
-        assert_eq!(valued.image_placement, SpriteImagePlacement::Pivot);
         assert_eq!(valued.reference_natural_size.unwrap().source, None);
-        assert_eq!(
-            valued.poses[0].image_pivot,
-            Some(SpriteAnchor { x: 0.25, y: 0.75 })
-        );
         assert_eq!(
             valued.poses[0]
                 .image_override_metrics

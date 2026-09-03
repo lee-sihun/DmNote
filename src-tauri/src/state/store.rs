@@ -50,9 +50,9 @@ use super::local_asset_path::{
     file_url_to_path, path_identity_key, paths_have_same_identity, FileUrlPath,
 };
 use super::migration::{
-    find_legacy_store_file, is_foreign_portable_asset_reference, load_store_from_path,
-    migrate_key_images_to_app_data, migrate_local_fonts_to_app_data, normalize_state,
-    rehome_foreign_asset_references,
+    fill_missing_sprite_image_metrics, find_legacy_store_file, is_foreign_portable_asset_reference,
+    load_store_from_path, migrate_key_images_to_app_data, migrate_local_fonts_to_app_data,
+    normalize_state, rehome_foreign_asset_references,
 };
 use super::plugin::{
     add_plugin_group_refs, decode_plugin_instance_entries, decode_plugin_instances_lenient,
@@ -341,6 +341,9 @@ impl AppStore {
             needs_persist = true;
         }
         if migrate_key_images_to_app_data(dir, &mut state) {
+            needs_persist = true;
+        }
+        if fill_missing_sprite_image_metrics(&mut state.sprite_positions) {
             needs_persist = true;
         }
         // 내장 키음 시딩
@@ -4860,10 +4863,10 @@ mod tests {
             NoteColor, OverlayBounds, PanelBounds, PendingProcessedWavReplacement,
             PluginInstancesCommitRequest, PluginInstancesReconcileRequest, PluginPoint,
             ReactiveSpritePosition, SavedPluginInstance, SettingsPatchInput, SlotMatch,
-            SoundLibraryEntry, SoundSource, SpriteActivation, SpriteAnchor, SpriteImageMetrics,
-            SpriteImagePlacement, SpritePose, SpriteRect, SpriteReferenceNaturalSize,
-            SpriteTransform, StatPosition, StatType, TabCss, TabNoteSettings,
-            EDITOR_COMMIT_SCHEMA_VERSION_V2, EDITOR_OPS_VERSION, EDITOR_SCHEMA_VERSION,
+            SoundLibraryEntry, SoundSource, SpriteActivation, SpriteImageMetrics, SpritePose,
+            SpriteReferenceNaturalSize, SpriteTransform, StatPosition, StatType, TabCss,
+            TabNoteSettings, EDITOR_COMMIT_SCHEMA_VERSION_V2, EDITOR_OPS_VERSION,
+            EDITOR_SCHEMA_VERSION,
         },
         services::{css_watcher::commit_css_reload, settings::apply_patch_to_store},
         state::{
@@ -4890,6 +4893,72 @@ mod tests {
 
     fn test_directory(label: &str) -> std::path::PathBuf {
         std::env::temp_dir().join(format!("dmnote-{label}-{}", uuid::Uuid::new_v4()))
+    }
+
+    fn png_header(width: u32, height: u32) -> Vec<u8> {
+        let mut bytes = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec();
+        bytes.extend_from_slice(&width.to_be_bytes());
+        bytes.extend_from_slice(&height.to_be_bytes());
+        bytes
+    }
+
+    #[test]
+    fn store_initialization_fills_missing_sprite_metrics_after_paths_resolve() {
+        let directory = test_directory("sprite-metrics-load");
+        let images = directory.join("images");
+        let base = images.join("base.png");
+        let pose = images.join("pose.png");
+        std::fs::create_dir_all(&images).unwrap();
+        std::fs::write(&base, png_header(640, 360)).unwrap();
+        std::fs::write(&pose, png_header(320, 240)).unwrap();
+        let mut data = AppStoreData::default();
+        data.sprite_positions.insert(
+            "4key".to_string(),
+            vec![
+                ReactiveSpritePosition {
+                    base_image: Some(base.to_string_lossy().into_owned()),
+                    poses: vec![SpritePose {
+                        image_override: Some(pose.to_string_lossy().into_owned()),
+                        ..SpritePose::default()
+                    }],
+                    ..ReactiveSpritePosition::default()
+                },
+                ReactiveSpritePosition {
+                    base_image: Some(images.join("missing.png").to_string_lossy().into_owned()),
+                    ..ReactiveSpritePosition::default()
+                },
+            ],
+        );
+        std::fs::write(
+            directory.join("store.json"),
+            serde_json::to_vec(&data).unwrap(),
+        )
+        .unwrap();
+
+        let store = AppStore::initialize_for_test(&directory).unwrap();
+        let snapshot = store.snapshot();
+        let sprite = &snapshot.sprite_positions["4key"][0];
+        assert_eq!(
+            sprite
+                .reference_natural_size
+                .as_ref()
+                .map(|size| (size.width, size.height)),
+            Some((640, 360))
+        );
+        assert_eq!(
+            sprite.poses[0]
+                .image_override_metrics
+                .as_ref()
+                .map(|size| (size.width, size.height)),
+            Some((320, 240))
+        );
+        assert_eq!(
+            snapshot.sprite_positions["4key"][1].reference_natural_size,
+            None
+        );
+
+        store.flush_and_shutdown().unwrap();
+        std::fs::remove_dir_all(directory).unwrap();
     }
 
     fn regular_file_count(directory: &Path) -> usize {
@@ -11051,14 +11120,13 @@ mod tests {
     }
 
     #[test]
-    fn legacy_sprite_changes_preserve_present_canonical_fields_and_undo_full_snapshot() {
+    fn legacy_sprite_changes_preserve_omitted_canonical_fields_and_undo_full_snapshot() {
         let dir = test_directory("legacy-sprite-presence-history-test");
         std::fs::create_dir_all(&dir).unwrap();
         let mut data = initialize_default_state();
         let sprite = ReactiveSpritePosition {
             id: uuid::Uuid::new_v4().to_string(),
             base_image: Some("/images/base.png".to_string()),
-            image_placement: SpriteImagePlacement::Pivot,
             reference_natural_size: Some(SpriteReferenceNaturalSize {
                 source: Some("/images/base.png".to_string()),
                 width: 800,
@@ -11070,8 +11138,6 @@ mod tests {
                 pose_id: uuid::Uuid::new_v4().to_string(),
                 triggers: vec![uuid::Uuid::new_v4().to_string()],
                 image_override: Some("/images/pose.png".to_string()),
-                contact_point: SpriteAnchor { x: 0.1, y: 0.9 },
-                image_pivot: Some(SpriteAnchor { x: 0.2, y: 0.8 }),
                 image_override_metrics: Some(SpriteImageMetrics {
                     source: "/images/pose.png".to_string(),
                     width: 320,
@@ -11101,7 +11167,7 @@ mod tests {
                 .and_then(Value::as_object_mut)
                 .unwrap();
             for field in [
-                "imagePlacement",
+                "baseImage",
                 "referenceNaturalSize",
                 "activation",
                 "pressDurationMs",
@@ -11109,9 +11175,8 @@ mod tests {
                 sprite.remove(field);
             }
             let pose = sprite["poses"][0].as_object_mut().unwrap();
-            for field in ["imagePivot", "imageOverrideMetrics", "contactPoint"] {
-                pose.remove(field);
-            }
+            pose.remove("imageOverride");
+            pose.remove("imageOverrideMetrics");
             crate::state::editor::decode_editor_commit_request(json!({
                 "baseRevision": 0,
                 "mutationId": uuid::Uuid::new_v4().to_string(),
@@ -11136,7 +11201,7 @@ mod tests {
         );
         let saved = &store.editor_get().document.sprite_positions["4key"][0];
         let expected = &initial["4key"][0];
-        assert_eq!(saved.image_placement, expected.image_placement);
+        assert_eq!(saved.base_image, expected.base_image);
         assert_eq!(
             saved.reference_natural_size,
             expected.reference_natural_size
@@ -11144,10 +11209,9 @@ mod tests {
         assert_eq!(saved.activation, expected.activation);
         assert_eq!(saved.press_duration_ms, expected.press_duration_ms);
         assert_eq!(
-            saved.poses[0].contact_point,
-            expected.poses[0].contact_point
+            saved.poses[0].image_override,
+            expected.poses[0].image_override
         );
-        assert_eq!(saved.poses[0].image_pivot, expected.poses[0].image_pivot);
         assert_eq!(
             saved.poses[0].image_override_metrics,
             expected.poses[0].image_override_metrics
@@ -11173,7 +11237,97 @@ mod tests {
     }
 
     #[test]
-    fn sprite_commit_normalizes_pivot_metadata_without_an_override() {
+    fn user_sprite_pose_rotation_v1_patch_commits_with_missing_image_files() {
+        let dir = test_directory("user-sprite-pose-rotation-v1-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let first_trigger = "0bf18ec9-7af0-4f03-a009-aebc99e70167";
+        let second_trigger = "9c2d07a6-e6d5-4ecc-84be-ca67d2d483d0";
+        let mut data = initialize_default_state();
+        let key_positions = data.key_positions.get_mut("4key").unwrap();
+        key_positions[0].id = first_trigger.to_string();
+        key_positions[1].id = second_trigger.to_string();
+        data.sprite_positions.insert(
+            "4key".to_string(),
+            vec![ReactiveSpritePosition {
+                id: "495749a9-0a13-4204-9d47-28fd91109c7f".to_string(),
+                dx: 600.5,
+                dy: 59.0,
+                width: 90.0,
+                height: 75.0,
+                base_image: Some("/missing/images/base.png".to_string()),
+                reference_natural_size: Some(SpriteReferenceNaturalSize {
+                    source: Some("/missing/images/base.png".to_string()),
+                    width: 240,
+                    height: 210,
+                }),
+                pivot: crate::models::SpriteAnchor { x: 1.0, y: 0.0 },
+                poses: vec![
+                    SpritePose {
+                        pose_id: "5120c78c-76c0-4447-b866-35d9769e9ae8".to_string(),
+                        triggers: vec![first_trigger.to_string()],
+                        transform: SpriteTransform {
+                            x: 1.41,
+                            y: 0.24,
+                            rotation: -33.6,
+                            scale: 1.0,
+                        },
+                        image_override: Some("/missing/images/pose.png".to_string()),
+                        image_override_metrics: Some(SpriteImageMetrics {
+                            source: "/missing/images/pose.png".to_string(),
+                            width: 240,
+                            height: 210,
+                        }),
+                        ..SpritePose::default()
+                    },
+                    SpritePose {
+                        pose_id: "2cc7ec94-6f85-4a07-9ae9-0d28eae8289a".to_string(),
+                        triggers: vec![second_trigger.to_string()],
+                        transform: SpriteTransform {
+                            x: 4.9,
+                            ..SpriteTransform::default()
+                        },
+                        image_override: Some("/missing/images/pose.png".to_string()),
+                        image_override_metrics: Some(SpriteImageMetrics {
+                            source: "/missing/images/pose.png".to_string(),
+                            width: 240,
+                            height: 210,
+                        }),
+                        ..SpritePose::default()
+                    },
+                ],
+                transition_ms: 90,
+                ..ReactiveSpritePosition::default()
+            }],
+        );
+        let store = AppStore::new(dir.join("store.json"), data, false).unwrap();
+        let mut sprite_positions = store.editor_get().document.sprite_positions;
+        sprite_positions.get_mut("4key").unwrap()[0].poses[0]
+            .transform
+            .rotation = 20.0;
+        let request = crate::state::editor::decode_editor_commit_request(json!({
+            "baseRevision": 0,
+            "mutationId": uuid::Uuid::new_v4().to_string(),
+            "changes": {
+                "schemaVersion": 1,
+                "spritePositions": sprite_positions,
+            }
+        }))
+        .unwrap();
+
+        let committed = store.commit_editor_document(request).unwrap();
+        assert_eq!(
+            committed.document.sprite_positions["4key"][0].poses[0]
+                .transform
+                .rotation,
+            20.0
+        );
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn sprite_commit_normalizes_metrics_without_an_override() {
         let dir = test_directory("sprite-pivot-normalization-commit-test");
         std::fs::create_dir_all(&dir).unwrap();
         let store = AppStore::initialize_in_dir(&dir).unwrap();
@@ -11183,7 +11337,6 @@ mod tests {
                 pose_id: uuid::Uuid::new_v4().to_string(),
                 triggers: vec![uuid::Uuid::new_v4().to_string()],
                 image_override: None,
-                image_pivot: Some(SpriteAnchor { x: 0.2, y: 0.8 }),
                 image_override_metrics: Some(SpriteImageMetrics {
                     source: "/images/removed.png".to_string(),
                     width: 320,
@@ -11207,7 +11360,6 @@ mod tests {
             .unwrap();
 
         let pose = &store.editor_get().document.sprite_positions["4key"][0].poses[0];
-        assert_eq!(pose.image_pivot, None);
         assert_eq!(pose.image_override_metrics, None);
 
         store.flush_and_shutdown().unwrap();
@@ -17348,12 +17500,6 @@ mod tests {
                 dy: 20.0,
                 width: 200.0,
                 height: 100.0,
-                image_rect: SpriteRect {
-                    x: 40.0,
-                    y: -10.0,
-                    width: 160.0,
-                    height: 80.0,
-                },
                 idle_transform: SpriteTransform {
                     x: 12.0,
                     y: -6.0,
@@ -17438,13 +17584,13 @@ mod tests {
             )
         );
         assert_eq!(
-            committed.sprite_positions["4key"][0].image_rect,
-            SpriteRect {
-                x: 80.0,
-                y: -5.0,
-                width: 320.0,
-                height: 40.0,
-            }
+            (
+                committed.sprite_positions["4key"][0].idle_transform.x,
+                committed.sprite_positions["4key"][0].idle_transform.y,
+                committed.sprite_positions["4key"][0].poses[0].transform.x,
+                committed.sprite_positions["4key"][0].poses[0].transform.y,
+            ),
+            (24.0, -3.0, -60.0, 22.0)
         );
 
         let operation_id = uuid::Uuid::new_v4().to_string();

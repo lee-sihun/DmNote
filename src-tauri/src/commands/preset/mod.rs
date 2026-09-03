@@ -331,9 +331,6 @@ mod tests {
                 "hidden",
                 "id",
                 "idleTransform",
-                "imageFit",
-                "imagePlacement",
-                "imageRect",
                 "pivot",
                 "poses",
                 "pressDurationMs",
@@ -351,10 +348,9 @@ mod tests {
         assert_eq!(
             pose_keys,
             [
-                "contactPoint",
                 "imageOverride",
                 "imageOverrideMetrics",
-                "imagePivot",
+                "pivot",
                 "poseId",
                 "transform",
                 "triggers"

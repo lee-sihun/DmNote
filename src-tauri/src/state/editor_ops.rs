@@ -16,14 +16,12 @@ use crate::{
         SpriteTransform, IMAGE_TRANSFORM_OFFSET_MAX, IMAGE_TRANSFORM_OFFSET_MIN,
         IMAGE_TRANSFORM_ROTATION_MAX, IMAGE_TRANSFORM_ROTATION_MIN, IMAGE_TRANSFORM_SCALE_MAX,
         IMAGE_TRANSFORM_SCALE_MIN, SHADOW_BLUR_MAX, SHADOW_BLUR_MIN, SHADOW_OFFSET_MAX,
-        SHADOW_OFFSET_MIN, SPRITE_RESIZE_MIN_DIMENSION, SPRITE_TRANSFORM_OFFSET_MAX,
-        SPRITE_TRANSFORM_OFFSET_MIN,
+        SHADOW_OFFSET_MIN, SPRITE_TRANSFORM_OFFSET_MAX, SPRITE_TRANSFORM_OFFSET_MIN,
     },
 };
 
 use super::editor::{
     validate_document_transition, validate_editor_op_bounds, validate_editor_op_target_type,
-    MAX_ABS_COORDINATE, MAX_DIMENSION,
 };
 use super::native_element_id::{validate_document_element_ids, DUPLICATE_ELEMENT_ID};
 use super::plugin::{plugin_group_refs_from_store, PluginGroupRefs};
@@ -1609,13 +1607,6 @@ fn apply_bounds(common: ElementCommonMut<'_>, bounds: &EditorBoundsV1) {
     *common.height = bounds.height;
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum SpriteResizeValueField {
-    Offset,
-    Coordinate,
-    Dimension,
-}
-
 #[allow(clippy::neg_cmp_op_on_partial_ord)]
 fn sprite_resize_ratio(prev: f64, next: f64) -> f64 {
     if !(prev > 0.0) || !prev.is_finite() || !(next > 0.0) || !next.is_finite() {
@@ -1629,25 +1620,18 @@ fn sprite_resize_ratio(prev: f64, next: f64) -> f64 {
     }
 }
 
-fn scale_sprite_resize_value(value: f64, ratio: f64, field: SpriteResizeValueField) -> f64 {
+fn scale_sprite_resize_value(value: f64, ratio: f64) -> f64 {
     // 배율 1은 클램프 없는 완전 passthrough - 순수 이동이 검증상 유효한
     // 극소 치수(하한 미만)까지 비트 단위로 보존한다
     if ratio == 1.0 {
         return value;
     }
-    let (min, max) = match field {
-        SpriteResizeValueField::Offset => {
-            (SPRITE_TRANSFORM_OFFSET_MIN, SPRITE_TRANSFORM_OFFSET_MAX)
-        }
-        SpriteResizeValueField::Coordinate => (-MAX_ABS_COORDINATE, MAX_ABS_COORDINATE),
-        SpriteResizeValueField::Dimension => (SPRITE_RESIZE_MIN_DIMENSION, MAX_DIMENSION),
-    };
-    (value * ratio).max(min).min(max)
+    (value * ratio).clamp(SPRITE_TRANSFORM_OFFSET_MIN, SPRITE_TRANSFORM_OFFSET_MAX)
 }
 
 fn scale_sprite_transform_offsets(transform: &mut SpriteTransform, sx: f64, sy: f64) {
-    transform.x = scale_sprite_resize_value(transform.x, sx, SpriteResizeValueField::Offset);
-    transform.y = scale_sprite_resize_value(transform.y, sy, SpriteResizeValueField::Offset);
+    transform.x = scale_sprite_resize_value(transform.x, sx);
+    transform.y = scale_sprite_resize_value(transform.y, sy);
 }
 
 fn apply_sprite_resize(sprite: &mut ReactiveSpritePosition, bounds: &EditorBoundsV1) {
@@ -1658,20 +1642,6 @@ fn apply_sprite_resize(sprite: &mut ReactiveSpritePosition, bounds: &EditorBound
     sprite.dy = bounds.dy;
     sprite.width = bounds.width;
     sprite.height = bounds.height;
-    sprite.image_rect.x =
-        scale_sprite_resize_value(sprite.image_rect.x, sx, SpriteResizeValueField::Coordinate);
-    sprite.image_rect.y =
-        scale_sprite_resize_value(sprite.image_rect.y, sy, SpriteResizeValueField::Coordinate);
-    sprite.image_rect.width = scale_sprite_resize_value(
-        sprite.image_rect.width,
-        sx,
-        SpriteResizeValueField::Dimension,
-    );
-    sprite.image_rect.height = scale_sprite_resize_value(
-        sprite.image_rect.height,
-        sy,
-        SpriteResizeValueField::Dimension,
-    );
     scale_sprite_transform_offsets(&mut sprite.idle_transform, sx, sy);
     for pose in &mut sprite.poses {
         scale_sprite_transform_offsets(&mut pose.transform, sx, sy);
@@ -3232,6 +3202,8 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
 
     let mut scratch = current_store.clone();
     candidate.apply_to_store(&mut scratch);
+    crate::state::migration::normalize_sprite_triggers(&mut scratch);
+    candidate = EditorDocumentV1::from_store(&scratch);
     scratch.editor_revision = current_store.editor_revision;
     validate_document_transition(&current, &candidate, current_store, &scratch)?;
     let changed_fields = current.changed_fields(&candidate);
@@ -3254,10 +3226,10 @@ mod tests {
             EditorFrozenElementV1, EditorFrozenGroupV1, EditorFrozenKeySlotV1, EditorGroupUpdateV1,
             EditorOpResultStatusV1, EditorOpV1, EditorTargetGroupV1, EditorZUpdateV1,
             GraphPosition, GraphStatType, GraphType, KeyPosition, KnobPosition, LayerGroupDef,
-            ReactiveSpritePosition, SpriteAnchor, SpriteImageMetrics, SpriteImagePlacement,
-            SpritePose, SpriteRect, SpriteReferenceNaturalSize, SpriteTransform, StatPosition,
-            StatType,
+            ReactiveSpritePosition, SpriteAnchor, SpriteImageMetrics, SpritePose,
+            SpriteReferenceNaturalSize, SpriteTransform, StatPosition, StatType,
         },
+        state::editor::{MAX_ABS_COORDINATE, MAX_DIMENSION},
         state::native_element_id::{
             backfill_store_element_ids, DUPLICATE_ELEMENT_ID, INVALID_ELEMENT_ID,
         },
@@ -3281,8 +3253,6 @@ mod tests {
     #[serde(deny_unknown_fields)]
     struct SpriteResizeScaleParityRanges {
         offset: [f64; 2],
-        coord: [f64; 2],
-        dimension: [f64; 2],
     }
 
     #[derive(Debug, Clone, Copy, serde::Deserialize)]
@@ -3290,8 +3260,6 @@ mod tests {
     enum SpriteResizeScaleParityField {
         Ratio,
         Offset,
-        Coord,
-        Dimension,
     }
 
     #[derive(serde::Deserialize)]
@@ -3302,7 +3270,8 @@ mod tests {
         prev: f64,
         next: f64,
         value: Option<f64>,
-        expected: f64,
+        #[serde(rename = "expected")]
+        _expected: f64,
         expected_hex: String,
     }
 
@@ -3332,15 +3301,6 @@ mod tests {
             fixture.ranges.offset,
             [SPRITE_TRANSFORM_OFFSET_MIN, SPRITE_TRANSFORM_OFFSET_MAX]
         );
-        assert_eq!(
-            fixture.ranges.coord,
-            [-MAX_ABS_COORDINATE, MAX_ABS_COORDINATE]
-        );
-        assert_eq!(
-            fixture.ranges.dimension,
-            [SPRITE_RESIZE_MIN_DIMENSION, MAX_DIMENSION]
-        );
-
         for case in fixture.cases {
             let expected_bits = u64::from_str_radix(
                 case.expected_hex
@@ -3349,29 +3309,12 @@ mod tests {
                 16,
             )
             .expect("expectedHex must contain IEEE754 f64 bits");
-            assert_eq!(
-                case.expected.to_bits(),
-                expected_bits,
-                "case {} fixture decimal and expectedHex",
-                case.name
-            );
             let ratio = sprite_resize_ratio(case.prev, case.next);
             let actual = match case.field {
                 SpriteResizeScaleParityField::Ratio => ratio,
                 SpriteResizeScaleParityField::Offset => scale_sprite_resize_value(
                     case.value.expect("scaled case must contain value"),
                     ratio,
-                    SpriteResizeValueField::Offset,
-                ),
-                SpriteResizeScaleParityField::Coord => scale_sprite_resize_value(
-                    case.value.expect("scaled case must contain value"),
-                    ratio,
-                    SpriteResizeValueField::Coordinate,
-                ),
-                SpriteResizeScaleParityField::Dimension => scale_sprite_resize_value(
-                    case.value.expect("scaled case must contain value"),
-                    ratio,
-                    SpriteResizeValueField::Dimension,
                 ),
             };
             assert_eq!(
@@ -4132,12 +4075,6 @@ mod tests {
         position.dy = 20.0;
         position.width = 200.0;
         position.height = 100.0;
-        position.image_rect = SpriteRect {
-            x: 40.0,
-            y: -10.0,
-            width: 160.0,
-            height: 80.0,
-        };
         position.pivot = SpriteAnchor { x: 0.25, y: 0.75 };
         position.idle_transform = SpriteTransform {
             x: 12.0,
@@ -4153,7 +4090,6 @@ mod tests {
                 rotation: -90.0,
                 scale: 0.5,
             },
-            contact_point: SpriteAnchor { x: 0.5, y: 1.0 },
             ..SpritePose::default()
         }];
         let original = position.clone();
@@ -4170,15 +4106,6 @@ mod tests {
                 .unwrap();
         let resized = &nonuniform.candidate.sprite_positions["4key"][0];
         assert_eq!(sprite_bounds(resized), nonuniform_bounds);
-        assert_eq!(
-            resized.image_rect,
-            SpriteRect {
-                x: 80.0,
-                y: -5.0,
-                width: 320.0,
-                height: 40.0,
-            }
-        );
         assert_eq!(
             (resized.idle_transform.x, resized.idle_transform.y),
             (24.0, -3.0)
@@ -4202,10 +4129,6 @@ mod tests {
         );
         assert_eq!(resized.pivot, original.pivot);
         assert_eq!(
-            resized.poses[0].contact_point,
-            original.poses[0].contact_point
-        );
-        assert_eq!(
             nonuniform.op_results[0].status,
             EditorOpResultStatusV1::Applied
         );
@@ -4221,15 +4144,6 @@ mod tests {
             prepare_editor_ops_transition(&store, &[resize_sprite_op(id, uniform_bounds)]).unwrap();
         let resized = &uniform.candidate.sprite_positions["4key"][0];
         assert_eq!(
-            resized.image_rect,
-            SpriteRect {
-                x: 80.0,
-                y: -20.0,
-                width: 320.0,
-                height: 160.0,
-            }
-        );
-        assert_eq!(
             (resized.idle_transform.x, resized.idle_transform.y),
             (24.0, -12.0)
         );
@@ -4240,17 +4154,11 @@ mod tests {
     }
 
     #[test]
-    fn resize_sprite_clamps_scaled_fields_at_contract_boundaries() {
+    fn resize_sprite_clamps_scaled_offsets_at_contract_boundaries() {
         let mut store = store_with_sprite();
         let position = &mut store.sprite_positions.get_mut("4key").unwrap()[0];
         position.width = 1.0;
         position.height = 1.0;
-        position.image_rect = SpriteRect {
-            x: 2.0,
-            y: -2.0,
-            width: 2.0,
-            height: 0.000_000_000_001,
-        };
         position.idle_transform = SpriteTransform {
             x: 1.0,
             y: -1.0,
@@ -4276,10 +4184,6 @@ mod tests {
         let transition =
             prepare_editor_ops_transition(&store, &[resize_sprite_op(id, bounds)]).unwrap();
         let resized = &transition.candidate.sprite_positions["4key"][0];
-        assert_eq!(resized.image_rect.x, MAX_ABS_COORDINATE);
-        assert_eq!(resized.image_rect.y, -MAX_ABS_COORDINATE);
-        assert_eq!(resized.image_rect.width, MAX_DIMENSION);
-        assert_eq!(resized.image_rect.height, SPRITE_RESIZE_MIN_DIMENSION);
         assert_eq!(resized.idle_transform.x, SPRITE_TRANSFORM_OFFSET_MAX);
         assert_eq!(resized.idle_transform.y, SPRITE_TRANSFORM_OFFSET_MIN);
         assert_eq!(resized.poses[0].transform.x, SPRITE_TRANSFORM_OFFSET_MIN);
@@ -4291,12 +4195,6 @@ mod tests {
         let mut position = ReactiveSpritePosition {
             width: 0.0,
             height: 0.0,
-            image_rect: SpriteRect {
-                x: 3.0,
-                y: -4.0,
-                width: 5.0,
-                height: 6.0,
-            },
             idle_transform: SpriteTransform {
                 x: 7.0,
                 y: -8.0,
@@ -4312,11 +4210,7 @@ mod tests {
             }],
             ..ReactiveSpritePosition::default()
         };
-        let content_before = (
-            position.image_rect,
-            position.idle_transform,
-            position.poses.clone(),
-        );
+        let content_before = (position.idle_transform, position.poses.clone());
         let bounds = EditorBoundsV1 {
             dx: 11.0,
             dy: 12.0,
@@ -4327,10 +4221,7 @@ mod tests {
         apply_sprite_resize(&mut position, &bounds);
 
         assert_eq!(sprite_bounds(&position), bounds);
-        assert_eq!(
-            (position.image_rect, position.idle_transform, position.poses,),
-            content_before
-        );
+        assert_eq!((position.idle_transform, position.poses,), content_before);
     }
 
     #[test]
@@ -4338,7 +4229,6 @@ mod tests {
         let mut position = ReactiveSpritePosition {
             width: 200.0,
             height: 100.0,
-            image_placement: SpriteImagePlacement::Pivot,
             reference_natural_size: Some(SpriteReferenceNaturalSize {
                 source: Some("/images/base.png".to_string()),
                 width: 800,
@@ -4346,7 +4236,6 @@ mod tests {
             }),
             poses: vec![SpritePose {
                 image_override: Some("/images/pose.png".to_string()),
-                image_pivot: Some(SpriteAnchor { x: 0.2, y: 0.8 }),
                 image_override_metrics: Some(SpriteImageMetrics {
                     source: "/images/pose.png".to_string(),
                     width: 320,
@@ -4357,10 +4246,8 @@ mod tests {
             ..ReactiveSpritePosition::default()
         };
         let metadata_before = (
-            position.image_placement,
             position.reference_natural_size.clone(),
             position.pivot,
-            position.poses[0].image_pivot,
             position.poses[0].image_override_metrics.clone(),
         );
 
@@ -4376,10 +4263,8 @@ mod tests {
 
         assert_eq!(
             (
-                position.image_placement,
                 position.reference_natural_size,
                 position.pivot,
-                position.poses[0].image_pivot,
                 position.poses[0].image_override_metrics.clone(),
             ),
             metadata_before
@@ -4458,12 +4343,6 @@ mod tests {
         let position = &mut store.sprite_positions.get_mut("4key").unwrap()[0];
         position.width = 200.0;
         position.height = 100.0;
-        position.image_rect = SpriteRect {
-            x: 20.0,
-            y: -10.0,
-            width: 100.0,
-            height: 50.0,
-        };
         position.idle_transform = SpriteTransform {
             x: 10.0,
             y: -4.0,
@@ -4503,15 +4382,6 @@ mod tests {
         let resized = &transition.candidate.sprite_positions["4key"][0];
 
         assert_eq!(sprite_bounds(resized), second_bounds);
-        assert_eq!(
-            resized.image_rect,
-            SpriteRect {
-                x: 10.0,
-                y: -5.0,
-                width: 50.0,
-                height: 25.0,
-            }
-        );
         assert_eq!(
             (resized.idle_transform.x, resized.idle_transform.y),
             (5.0, -2.0)

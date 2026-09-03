@@ -372,10 +372,8 @@ mod tests {
         });
 
         for pointer in [
-            "/spritePositions/4key/0/imagePlacement",
             "/spritePositions/4key/0/activation",
             "/spritePositions/4key/0/pressDurationMs",
-            "/spritePositions/4key/0/poses/0/contactPoint",
         ] {
             let mut invalid_changes = changes.clone();
             *invalid_changes.pointer_mut(pointer).unwrap() = Value::Null;
@@ -410,12 +408,12 @@ mod tests {
             .pointer_mut("/spritePositions/4key/0")
             .and_then(Value::as_object_mut)
             .unwrap();
-        sprite.remove("imagePlacement");
+        sprite.remove("referenceNaturalSize");
         sprite.remove("activation");
         sprite["poses"][0]
             .as_object_mut()
             .unwrap()
-            .remove("contactPoint");
+            .remove("imageOverrideMetrics");
         let mutation_id = uuid::Uuid::new_v4().to_string();
         let decode = |changes| {
             decode_editor_commit_request(serde_json::json!({

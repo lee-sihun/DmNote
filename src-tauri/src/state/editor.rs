@@ -12,7 +12,7 @@ use crate::{
         is_renderable_image_ref, AppStoreData, CustomTab, EditorBoundsV1, EditorCommitRequest,
         EditorDocumentV1, EditorElementTypeV1, EditorField, ElementShadowSpec,
         GestureCommitRequest, GraphPosition, KeyCounters, KeyMappings, KeyPosition, KeySlot,
-        KnobPosition, ReactiveSpritePosition, SpriteImagePlacement, SpriteTransform, StatPosition,
+        KnobPosition, ReactiveSpritePosition, SpriteTransform, StatPosition,
         EDITOR_COMMIT_SCHEMA_VERSION_V2, EDITOR_OPS_VERSION, EDITOR_SCHEMA_VERSION,
         MAX_SPRITE_POSES, MAX_SPRITE_POSE_TRIGGERS, SPRITE_IMAGE_DIMENSION_MAX,
         SPRITE_IMAGE_DIMENSION_MIN, SPRITE_PRESS_DURATION_MS_MAX, SPRITE_PRESS_DURATION_MS_MIN,
@@ -1704,44 +1704,6 @@ fn collect_sprite_violations(
                 }
             }
 
-            for (property, value, positive) in [
-                ("x", sprite.image_rect.x, false),
-                ("y", sprite.image_rect.y, false),
-                ("width", sprite.image_rect.width, true),
-                ("height", sprite.image_rect.height, true),
-            ] {
-                let valid = if positive {
-                    dimension_within_limit(value)
-                } else {
-                    coordinate_within_limit(value)
-                };
-                if !valid {
-                    violations.insert(ValidationViolation::new(
-                        native_violation_key(
-                            NativeElementKind::Sprite,
-                            &sprite.id,
-                            "INVALID_SPRITE_RECT",
-                            ViolationPropertyPath::SpriteProperty {
-                                section: "imageRect",
-                                property,
-                            },
-                            InvalidValueSignature::FloatBits(value.to_bits()),
-                        ),
-                        format!(
-                            "spritePositions {mode}[{sprite_index}].imageRect.{property} must be {}",
-                            if positive {
-                                format!("a positive finite number at most {MAX_DIMENSION}")
-                            } else {
-                                format!(
-                                    "a finite number between {} and {MAX_ABS_COORDINATE}",
-                                    -MAX_ABS_COORDINATE
-                                )
-                            }
-                        ),
-                    ));
-                }
-            }
-
             if sprite.transition_ms > SPRITE_TRANSITION_MS_MAX {
                 violations.insert(ValidationViolation::new(
                     native_violation_key(
@@ -1791,69 +1753,32 @@ fn collect_sprite_violations(
                     &pose.transform,
                     violations,
                 );
-                for (property, value) in [("x", pose.contact_point.x), ("y", pose.contact_point.y)]
-                {
-                    if !value.is_finite() || !(0.0..=1.0).contains(&value) {
-                        violations.insert(ValidationViolation::new(
-                            native_violation_key(
-                                NativeElementKind::Sprite,
-                                &sprite.id,
-                                "INVALID_SPRITE_CONTACT_POINT",
-                                ViolationPropertyPath::SpritePoseProperty {
-                                    pose_id: pose.pose_id.clone(),
-                                    property,
-                                },
-                                InvalidValueSignature::FloatBits(value.to_bits()),
-                            ),
-                            format!(
-                                "spritePositions {mode}[{sprite_index}].poses[{pose_index}].contactPoint.{property} must be between 0 and 1"
-                            ),
-                        ));
-                    }
-                }
-                if let Some(image_pivot) = pose.image_pivot {
-                    for (property, value) in [("x", image_pivot.x), ("y", image_pivot.y)] {
+                if let Some(pivot) = pose.pivot.as_ref() {
+                    for (property, value) in [("x", pivot.x), ("y", pivot.y)] {
                         if !value.is_finite() || !(0.0..=1.0).contains(&value) {
                             violations.insert(ValidationViolation::new(
                                 native_violation_key(
                                     NativeElementKind::Sprite,
                                     &sprite.id,
-                                    "INVALID_SPRITE_IMAGE_PIVOT",
+                                    "INVALID_SPRITE_POSE_PIVOT",
                                     ViolationPropertyPath::SpritePoseProperty {
                                         pose_id: pose.pose_id.clone(),
                                         property: if property == "x" {
-                                            "imagePivot.x"
+                                            "pivot.x"
                                         } else {
-                                            "imagePivot.y"
+                                            "pivot.y"
                                         },
                                     },
                                     InvalidValueSignature::FloatBits(value.to_bits()),
                                 ),
                                 format!(
-                                    "spritePositions {mode}[{sprite_index}].poses[{pose_index}].imagePivot.{property} must be between 0 and 1"
+                                    "spritePositions {mode}[{sprite_index}].poses[{pose_index}].pivot.{property} must be between 0 and 1"
                                 ),
                             ));
                         }
                     }
                 }
                 if let Some(metrics) = pose.image_override_metrics.as_ref() {
-                    if metrics.source.is_empty() {
-                        violations.insert(ValidationViolation::new(
-                            native_violation_key(
-                                NativeElementKind::Sprite,
-                                &sprite.id,
-                                "INVALID_SPRITE_IMAGE_METRICS",
-                                ViolationPropertyPath::SpritePoseProperty {
-                                    pose_id: pose.pose_id.clone(),
-                                    property: "imageOverrideMetrics.source",
-                                },
-                                InvalidValueSignature::Empty,
-                            ),
-                            format!(
-                                "spritePositions {mode}[{sprite_index}].poses[{pose_index}].imageOverrideMetrics.source must not be empty"
-                            ),
-                        ));
-                    }
                     for (property, value) in [("width", metrics.width), ("height", metrics.height)]
                     {
                         if !(SPRITE_IMAGE_DIMENSION_MIN..=SPRITE_IMAGE_DIMENSION_MAX)
@@ -1954,23 +1879,6 @@ fn collect_sprite_violations(
             }
 
             if let Some(reference) = sprite.reference_natural_size.as_ref() {
-                if reference.source.as_deref() == Some("") {
-                    violations.insert(ValidationViolation::new(
-                        native_violation_key(
-                            NativeElementKind::Sprite,
-                            &sprite.id,
-                            "INVALID_SPRITE_IMAGE_METRICS",
-                            ViolationPropertyPath::SpriteProperty {
-                                section: "referenceNaturalSize",
-                                property: "source",
-                            },
-                            InvalidValueSignature::Empty,
-                        ),
-                        format!(
-                            "spritePositions {mode}[{sprite_index}].referenceNaturalSize.source must not be empty"
-                        ),
-                    ));
-                }
                 for (property, value) in [("width", reference.width), ("height", reference.height)]
                 {
                     if !(SPRITE_IMAGE_DIMENSION_MIN..=SPRITE_IMAGE_DIMENSION_MAX).contains(&value) {
@@ -1993,140 +1901,83 @@ fn collect_sprite_violations(
                 }
             }
 
-            if sprite.image_placement == SpriteImagePlacement::Pivot {
-                let base_image = sprite
-                    .base_image
-                    .as_deref()
-                    .filter(|image_ref| is_renderable_image_ref(Some(image_ref)));
-                match (base_image, &sprite.reference_natural_size) {
-                    (Some(_), None) => {
-                        violations.insert(ValidationViolation::new(
-                            native_violation_key(
-                                NativeElementKind::Sprite,
-                                &sprite.id,
-                                "MISSING_SPRITE_IMAGE_METRICS",
-                                ViolationPropertyPath::SpriteProperty {
-                                    section: "referenceNaturalSize",
-                                    property: "presence",
-                                },
-                                InvalidValueSignature::None,
-                            ),
-                            format!(
-                                "spritePositions {mode}[{sprite_index}].referenceNaturalSize is required for pivot placement"
-                            ),
-                        ));
-                    }
-                    (Some(base_image), Some(reference))
-                        if reference.source.as_deref() != Some(base_image) =>
-                    {
-                        violations.insert(ValidationViolation::new(
-                            native_violation_key(
-                                NativeElementKind::Sprite,
-                                &sprite.id,
-                                "STALE_SPRITE_IMAGE_METRICS",
-                                ViolationPropertyPath::SpriteProperty {
-                                    section: "referenceNaturalSize",
-                                    property: "source",
-                                },
-                                reference.source.as_ref().map_or(
-                                    InvalidValueSignature::None,
-                                    |source| InvalidValueSignature::Text(source.clone()),
-                                ),
-                            ),
-                            format!(
-                                "spritePositions {mode}[{sprite_index}].referenceNaturalSize.source must match baseImage"
-                            ),
-                        ));
-                    }
-                    (None, Some(reference)) if reference.source.is_some() => {
-                        violations.insert(ValidationViolation::new(
-                            native_violation_key(
-                                NativeElementKind::Sprite,
-                                &sprite.id,
-                                "STALE_SPRITE_IMAGE_METRICS",
-                                ViolationPropertyPath::SpriteProperty {
-                                    section: "referenceNaturalSize",
-                                    property: "source",
-                                },
-                                InvalidValueSignature::Text(
-                                    reference.source.clone().unwrap_or_default(),
-                                ),
-                            ),
-                            format!(
-                                "spritePositions {mode}[{sprite_index}].referenceNaturalSize.source must be null without baseImage"
-                            ),
-                        ));
-                    }
-                    _ => {}
-                }
-
-                let has_override = sprite
-                    .poses
-                    .iter()
-                    .any(|pose| is_renderable_image_ref(pose.image_override.as_deref()));
-                if base_image.is_none() && has_override && sprite.reference_natural_size.is_none() {
+            let base_image = sprite
+                .base_image
+                .as_deref()
+                .filter(|image_ref| is_renderable_image_ref(Some(image_ref)));
+            match (base_image, &sprite.reference_natural_size) {
+                (Some(base_image), Some(reference))
+                    if reference.source.as_deref() != Some(base_image) =>
+                {
                     violations.insert(ValidationViolation::new(
                         native_violation_key(
                             NativeElementKind::Sprite,
                             &sprite.id,
-                            "MISSING_SPRITE_IMAGE_METRICS",
+                            "STALE_SPRITE_IMAGE_METRICS",
                             ViolationPropertyPath::SpriteProperty {
                                 section: "referenceNaturalSize",
-                                property: "presence",
+                                property: "source",
                             },
-                            InvalidValueSignature::None,
+                            reference.source.as_ref().map_or(
+                                InvalidValueSignature::None,
+                                |source| InvalidValueSignature::Text(source.clone()),
+                            ),
                         ),
                         format!(
-                            "spritePositions {mode}[{sprite_index}].referenceNaturalSize is required when pivot poses have images"
+                            "spritePositions {mode}[{sprite_index}].referenceNaturalSize.source must match baseImage"
                         ),
                     ));
                 }
+                (None, Some(reference)) if reference.source.is_some() => {
+                    violations.insert(ValidationViolation::new(
+                        native_violation_key(
+                            NativeElementKind::Sprite,
+                            &sprite.id,
+                            "STALE_SPRITE_IMAGE_METRICS",
+                            ViolationPropertyPath::SpriteProperty {
+                                section: "referenceNaturalSize",
+                                property: "source",
+                            },
+                            InvalidValueSignature::Text(
+                                reference.source.clone().unwrap_or_default(),
+                            ),
+                        ),
+                        format!(
+                            "spritePositions {mode}[{sprite_index}].referenceNaturalSize.source must be null without baseImage"
+                        ),
+                    ));
+                }
+                _ => {}
+            }
 
-                for (pose_index, pose) in sprite.poses.iter().enumerate() {
-                    let Some(image_override) = pose
-                        .image_override
-                        .as_deref()
-                        .filter(|image_ref| is_renderable_image_ref(Some(image_ref)))
-                    else {
-                        continue;
-                    };
-                    match pose.image_override_metrics.as_ref() {
-                        None => {
-                            violations.insert(ValidationViolation::new(
-                                native_violation_key(
-                                    NativeElementKind::Sprite,
-                                    &sprite.id,
-                                    "MISSING_SPRITE_IMAGE_METRICS",
-                                    ViolationPropertyPath::SpritePoseProperty {
-                                        pose_id: pose.pose_id.clone(),
-                                        property: "imageOverrideMetrics",
-                                    },
-                                    InvalidValueSignature::None,
-                                ),
-                                format!(
-                                    "spritePositions {mode}[{sprite_index}].poses[{pose_index}].imageOverrideMetrics is required for pivot placement"
-                                ),
-                            ));
-                        }
-                        Some(metrics) if metrics.source != image_override => {
-                            violations.insert(ValidationViolation::new(
-                                native_violation_key(
-                                    NativeElementKind::Sprite,
-                                    &sprite.id,
-                                    "STALE_SPRITE_IMAGE_METRICS",
-                                    ViolationPropertyPath::SpritePoseProperty {
-                                        pose_id: pose.pose_id.clone(),
-                                        property: "imageOverrideMetrics.source",
-                                    },
-                                    InvalidValueSignature::Text(metrics.source.clone()),
-                                ),
-                                format!(
-                                    "spritePositions {mode}[{sprite_index}].poses[{pose_index}].imageOverrideMetrics.source must match imageOverride"
-                                ),
-                            ));
-                        }
-                        _ => {}
-                    }
+            for (pose_index, pose) in sprite.poses.iter().enumerate() {
+                let Some(image_override) = pose
+                    .image_override
+                    .as_deref()
+                    .filter(|image_ref| is_renderable_image_ref(Some(image_ref)))
+                else {
+                    continue;
+                };
+                if let Some(metrics) = pose
+                    .image_override_metrics
+                    .as_ref()
+                    .filter(|metrics| metrics.source != image_override)
+                {
+                    violations.insert(ValidationViolation::new(
+                        native_violation_key(
+                            NativeElementKind::Sprite,
+                            &sprite.id,
+                            "STALE_SPRITE_IMAGE_METRICS",
+                            ViolationPropertyPath::SpritePoseProperty {
+                                pose_id: pose.pose_id.clone(),
+                                property: "imageOverrideMetrics.source",
+                            },
+                            InvalidValueSignature::Text(metrics.source.clone()),
+                        ),
+                        format!(
+                            "spritePositions {mode}[{sprite_index}].poses[{pose_index}].imageOverrideMetrics.source must match imageOverride"
+                        ),
+                    ));
                 }
             }
         }
@@ -3150,9 +3001,8 @@ mod tests {
         EditorFrozenKeySlotV1, EditorGroupUpdateV1, EditorOpResultStatusV1, EditorOpResultV1,
         EditorOpV1, EditorPatchV1, EditorTargetGroupV1, EditorZUpdateV1, ElementShadowSpec,
         GraphPosition, GraphStatType, GraphType, KeyPosition, KnobPosition, LayerGroupDef,
-        ReactiveSpritePosition, SpriteActivation, SpriteAnchor, SpriteImageMetrics,
-        SpriteImagePlacement, SpritePose, SpriteRect, SpriteReferenceNaturalSize, StatPosition,
-        StatType,
+        ReactiveSpritePosition, SpriteActivation, SpriteImageMetrics, SpritePose,
+        SpriteReferenceNaturalSize, StatPosition, StatType,
     };
 
     use super::*;
@@ -3169,17 +3019,13 @@ mod tests {
         anchor: NumericRangeFixture,
         transition_ms: IntegerRangeFixture,
         press_duration_ms: IntegerRangeFixture,
-        image_rect: ImageRectRangeFixture,
         image_metrics: ImageMetricsRangeFixture,
-        resize_min_dimension: f64,
         max_poses: usize,
         max_triggers_per_pose: usize,
         default_transition_ms: u32,
         default_transition_easing: String,
         default_activation: SpriteActivation,
         default_press_duration_ms: u32,
-        default_contact_point: SpriteAnchor,
-        default_image_placement: SpriteImagePlacement,
     }
 
     #[derive(serde::Deserialize)]
@@ -3192,14 +3038,6 @@ mod tests {
     struct IntegerRangeFixture {
         min: u32,
         max: u32,
-    }
-
-    #[derive(serde::Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    struct ImageRectRangeFixture {
-        coord_min: f64,
-        coord_max: f64,
-        dimension_max: f64,
     }
 
     #[derive(serde::Deserialize)]
@@ -6915,9 +6753,6 @@ mod tests {
     #[test]
     fn sprite_geometry_constraints_follow_shared_fixture() {
         let fixture = sprite_constraint_fixture();
-        assert_eq!(fixture.image_rect.coord_min, -MAX_ABS_COORDINATE);
-        assert_eq!(fixture.image_rect.coord_max, MAX_ABS_COORDINATE);
-        assert_eq!(fixture.image_rect.dimension_max, MAX_DIMENSION);
         assert_eq!(
             fixture.image_metrics.dimension_min,
             SPRITE_IMAGE_DIMENSION_MIN
@@ -6925,11 +6760,6 @@ mod tests {
         assert_eq!(
             fixture.image_metrics.dimension_max,
             SPRITE_IMAGE_DIMENSION_MAX
-        );
-        assert_eq!(fixture.default_image_placement, SpriteImagePlacement::Box);
-        assert_eq!(
-            fixture.resize_min_dimension,
-            crate::models::SPRITE_RESIZE_MIN_DIMENSION
         );
 
         for pivot in [
@@ -6965,99 +6795,53 @@ mod tests {
             assert!(violations.contains("INVALID_SPRITE_PIVOT"));
         }
 
-        for contact_point in [
-            SpriteAnchor {
+        for pivot in [
+            crate::models::SpriteAnchor {
                 x: fixture.anchor.min,
                 y: fixture.anchor.max,
             },
-            SpriteAnchor {
+            crate::models::SpriteAnchor {
                 x: fixture.anchor.max,
                 y: fixture.anchor.min,
             },
         ] {
             let violations = sprite_violation_codes(ReactiveSpritePosition {
                 poses: vec![SpritePose {
-                    contact_point,
+                    pivot: Some(pivot),
                     ..SpritePose::default()
                 }],
                 ..ReactiveSpritePosition::default()
             });
-            assert!(!violations.contains("INVALID_SPRITE_CONTACT_POINT"));
+            assert!(!violations.contains("INVALID_SPRITE_POSE_PIVOT"));
         }
-        for contact_point in [
-            SpriteAnchor {
+        for pivot in [
+            crate::models::SpriteAnchor {
                 x: fixture.anchor.min - 0.000_001,
                 y: fixture.anchor.min,
             },
-            SpriteAnchor {
+            crate::models::SpriteAnchor {
                 x: fixture.anchor.max,
                 y: fixture.anchor.max + 0.000_001,
             },
         ] {
             let violations = sprite_violation_codes(ReactiveSpritePosition {
                 poses: vec![SpritePose {
-                    contact_point,
+                    pivot: Some(pivot),
                     ..SpritePose::default()
                 }],
                 ..ReactiveSpritePosition::default()
             });
-            assert!(violations.contains("INVALID_SPRITE_CONTACT_POINT"));
-        }
-
-        let at_limit = SpriteRect {
-            x: fixture.image_rect.coord_min,
-            y: fixture.image_rect.coord_max,
-            width: fixture.image_rect.dimension_max,
-            height: fixture.image_rect.dimension_max,
-        };
-        assert!(!sprite_violation_codes(ReactiveSpritePosition {
-            image_rect: at_limit,
-            ..ReactiveSpritePosition::default()
-        })
-        .contains("INVALID_SPRITE_RECT"));
-        for image_rect in [
-            SpriteRect {
-                x: fixture.image_rect.coord_min - 1.0,
-                ..at_limit
-            },
-            SpriteRect {
-                y: fixture.image_rect.coord_max + 1.0,
-                ..at_limit
-            },
-            SpriteRect {
-                width: fixture.image_rect.dimension_max + 1.0,
-                ..at_limit
-            },
-            SpriteRect {
-                height: 0.0,
-                ..at_limit
-            },
-        ] {
-            assert!(sprite_violation_codes(ReactiveSpritePosition {
-                image_rect,
-                ..ReactiveSpritePosition::default()
-            })
-            .contains("INVALID_SPRITE_RECT"));
+            assert!(violations.contains("INVALID_SPRITE_POSE_PIVOT"));
         }
     }
 
     #[test]
-    fn sprite_image_pivot_and_metrics_validation_follow_mode_contract() {
-        let invalid_pivot = sprite_violation_codes(ReactiveSpritePosition {
-            poses: vec![SpritePose {
-                image_override: Some("/images/pose.png".to_string()),
-                image_pivot: Some(SpriteAnchor { x: -0.1, y: 1.1 }),
-                ..SpritePose::default()
-            }],
-            ..ReactiveSpritePosition::default()
-        });
-        assert!(invalid_pivot.contains("INVALID_SPRITE_IMAGE_PIVOT"));
-
+    fn sprite_image_metrics_are_optional_but_invalid_or_stale_values_are_rejected() {
         for sprite in [
             ReactiveSpritePosition {
                 reference_natural_size: Some(SpriteReferenceNaturalSize {
-                    source: Some(String::new()),
-                    width: SPRITE_IMAGE_DIMENSION_MIN,
+                    source: None,
+                    width: 0,
                     height: SPRITE_IMAGE_DIMENSION_MAX,
                 }),
                 ..ReactiveSpritePosition::default()
@@ -7078,7 +6862,7 @@ mod tests {
             assert!(sprite_violation_codes(sprite).contains("INVALID_SPRITE_IMAGE_METRICS"));
         }
 
-        let box_without_metrics = ReactiveSpritePosition {
+        let without_metrics = ReactiveSpritePosition {
             base_image: Some("/images/base.png".to_string()),
             poses: vec![SpritePose {
                 image_override: Some("/images/pose.png".to_string()),
@@ -7086,18 +6870,9 @@ mod tests {
             }],
             ..ReactiveSpritePosition::default()
         };
-        let box_codes = sprite_violation_codes(box_without_metrics.clone());
-        assert!(!box_codes.contains("MISSING_SPRITE_IMAGE_METRICS"));
-        assert!(!box_codes.contains("STALE_SPRITE_IMAGE_METRICS"));
-
-        let missing_codes = sprite_violation_codes(ReactiveSpritePosition {
-            image_placement: SpriteImagePlacement::Pivot,
-            ..box_without_metrics
-        });
-        assert!(missing_codes.contains("MISSING_SPRITE_IMAGE_METRICS"));
+        assert!(!sprite_violation_codes(without_metrics).contains("STALE_SPRITE_IMAGE_METRICS"));
 
         let stale_codes = sprite_violation_codes(ReactiveSpritePosition {
-            image_placement: SpriteImagePlacement::Pivot,
             base_image: Some("/images/base.png".to_string()),
             reference_natural_size: Some(SpriteReferenceNaturalSize {
                 source: Some("/images/old-base.png".to_string()),
@@ -7118,7 +6893,6 @@ mod tests {
         assert!(stale_codes.contains("STALE_SPRITE_IMAGE_METRICS"));
 
         let valid_codes = sprite_violation_codes(ReactiveSpritePosition {
-            image_placement: SpriteImagePlacement::Pivot,
             base_image: Some("/images/base.png".to_string()),
             reference_natural_size: Some(SpriteReferenceNaturalSize {
                 source: Some("/images/base.png".to_string()),
@@ -7127,7 +6901,6 @@ mod tests {
             }),
             poses: vec![SpritePose {
                 image_override: Some("/images/pose.png".to_string()),
-                image_pivot: Some(SpriteAnchor { x: 0.0, y: 1.0 }),
                 image_override_metrics: Some(SpriteImageMetrics {
                     source: "/images/pose.png".to_string(),
                     width: SPRITE_IMAGE_DIMENSION_MIN,
@@ -7137,22 +6910,13 @@ mod tests {
             }],
             ..ReactiveSpritePosition::default()
         });
-        assert!(!valid_codes.contains("INVALID_SPRITE_IMAGE_PIVOT"));
         assert!(!valid_codes.contains("INVALID_SPRITE_IMAGE_METRICS"));
-        assert!(!valid_codes.contains("MISSING_SPRITE_IMAGE_METRICS"));
         assert!(!valid_codes.contains("STALE_SPRITE_IMAGE_METRICS"));
-
-        let no_image_codes = sprite_violation_codes(ReactiveSpritePosition {
-            image_placement: SpriteImagePlacement::Pivot,
-            ..ReactiveSpritePosition::default()
-        });
-        assert!(!no_image_codes.contains("MISSING_SPRITE_IMAGE_METRICS"));
     }
 
     #[test]
     fn whitespace_sprite_image_refs_follow_renderable_validation_contract() {
         let whitespace_only = sprite_violation_codes(ReactiveSpritePosition {
-            image_placement: SpriteImagePlacement::Pivot,
             base_image: Some("   ".to_string()),
             poses: vec![SpritePose {
                 image_override: Some("\t \n".to_string()),
@@ -7160,11 +6924,9 @@ mod tests {
             }],
             ..ReactiveSpritePosition::default()
         });
-        assert!(!whitespace_only.contains("MISSING_SPRITE_IMAGE_METRICS"));
         assert!(!whitespace_only.contains("STALE_SPRITE_IMAGE_METRICS"));
 
         let stale_reference = sprite_violation_codes(ReactiveSpritePosition {
-            image_placement: SpriteImagePlacement::Pivot,
             base_image: Some("   ".to_string()),
             reference_natural_size: Some(SpriteReferenceNaturalSize {
                 source: Some("   ".to_string()),
@@ -7176,7 +6938,6 @@ mod tests {
         assert!(stale_reference.contains("STALE_SPRITE_IMAGE_METRICS"));
 
         let renderable_override = sprite_violation_codes(ReactiveSpritePosition {
-            image_placement: SpriteImagePlacement::Pivot,
             base_image: Some("   ".to_string()),
             poses: vec![SpritePose {
                 image_override: Some("/images/pose.png".to_string()),
@@ -7189,7 +6950,7 @@ mod tests {
             }],
             ..ReactiveSpritePosition::default()
         });
-        assert!(renderable_override.contains("MISSING_SPRITE_IMAGE_METRICS"));
+        assert!(!renderable_override.contains("STALE_SPRITE_IMAGE_METRICS"));
     }
 
     #[test]
@@ -7198,23 +6959,9 @@ mod tests {
             (
                 ReactiveSpritePosition {
                     id: Uuid::new_v4().to_string(),
-                    poses: vec![SpritePose {
-                        pose_id: Uuid::new_v4().to_string(),
-                        triggers: vec![Uuid::new_v4().to_string()],
-                        image_override: Some("/images/pose.png".to_string()),
-                        image_pivot: Some(SpriteAnchor { x: -0.1, y: 0.5 }),
-                        ..SpritePose::default()
-                    }],
-                    ..ReactiveSpritePosition::default()
-                },
-                "INVALID_SPRITE_IMAGE_PIVOT",
-            ),
-            (
-                ReactiveSpritePosition {
-                    id: Uuid::new_v4().to_string(),
                     reference_natural_size: Some(SpriteReferenceNaturalSize {
-                        source: Some(String::new()),
-                        width: 100,
+                        source: None,
+                        width: 0,
                         height: 100,
                     }),
                     ..ReactiveSpritePosition::default()
@@ -7224,16 +6971,6 @@ mod tests {
             (
                 ReactiveSpritePosition {
                     id: Uuid::new_v4().to_string(),
-                    image_placement: SpriteImagePlacement::Pivot,
-                    base_image: Some("/images/base.png".to_string()),
-                    ..ReactiveSpritePosition::default()
-                },
-                "MISSING_SPRITE_IMAGE_METRICS",
-            ),
-            (
-                ReactiveSpritePosition {
-                    id: Uuid::new_v4().to_string(),
-                    image_placement: SpriteImagePlacement::Pivot,
                     base_image: Some("/images/base.png".to_string()),
                     reference_natural_size: Some(SpriteReferenceNaturalSize {
                         source: Some("/images/old.png".to_string()),
@@ -7342,10 +7079,6 @@ mod tests {
             default_sprite.press_duration_ms,
             fixture.default_press_duration_ms
         );
-        assert_eq!(
-            SpritePose::default().contact_point,
-            fixture.default_contact_point
-        );
     }
 
     #[test]
@@ -7368,45 +7101,5 @@ mod tests {
         let violations =
             sprite_violation_codes(sprite_with_triggers(vec!["not-an-element-id".to_string()]));
         assert!(violations.contains("INVALID_SPRITE_TRIGGER"));
-    }
-
-    #[test]
-    fn sprite_image_rect_enforces_coordinate_and_dimension_boundaries() {
-        let at_limit = ReactiveSpritePosition {
-            id: Uuid::new_v4().to_string(),
-            image_rect: SpriteRect {
-                x: MAX_ABS_COORDINATE,
-                y: -MAX_ABS_COORDINATE,
-                width: MAX_DIMENSION,
-                height: MAX_DIMENSION,
-            },
-            ..ReactiveSpritePosition::default()
-        };
-        assert!(!sprite_violation_codes(at_limit.clone()).contains("INVALID_SPRITE_RECT"));
-
-        for image_rect in [
-            SpriteRect {
-                x: MAX_ABS_COORDINATE + 1.0,
-                ..at_limit.image_rect
-            },
-            SpriteRect {
-                y: -MAX_ABS_COORDINATE - 1.0,
-                ..at_limit.image_rect
-            },
-            SpriteRect {
-                width: MAX_DIMENSION + 1.0,
-                ..at_limit.image_rect
-            },
-            SpriteRect {
-                height: MAX_DIMENSION + 1.0,
-                ..at_limit.image_rect
-            },
-        ] {
-            let violations = sprite_violation_codes(ReactiveSpritePosition {
-                image_rect,
-                ..at_limit.clone()
-            });
-            assert!(violations.contains("INVALID_SPRITE_RECT"));
-        }
     }
 }
