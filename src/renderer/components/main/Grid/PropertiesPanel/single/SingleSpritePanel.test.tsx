@@ -1812,6 +1812,42 @@ describe('SingleSpritePanel 자세 편집', () => {
     );
   });
 
+  // 1024:1처럼 극단 비율이면 한 축의 정상 입력이 반대 축을 상한 밖으로 밀어낸다
+  // 곱셈·나눗셈 분기가 따로라 두 방향 모두 고정한다 (9999/1024는 이진 정확)
+  it.each<
+    [
+      axis: 'W' | 'H',
+      size: { width: number; height: number },
+      expected: { width: number; height: number },
+    ]
+  >([
+    ['H', { width: 1024, height: 1 }, { width: 9999, height: 9.7646484375 }],
+    ['W', { width: 1, height: 1024 }, { width: 9.7646484375, height: 9999 }],
+  ])(
+    '파생 축이 상한을 넘으면 %s 입력을 역산해 두 축을 상한 안에 둔다',
+    (axis, size, expected) => {
+      const position = spritePosition(size);
+      seed(position);
+      render(position);
+
+      // 100을 치면 반대 축은 102400 - 반대 축을 9999에 두고 입력 축을 되돌려 계산한다
+      const input = container.querySelector<HTMLInputElement>(
+        `input[aria-label="propertiesPanel.size ${axis}"]`,
+      )!;
+      act(() => {
+        input.focus();
+        setInputValue(input, '100');
+      });
+      act(() => input.blur());
+      expect(mocks.commitBounds).toHaveBeenLastCalledWith(
+        'sprite',
+        SPRITE_ID,
+        { dx: 0, dy: 0, ...expected },
+        undefined,
+      );
+    },
+  );
+
   it('자세 이미지 선택은 파일창 결과를 자세에 커밋한다', async () => {
     const position = spritePosition({
       poses: [

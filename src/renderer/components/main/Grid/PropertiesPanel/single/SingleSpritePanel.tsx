@@ -500,20 +500,24 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
     ...patch,
   });
   // 크기는 비율 고정 - 그림 레이어라 늘리지 않는다. 한쪽을 치면 다른 쪽이 따라간다
+  // 파생 축도 상한 안에 든다 - 넘치면 파생 축을 상한에 놓고 입력 축을 역산한다
+  // (극단 비율에서는 입력 축이 하한 아래로 내려간다, 백엔드는 양수면 받는다)
   const aspectBounds = (
     field: 'width' | 'height',
     raw: number,
   ): EditorBoundsV1 => {
-    const value = clamp(
-      raw,
-      BOUNDS_EDIT_LIMITS.dimensionMin,
-      BOUNDS_EDIT_LIMITS.dimensionMax,
-    );
+    const { dimensionMin, dimensionMax } = BOUNDS_EDIT_LIMITS;
     const ratio = canonicalPosition.height / canonicalPosition.width;
+    let value = clamp(raw, dimensionMin, dimensionMax);
+    let derived = field === 'width' ? value * ratio : value / ratio;
+    if (derived > dimensionMax) {
+      derived = dimensionMax;
+      value = field === 'width' ? derived / ratio : derived * ratio;
+    }
     return boundsWith(
       field === 'width'
-        ? { width: value, height: value * ratio }
-        : { height: value, width: value / ratio },
+        ? { width: value, height: derived }
+        : { height: value, width: derived },
     );
   };
 
