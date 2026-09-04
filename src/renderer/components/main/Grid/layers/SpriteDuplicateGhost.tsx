@@ -25,7 +25,9 @@ interface SpriteDuplicateGhostProps {
 }
 
 // 복제 배치 미리보기. 이미지 원점 규칙을 SpriteItem과 똑같이 맞춘다 -
-// 호스트에 보더를 두면 안쪽 이미지가 밀려 놓는 순간 위치가 튄다
+// 호스트에 보더를 두면 안쪽 이미지가 밀려 놓는 순간 위치가 튄다.
+// 사용자 클래스와 [data-sprite-element] 층도 아이템과 같아야 커스텀 CSS가
+// 고스트에 닿아 놓는 순간 외형이 바뀌지 않는다
 const SpriteDuplicateGhost = ({
   position,
   cursor,
@@ -45,32 +47,41 @@ const SpriteDuplicateGhost = ({
       width={width}
       height={height}
       cursor={cursor}
+      className={position.className ?? undefined}
       dataAttributes={{ 'data-sprite-ghost': 'true' }}
     >
-      {ghostImage ? (
-        <img
-          src={ghostImage}
-          alt=""
-          draggable={false}
-          style={{
-            // 고스트는 CSS 변수 채널이 닿지 않아 인라인 강제
-            ...computeSpriteImageStyle(
-              { ...position, useInlineStyles: true },
-              position.idleTransform,
-              undefined,
-              placeSpriteVisual(position, spriteIdleVisual(position)),
-            ),
-            pointerEvents: 'none',
-            userSelect: 'none',
-          }}
-          onError={(event) => {
-            if (!isErrorForCurrentSrc(event.currentTarget, ghostImage)) return;
-            markFailed(ghostImage);
-          }}
-        />
-      ) : (
-        <SpriteImagePlaceholder />
-      )}
+      <div
+        style={{ width: '100%', height: '100%', position: 'relative' }}
+        data-sprite-element="true"
+      >
+        {ghostImage ? (
+          <img
+            src={ghostImage}
+            alt=""
+            draggable={false}
+            style={{
+              // 외관 채널은 아이템과 같은 규칙 - 기본 모드는 변수로 실어 전역 규칙이
+              // 소비하고, 사용자의 --sprite-transform·일반 선언이 고스트에서도 이긴다
+              ...computeSpriteImageStyle(
+                position,
+                position.idleTransform,
+                undefined,
+                placeSpriteVisual(position, spriteIdleVisual(position)),
+              ),
+              pointerEvents: 'none',
+              userSelect: 'none',
+            }}
+            onError={(event) => {
+              if (!isErrorForCurrentSrc(event.currentTarget, ghostImage)) {
+                return;
+              }
+              markFailed(ghostImage);
+            }}
+          />
+        ) : (
+          <SpriteImagePlaceholder />
+        )}
+      </div>
       <div
         data-sprite-activity-guide="true"
         style={{

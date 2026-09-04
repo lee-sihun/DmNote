@@ -121,4 +121,73 @@ describe('SpriteDuplicateGhost', () => {
       container.querySelector('[data-sprite-placeholder="true"]'),
     ).not.toBeNull();
   });
+
+  it('사용자 클래스와 [data-sprite-element] 층을 아이템과 같게 둬 커스텀 CSS가 닿는다', () => {
+    act(() => {
+      root.render(
+        <SpriteDuplicateGhost
+          position={position({ className: 'left-hand' })}
+          cursor={{ x: 300, y: 200 }}
+          zoom={1}
+        />,
+      );
+    });
+    const ghost = container.querySelector<HTMLElement>(
+      '[data-sprite-ghost="true"]',
+    );
+    expect(ghost?.classList.contains('left-hand')).toBe(true);
+    // 문서의 `.클래스 [data-sprite-element] > img` 선택자가 고스트에서도 성립한다
+    const image = container.querySelector<HTMLImageElement>(
+      '.left-hand [data-sprite-element] > img',
+    );
+    expect(image).not.toBeNull();
+    const layer = ghost?.querySelector<HTMLElement>('[data-sprite-element]');
+    expect(layer?.style.position).toBe('relative');
+    expect(layer?.style.width).toBe('100%');
+    expect(layer?.style.height).toBe('100%');
+  });
+
+  it('기본 모드는 transform을 변수로만 실어 사용자 --sprite-transform이 이긴다', () => {
+    act(() => {
+      root.render(
+        <SpriteDuplicateGhost
+          position={position({
+            idleTransform: { x: 4, y: 0, rotation: 15, scale: 1.2 },
+          })}
+          cursor={{ x: 300, y: 200 }}
+          zoom={1}
+        />,
+      );
+    });
+    const image = container.querySelector<HTMLImageElement>('img')!;
+    expect(image.style.transform).toBe('');
+    expect(image.style.getPropertyValue('--dmn-sprite-transform-default')).toBe(
+      'translate(4px, 0px) rotate(15deg) scale(1.2)',
+    );
+  });
+
+  it('useInlineStyles=true는 아이템처럼 인라인 transform으로 승격한다', () => {
+    act(() => {
+      root.render(
+        <SpriteDuplicateGhost
+          position={position({
+            useInlineStyles: true,
+            idleTransform: { x: 4, y: 0, rotation: 15, scale: 1.2 },
+          })}
+          cursor={{ x: 300, y: 200 }}
+          zoom={1}
+        />,
+      );
+    });
+    const image = container.querySelector<HTMLImageElement>('img')!;
+    expect(image.style.transform).toBe(
+      'translate(4px, 0px) rotate(15deg) scale(1.2)',
+    );
+  });
+
+  it('클래스가 없으면 호스트 클래스에 빈 조각을 남기지 않는다', () => {
+    const ghost = renderGhost();
+    expect(ghost?.className.includes('undefined')).toBe(false);
+    expect(ghost?.className.includes('null')).toBe(false);
+  });
 });
