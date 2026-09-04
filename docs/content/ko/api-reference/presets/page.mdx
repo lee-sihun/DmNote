@@ -51,7 +51,9 @@ const result = await dmn.presets.saveTab();
 ### loadTab()
 
 탭 프리셋 파일을 현재 선택된 탭에 불러옵니다. 파일 선택 다이얼로그가
-열립니다.
+열립니다. 파일에 담긴 요소 컬렉션(키·통계·그래프·노브·스프라이트)은 탭
+내용을 통째로 대체하므로 파일 쪽 탭에 없는 요소는 사라집니다. 컬렉션 자체가
+없는 옛 프리셋은 그 요소를 그대로 둡니다.
 
 ```javascript
 const result = await dmn.presets.loadTab();

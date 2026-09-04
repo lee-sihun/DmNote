@@ -677,29 +677,14 @@ fn preset_load_tab_from_path(
         src_key_positions.insert(current_tab_id.clone(), v.clone());
     }
 
-    let imported_stat_positions = stat_positions.unwrap_or_default();
-    let mut src_stat_positions: StatPositions = HashMap::new();
-    if let Some(v) = imported_stat_positions.get(&source_tab_id) {
-        src_stat_positions.insert(current_tab_id.clone(), v.clone());
-    }
-
-    let imported_graph_positions = graph_positions.unwrap_or_default();
-    let mut src_graph_positions: GraphPositions = HashMap::new();
-    if let Some(v) = imported_graph_positions.get(&source_tab_id) {
-        src_graph_positions.insert(current_tab_id.clone(), v.clone());
-    }
-
-    let imported_knob_positions = knob_positions.unwrap_or_default();
-    let mut src_knob_positions: KnobPositions = HashMap::new();
-    if let Some(v) = imported_knob_positions.get(&source_tab_id) {
-        src_knob_positions.insert(current_tab_id.clone(), v.clone());
-    }
-
-    let imported_sprite_positions = sprite_positions.unwrap_or_default();
-    let mut src_sprite_positions: SpritePositions = HashMap::new();
-    if let Some(v) = imported_sprite_positions.get(&source_tab_id) {
-        src_sprite_positions.insert(current_tab_id.clone(), v.clone());
-    }
+    let mut src_stat_positions =
+        select_tab_preset_elements(stat_positions.as_ref(), &source_tab_id, &current_tab_id);
+    let mut src_graph_positions =
+        select_tab_preset_elements(graph_positions.as_ref(), &source_tab_id, &current_tab_id);
+    let mut src_knob_positions =
+        select_tab_preset_elements(knob_positions.as_ref(), &source_tab_id, &current_tab_id);
+    let mut src_sprite_positions =
+        select_tab_preset_elements(sprite_positions.as_ref(), &source_tab_id, &current_tab_id);
 
     migrate_imported_font_weights(
         &mut src_key_positions,
@@ -1028,6 +1013,24 @@ fn normalize_imported_tab_css_overrides(
         normalize_imported_tab_css(css, operation);
     }
     overrides
+}
+
+/// 탭 프리셋의 요소 컬렉션 하나를 대상 탭 키로 옮긴다. 컬렉션이 있는데 원본 탭 항목이
+/// 없으면 "요소 없음"이라 빈 목록을 넣어 기존 요소를 지운다 - 없으면 남는다.
+/// 컬렉션 자체가 없는 옛 프리셋만 기존 요소를 그대로 둔다
+fn select_tab_preset_elements<T: Clone>(
+    collection: Option<&HashMap<String, Vec<T>>>,
+    source_tab_id: &str,
+    current_tab_id: &str,
+) -> HashMap<String, Vec<T>> {
+    let mut selected = HashMap::new();
+    if let Some(collection) = collection {
+        selected.insert(
+            current_tab_id.to_string(),
+            collection.get(source_tab_id).cloned().unwrap_or_default(),
+        );
+    }
+    selected
 }
 
 fn choose_tab_preset_source_tab(
@@ -3308,6 +3311,27 @@ mod tests {
         assert!(merge_tab_preset_fonts(&existing, imported, |_| Ok(()))
             .unwrap()
             .is_none());
+    }
+
+    #[test]
+    fn tab_preset_collection_without_source_tab_entry_clears_target_tab() {
+        let sprites = SpritePositions::from([(
+            "other-tab".to_string(),
+            vec![ReactiveSpritePosition::default()],
+        )]);
+
+        // 컬렉션은 있는데 원본 탭 항목이 없다 - 빈 탭이라 대상 탭도 비운다
+        let selected = select_tab_preset_elements(Some(&sprites), "4key", "target");
+        assert_eq!(selected.get("target").map(Vec::len), Some(0));
+
+        // 원본 탭 항목이 있으면 대상 탭 키로 옮긴다
+        let selected = select_tab_preset_elements(Some(&sprites), "other-tab", "target");
+        assert_eq!(selected.get("target").map(Vec::len), Some(1));
+        assert!(!selected.contains_key("other-tab"));
+
+        // 컬렉션 자체가 없는 옛 프리셋은 대상 탭을 건드리지 않는다
+        let selected = select_tab_preset_elements::<ReactiveSpritePosition>(None, "4key", "target");
+        assert!(selected.is_empty());
     }
 
     #[test]
