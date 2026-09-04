@@ -30,6 +30,7 @@ use crate::models::obs::{
     make_envelope, HelloAckPayload, InvokeRequestPayload, ObsBroadcast, ObsEnvelope, ObsStatus,
     OBS_PROTOCOL_VERSION,
 };
+use crate::state::image_asset::SUPPORTED_IMAGE_EXTENSIONS;
 
 const MAX_HTTP_HEADER_SIZE: usize = 16 * 1024;
 
@@ -1214,22 +1215,7 @@ impl ObsBridgeService {
             .and_then(|e| e.to_str())
             .unwrap_or("")
             .to_ascii_lowercase();
-        if !matches!(
-            ext.as_str(),
-            "png"
-                | "jpg"
-                | "jpeg"
-                | "gif"
-                | "webp"
-                | "svg"
-                | "mp4"
-                | "webm"
-                | "ogg"
-                | "woff"
-                | "woff2"
-                | "ttf"
-                | "otf"
-        ) {
+        if !is_servable_media_extension(&ext) {
             let _ = stream
                 .write_all(
                     b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
@@ -1261,6 +1247,15 @@ impl ObsBridgeService {
 }
 
 /// 파일 확장자로 MIME 타입 추정
+// 이미지는 선택창 목록 그대로, 나머지는 영상·폰트만
+fn is_servable_media_extension(ext: &str) -> bool {
+    SUPPORTED_IMAGE_EXTENSIONS.contains(&ext)
+        || matches!(
+            ext,
+            "mp4" | "webm" | "ogg" | "woff" | "woff2" | "ttf" | "otf"
+        )
+}
+
 fn guess_mime(path: &str) -> &'static str {
     match path
         .rsplit('.')
@@ -1278,6 +1273,9 @@ fn guess_mime(path: &str) -> &'static str {
         "gif" => "image/gif",
         "webp" => "image/webp",
         "svg" => "image/svg+xml",
+        "bmp" => "image/bmp",
+        "ico" => "image/x-icon",
+        "avif" => "image/avif",
         "mp4" => "video/mp4",
         "webm" => "video/webm",
         "ogg" => "video/ogg",
@@ -1326,6 +1324,32 @@ fn broadcast_to_envelope(broadcast: &ObsBroadcast, seq: u64) -> Value {
 mod tests {
     use super::*;
     use tokio_tungstenite::{connect_async, MaybeTlsStream};
+
+    // 선택창이 받는 이미지는 전부 OBS에서도 서빙되고 image/* MIME으로 나가야 한다
+    #[test]
+    fn media_whitelist_serves_every_picker_image_extension() {
+        for ext in SUPPORTED_IMAGE_EXTENSIONS {
+            assert!(
+                is_servable_media_extension(ext),
+                "{ext} 이미지가 OBS 서빙에서 빠짐"
+            );
+            let mime = guess_mime(&format!("/app/images/sample.{ext}"));
+            assert!(
+                mime.starts_with("image/"),
+                "{ext} MIME이 image/*가 아님: {mime}"
+            );
+        }
+        assert_eq!(guess_mime("/app/images/a.BMP"), "image/bmp");
+        assert_eq!(guess_mime("/app/images/a.ico"), "image/x-icon");
+        assert_eq!(guess_mime("/app/images/a.avif"), "image/avif");
+    }
+
+    #[test]
+    fn media_whitelist_still_rejects_non_media_files() {
+        for ext in ["json", "html", "js", "exe", "css", ""] {
+            assert!(!is_servable_media_extension(ext), "{ext} 서빙 허용됨");
+        }
+    }
 
     type TestWebSocket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 

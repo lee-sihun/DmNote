@@ -10,6 +10,12 @@ use uuid::Uuid;
 use super::atomic_file::{atomic_replace, atomic_replace_from_temp, sync_file_contents};
 use super::local_asset_path::{file_url_to_path, FileUrlPath};
 
+// 이미지 선택창이 받는 확장자. OBS 브릿지 서빙 허용 목록도 이 목록을 따라야
+// 편집기·네이티브 오버레이에서 보이는 그림이 OBS에서만 빠지지 않는다
+pub(crate) const SUPPORTED_IMAGE_EXTENSIONS: &[&str] = &[
+    "png", "jpg", "jpeg", "webp", "gif", "bmp", "svg", "ico", "avif",
+];
+
 pub(crate) fn probe_local_raster_size(image_ref: &str) -> Result<Option<(u32, u32)>> {
     let trimmed = image_ref.trim();
     let path = match file_url_to_path(trimmed) {

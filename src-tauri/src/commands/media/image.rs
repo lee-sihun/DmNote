@@ -14,7 +14,7 @@ use tauri::{Manager, WebviewWindow};
 use crate::{
     commands::dialog::parented_file_dialog,
     errors::{CmdResult, CommandError},
-    state::image_asset::import_image_file,
+    state::image_asset::{import_image_file, SUPPORTED_IMAGE_EXTENSIONS},
 };
 
 #[derive(Serialize)]
@@ -44,15 +44,9 @@ pub async fn image_load(
     app: tauri::AppHandle,
     window: WebviewWindow,
 ) -> CmdResult<ImageLoadResponse> {
-    let picked = parented_file_dialog(
-        &window,
-        "Images",
-        &[
-            "png", "jpg", "jpeg", "webp", "gif", "bmp", "svg", "ico", "avif",
-        ],
-    )
-    .pick_file()
-    .await;
+    let picked = parented_file_dialog(&window, "Images", SUPPORTED_IMAGE_EXTENSIONS)
+        .pick_file()
+        .await;
 
     let Some(file) = picked else {
         return Ok(ImageLoadResponse {
