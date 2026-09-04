@@ -556,7 +556,7 @@
     "spriteImageSelect": "선택",
     "spritePivot": "기준점",
     "spritePivotHint": "드래그: 기준점 이동 · Ctrl/⌘: 스냅 해제",
-    "spriteFollowBasePivot": "기본 기준점 따라가기",
+    "spriteFollowBasePivot": "기본 기준점 사용",
     "spriteStatePivot": "상태 기준점",
     "spriteRotation": "회전",
     "spriteScale": "배율",

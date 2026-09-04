@@ -561,7 +561,7 @@
     "spriteImageSelect": "選擇",
     "spritePivot": "基準點",
     "spritePivotHint": "拖曳:移動基準點 · Ctrl/⌘:取消吸附",
-    "spriteFollowBasePivot": "跟隨基礎基準點",
+    "spriteFollowBasePivot": "使用基礎基準點",
     "spriteStatePivot": "狀態基準點",
     "spriteRotation": "旋轉",
     "spriteScale": "縮放",

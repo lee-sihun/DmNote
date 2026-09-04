@@ -556,7 +556,7 @@
     "spriteImageSelect": "Select",
     "spritePivot": "Pivot",
     "spritePivotHint": "Drag: move the pivot · Ctrl/⌘: no snapping",
-    "spriteFollowBasePivot": "Follow Base Pivot",
+    "spriteFollowBasePivot": "Use Base Pivot",
     "spriteStatePivot": "State Pivot",
     "spriteRotation": "Rotation",
     "spriteScale": "Scale",

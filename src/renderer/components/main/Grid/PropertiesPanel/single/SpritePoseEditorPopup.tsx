@@ -1,5 +1,6 @@
 import React from 'react';
 import PickerSurface from '@components/main/Grid/PropertiesPanel/PickerSurface';
+import { PropertySection } from '@components/main/Grid/PropertiesPanel/PropertyInputs';
 import Dropdown from '@components/main/common/Dropdown';
 import Checkbox from '@components/main/common/Checkbox';
 import { NumberInput } from '@components/main/common/NumberInput';
@@ -12,6 +13,7 @@ import {
   type SpriteAnchor,
   type SpriteTransform,
 } from '@src/types/key/sprites';
+import { FORM_LABEL_CLASS, FORM_ROW_CLASS } from '@utils/cardRecipes';
 import { clamp } from '@utils/core/clamp';
 import SpriteImagePreviewCard from './SpriteImagePreviewCard';
 
@@ -98,8 +100,9 @@ const SpritePoseEditorPopup: React.FC<SpritePoseEditorPopupProps> = ({
       referenceRef={referenceRef}
       panelElement={panelElement}
       fallbackWidth={172}
-      // 미리보기 76 + 변환 그리드 68 + 담당 키 32 + 간격·패딩 32
-      fallbackHeight={followsBasePivot ? 240 : 276}
+      // 미리보기 76 + 변환 그리드 50 + 기준점 카드 40(입력 행 열리면 72)
+      // + 담당 키 23 + 간격·패딩 40
+      fallbackHeight={followsBasePivot ? 229 : 261}
       cardClassName="flex flex-col p-[8px] gap-[8px] w-[172px] rounded-popup"
       offsetY={-93}
       interactiveRefs={interactiveRefs}
@@ -199,24 +202,24 @@ const SpritePoseEditorPopup: React.FC<SpritePoseEditorPopupProps> = ({
           </div>
         </div>
 
-        <div className="flex flex-col gap-[4px]">
-          <div className="flex items-center justify-between min-h-[28px]">
-            <span className="text-fg-muted text-label">
-              {t('propertiesPanel.spriteFollowBasePivot') ||
-                '기본 기준점 따라가기'}
-            </span>
+        {/* 기준점 - 기본을 그대로 쓰거나 이 상태만의 축을 둔다. 토글은 이미지 피커의
+            설정 카드와 같은 행 문법, X·Y 쌍은 라벨을 옆에 둘 폭이 없어 한 행을 통째로 쓴다 */}
+        <PropertySection>
+          <div className={FORM_ROW_CLASS}>
+            <p className={FORM_LABEL_CLASS}>
+              {t('propertiesPanel.spriteFollowBasePivot') || '기본 기준점 사용'}
+            </p>
             <Checkbox
               checked={followsBasePivot}
               onChange={onPivotLinkChange}
               ariaLabel={
-                t('propertiesPanel.spriteFollowBasePivot') ||
-                '기본 기준점 따라가기'
+                t('propertiesPanel.spriteFollowBasePivot') || '기본 기준점 사용'
               }
               commitStrategy="after-paint"
             />
           </div>
           {!followsBasePivot ? (
-            <div className="flex items-center gap-[8px] w-full">
+            <div className="flex items-center gap-[8px] w-full min-h-[32px]">
               <NumberInput
                 value={pivot.x * 100}
                 onChange={(value) =>
@@ -267,7 +270,7 @@ const SpritePoseEditorPopup: React.FC<SpritePoseEditorPopupProps> = ({
               />
             </div>
           ) : null}
-        </div>
+        </PropertySection>
 
         {/* 담당 키 - 미리보기·변환 아래가 정위치, 신규 상태도 카드가 작아 한눈에 보인다 */}
         {poseControls.keyOptions.length === 0 && deadTriggers.length === 0 ? (

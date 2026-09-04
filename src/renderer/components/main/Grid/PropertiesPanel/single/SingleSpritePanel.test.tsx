@@ -445,7 +445,7 @@ describe('SingleSpritePanel 자세 편집', () => {
     expect(posePopup()!.getAttribute('aria-label')).toBe(
       'propertiesPanel.spritePose 1',
     );
-    expect(posePopup()!.dataset.fallbackHeight).toBe('240');
+    expect(posePopup()!.dataset.fallbackHeight).toBe('229');
 
     // 같은 행 재클릭 - 토글 닫힘
     act(() => poseEditButtons()[0].click());

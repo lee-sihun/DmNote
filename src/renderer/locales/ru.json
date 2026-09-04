@@ -561,7 +561,7 @@
     "spriteImageSelect": "Выбрать",
     "spritePivot": "Точка опоры",
     "spritePivotHint": "Перетаскивание: переместить точку опоры · Ctrl/⌘: без привязки",
-    "spriteFollowBasePivot": "Следовать базовой точке",
+    "spriteFollowBasePivot": "Базовая точка",
     "spriteStatePivot": "Точка состояния",
     "spriteRotation": "Поворот",
     "spriteScale": "Масштаб",
