@@ -900,4 +900,106 @@ describe('자세 편집 세션 통합 (패널 + 캔버스 핸들)', () => {
     expect(canonicalSprite().pivot.x).toBeCloseTo(0.25, 9);
     expect(canonicalSprite().pivot.y).toBeCloseTo(0.8, 9);
   });
+
+  it('팝업에서 X를 입력한 직후 캔버스를 끌면 입력값 위에 이동량이 더해진다', async () => {
+    runtime.get.mockResolvedValue({
+      revision: 0,
+      document: makeDocument(spriteFixture()),
+    });
+    await harness.editorCoordinator.start();
+    render();
+    act(() => poseRows()[0].click());
+    await settle();
+
+    // X=30을 입력하고 blur 없이 바로 캔버스 프레임을 잡는다 - 잡는 순간의 포커스 정산이
+    // 30을 커밋하고, 드래그는 그 값 위에서 시작해야 한다
+    // 패널의 요소 위치 X와 라벨이 같아 팝업 안에서 고른다
+    const xInput = container.querySelector<HTMLInputElement>(
+      '[data-testid="pose-popup"] input[aria-label="propertiesPanel.position X"]',
+    )!;
+    act(() => {
+      xInput.focus();
+      setInputValue(xInput, '30');
+    });
+    pointer('pointerdown', poseFrame()!, 60, 60);
+    await settle();
+    expect(runtime.commit).toHaveBeenCalledTimes(1);
+    pointer('pointermove', window, 70, 60);
+    await settle();
+    pointer('pointerup', window, 70, 60);
+    await settle();
+
+    // 직렬 큐 - 입력 저장이 끝나야 이동 저장이 나간다
+    runtime.resolveNext(1);
+    await settle();
+    expect(runtime.commit).toHaveBeenCalledTimes(2);
+    const second = runtime.commit.mock.calls[1][0];
+    const wirePose = second.changes?.spritePositions?.['4key']?.[0]?.poses?.[0];
+    expect(wirePose?.transform.x).toBeCloseTo(40, 6);
+    expect(wirePose?.transform.y).toBeCloseTo(0, 6);
+    runtime.resolveNext(2);
+    await settle();
+    expect(canonicalSprite().poses[0].transform.x).toBeCloseTo(40, 6);
+    expect(errors.filter((line) => /Failed|failed/.test(line))).toEqual([]);
+  });
+
+  it('상태 기준점을 입력한 직후 기준점을 끌어도 입력값 위에서 이어진다', async () => {
+    runtime.get.mockResolvedValue({
+      revision: 0,
+      document: makeDocument(spriteFixture()),
+    });
+    await harness.editorCoordinator.start();
+    render();
+    act(() => poseRows()[0].click());
+    await settle();
+
+    // 기본 기준점 연결을 끊어 상태 기준점 입력을 연다 (after-paint 커밋)
+    const link = container.querySelector<HTMLElement>(
+      '[role="switch"][aria-label="propertiesPanel.spriteFollowBasePivot"]',
+    )!;
+    act(() => link.click());
+    await settle();
+    expect(runtime.commit).toHaveBeenCalledTimes(1);
+
+    // X=25%를 입력하고 blur 없이 바로 기준점 표식을 잡는다. 표식은 입력이 확정되기
+    // 전이라 아직 옛 자리(x 50%)에 있고, 잡는 순간의 정산이 25%를 커밋한다
+    const pivotX = container.querySelector<HTMLInputElement>(
+      'input[aria-label="propertiesPanel.spriteStatePivot X"]',
+    )!;
+    act(() => {
+      pivotX.focus();
+      setInputValue(pivotX, '25');
+    });
+    const start = pivotCenter();
+    pointer('pointerdown', pivotHandle(), start.x, start.y);
+    await settle();
+    // 표식은 입력값 자리로 옮겨져 있다 - 자세가 8.8° 돌아 있어 이미지 축의 -50px가
+    // 화면에서는 회전해 보인다. 드래그는 이 자리에서 포인터 이동량만큼 이어진다
+    const rad = (8.8 * Math.PI) / 180;
+    const settled = pivotCenter();
+    expect(settled.x).toBeCloseTo(start.x - 50 * Math.cos(rad), 6);
+    expect(settled.y).toBeCloseTo(start.y - 50 * Math.sin(rad), 6);
+    pointer('pointermove', window, start.x + 20, start.y, { ctrlKey: true });
+    await settle();
+    pointer('pointerup', window, start.x + 20, start.y);
+    await settle();
+
+    runtime.resolveNext(1);
+    await settle();
+    runtime.resolveNext(2);
+    await settle();
+    expect(runtime.commit).toHaveBeenCalledTimes(3);
+    runtime.resolveNext(3);
+    await settle();
+
+    // 표식이 놓은 자리에 남고, 저장된 기준점은 25%에서 20px만큼 옮긴 값이다
+    // (자세 회전 8.8°라 화면 +x는 이미지 축으로 되돌려 잰다)
+    const landed = pivotCenter();
+    expect(landed.x).toBeCloseTo(settled.x + 20, 6);
+    expect(landed.y).toBeCloseTo(settled.y, 6);
+    const pivot = canonicalSprite().poses[0].pivot!;
+    expect(pivot.x).toBeCloseTo(0.25 + (20 * Math.cos(rad)) / 200, 6);
+    expect(pivot.y).toBeCloseTo(0.5 - (20 * Math.sin(rad)) / 150, 6);
+    expect(errors.filter((line) => /Failed|failed/.test(line))).toEqual([]);
+  });
 });

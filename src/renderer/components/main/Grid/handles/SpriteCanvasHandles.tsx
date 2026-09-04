@@ -31,7 +31,6 @@ import {
 import {
   compensateTransformForPivotDelta,
   compensateTransformForPosePivotDelta,
-  isSameSpritePlacement,
   pivotHandleLocalPoint,
   pivotForHandleTarget,
   placeSpriteVisual,
@@ -41,7 +40,6 @@ import {
   snapPosePivotToPreset,
   spriteIdleVisual,
   spritePivotChangePatch,
-  spritePoseVisual,
   type SpritePivotHandleFrame,
   type SpritePosePivotHandleFrame,
 } from '@utils/sprite/spritePlacement';
@@ -95,10 +93,8 @@ type PivotDragBase =
     }
   | {
       kind: 'pose';
-      mode: string;
-      id: string;
-      canonical: ReactiveSpritePosition;
       poseId: string;
+      /** 세션(표시 기하)에서 뜬 프레임 - 저장 대기 중인 필드 편집도 그대로 담긴다 */
       frame: SpritePosePivotHandleFrame;
       grabOffset: Point;
     };
@@ -129,6 +125,17 @@ interface PendingBasePivotLanding {
   mode: string;
   id: string;
   pivot: SpriteAnchor;
+}
+
+/** 최신 렌더의 표시 기하 - 드래그 시작이 포커스 정산 뒤에 읽는다 */
+interface HandleGeometry {
+  session: SpritePoseHandleSession | null;
+  sprite: ReactiveSpritePosition | null;
+  origin: { dx: number; dy: number };
+  box: { width: number; height: number };
+  imagePivot: SpriteAnchor;
+  displayTransform: SpriteTransform;
+  pivotLocal: Point;
 }
 
 const KNOB_HIT_SIZE = 22;
@@ -231,6 +238,9 @@ const SpriteCanvasHandles = ({
   const sessionRef = useRef(session);
   // eslint-disable-next-line react-hooks/refs
   sessionRef.current = session;
+  // 드래그 시작은 포커스 필드 정산(flushSync) 뒤에 온다. 정산이 값을 커밋하면 세션과
+  // 표시 기하가 같은 프레임에 바뀌므로 시작 값은 렌더 클로저가 아니라 여기서 읽는다
+  const latestRef = useRef<HandleGeometry | null>(null);
 
   // 활성 드래그 취소 배선 - 세션 종료·대상 교체·언마운트에서
   // window 리스너·포인터 캡처·전역 드래그 락·열린 preview 제스처를 함께 정리한다
@@ -268,6 +278,8 @@ const SpriteCanvasHandles = ({
   }, [historyTick]);
 
   if (!sprite && !session) {
+    // eslint-disable-next-line react-hooks/refs
+    latestRef.current = null;
     if (
       dragTransform !== null ||
       dragPivot !== null ||
@@ -314,6 +326,16 @@ const SpriteCanvasHandles = ({
     x: axis.x + displayTransform.x,
     y: axis.y + displayTransform.y,
   };
+  // eslint-disable-next-line react-hooks/refs
+  latestRef.current = {
+    session,
+    sprite,
+    origin,
+    box,
+    imagePivot,
+    displayTransform,
+    pivotLocal,
+  };
   // 선택 테두리와 리사이즈 핸들은 상자 밖 1px 프레임에 그려진다. 상자 핸들이 보이는 동안은
   // 표식도 그 프레임에 앉혀 모서리·변에서 선·핸들 중심과 정확히 겹치게 한다.
   // 자세 편집 중에는 자세 프레임 선이 상자 그대로라 보정하지 않는다
@@ -341,14 +363,16 @@ const SpriteCanvasHandles = ({
       }
     : null;
 
-  // 뷰(zoom·pan)는 ref에서 읽는다 - 드래그 중 최신 값이어야 팬·줌을 따라간다
+  // 뷰(zoom·pan)와 원점은 ref에서 읽는다 - 드래그 중 최신 값이어야 팬·줌과
+  // 정산된 위치 편집을 따라간다
   const clientToLocal = (clientX: number, clientY: number): Point | null => {
     const hostRect = rootRef.current?.getBoundingClientRect();
     if (!hostRect) return null;
     const view = viewRef.current;
+    const liveOrigin = latestRef.current?.origin ?? origin;
     return {
-      x: (clientX - hostRect.left - view.panX) / view.zoom - origin.dx,
-      y: (clientY - hostRect.top - view.panY) / view.zoom - origin.dy,
+      x: (clientX - hostRect.left - view.panX) / view.zoom - liveOrigin.dx,
+      y: (clientY - hostRect.top - view.panY) / view.zoom - liveOrigin.dy,
     };
   };
 
@@ -408,42 +432,23 @@ const SpriteCanvasHandles = ({
   const generationNow = () => useSpritePoseHandleStore.getState().generation;
   // 드래그 시작 때 잡은 세대가 아직 유효한지 - 자세 preview·커밋의 공통 전제
   const ownsSession = () => ownerGenerationRef.current === generationNow();
-  // 기준점 드래그의 전제 - 시작 시점 canonical이 아직 스토어의 그 객체인지.
-  // 리사이즈 착지·다른 창 편집·undo가 끼어들면 시작 시점 patch는 낡은 값이다
+  // 기준점 드래그의 전제. 기본 기준점은 시작 시점 canonical이 아직 스토어의 그 객체인지 -
+  // 리사이즈 착지·다른 창 편집·undo가 끼어들면 시작 시점 patch는 낡은 값이다.
+  // 자세 기준점은 세션 프레임이 기준이라 세션 소유권으로 판정한다 (기하가 바뀌면 세대가 오른다)
   const pivotBaseCurrent = (drag: DragState): boolean => {
     const base = drag.pivotBase;
     if (!base) return false;
+    if (base.kind === 'pose') return ownsSession();
     const current = findCanonicalSprite(base.mode, base.id);
     if (!current) return false;
-    if (base.kind === 'base') {
-      const placement = placeSpriteVisual(current, spriteIdleVisual(current));
-      return (
-        current.dx === base.canonical.dx &&
-        current.dy === base.canonical.dy &&
-        current.width === base.frame.box.width &&
-        current.height === base.frame.box.height &&
-        isSameSpriteAnchor(current.pivot, base.frame.pivot) &&
-        isSameSpriteTransform(current.idleTransform, base.frame.transform) &&
-        placement.rect.width === base.frame.rect.width &&
-        placement.rect.height === base.frame.rect.height
-      );
-    }
-    const pose = current.poses.find(
-      (candidate) => candidate.poseId === base.poseId,
-    );
-    if (!pose) return false;
-    const placement = placeSpriteVisual(
-      current,
-      spritePoseVisual(current, pose),
-    );
-    const axis = spritePivotPx(current);
+    const placement = placeSpriteVisual(current, spriteIdleVisual(current));
     return (
       current.dx === base.canonical.dx &&
       current.dy === base.canonical.dy &&
-      axis.x === base.frame.axis.x &&
-      axis.y === base.frame.axis.y &&
-      isSameSpriteAnchor(pose.pivot ?? current.pivot, base.frame.pivot) &&
-      isSameSpriteTransform(pose.transform, base.frame.transform) &&
+      current.width === base.frame.box.width &&
+      current.height === base.frame.box.height &&
+      isSameSpriteAnchor(current.pivot, base.frame.pivot) &&
+      isSameSpriteTransform(current.idleTransform, base.frame.transform) &&
       placement.rect.width === base.frame.rect.width &&
       placement.rect.height === base.frame.rect.height
     );
@@ -807,13 +812,23 @@ const SpriteCanvasHandles = ({
   ) => {
     if (event.button !== 0 || dragRef.current || !session) return;
     settleFocusedField();
+    // 정산이 팝업 필드를 커밋했으면 세션은 이미 새 값이다 - 시작 자세도 그 값이어야
+    // 입력한 값 위에 이동량이 더해진다
+    const live = latestRef.current;
+    const liveSession = live?.session;
+    if (!live || !liveSession) return;
     const local = clientToLocal(event.clientX, event.clientY);
     if (!local) return;
     const startDistance = Math.hypot(
-      local.x - pivotLocal.x,
-      local.y - pivotLocal.y,
+      local.x - live.pivotLocal.x,
+      local.y - live.pivotLocal.y,
     );
-    if (kind === 'scale' && startDistance * zoom < MIN_SCALE_ARM_PX) return;
+    if (
+      kind === 'scale' &&
+      startDistance * viewRef.current.zoom < MIN_SCALE_ARM_PX
+    ) {
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     if (!tryAcquireDragSession()) return;
@@ -824,11 +839,14 @@ const SpriteCanvasHandles = ({
       pointerId: event.pointerId,
       sawPressedMove: false,
       startLocal: local,
-      baseTransform: session.transform,
-      axisLocal: pivotLocal,
-      startAngle: Math.atan2(local.y - pivotLocal.y, local.x - pivotLocal.x),
+      baseTransform: liveSession.transform,
+      axisLocal: live.pivotLocal,
+      startAngle: Math.atan2(
+        local.y - live.pivotLocal.y,
+        local.x - live.pivotLocal.x,
+      ),
       startDistance,
-      session,
+      session: liveSession,
       pivotBase: null,
       snappedPivot: null,
     };
@@ -846,78 +864,58 @@ const SpriteCanvasHandles = ({
   const beginPivotDrag = (event: React.PointerEvent<Element>) => {
     if (event.button !== 0 || dragRef.current) return;
     settleFocusedField();
-    const id = session ? session.positionId : sprite?.id;
-    if (!id || !isNativeElementId(id)) return;
-    const locator = resolveElementById('sprite', id);
-    if (!locator) return;
-    const canonical = findCanonicalSprite(locator.mode, id);
-    if (!canonical) return;
-    // 컨트롤러 소유권이 사라진 로컬 프리뷰는 새 조작보다 먼저 회수한다
-    const reclaimedOrphanPreview = session
-      ? false
-      : editGestureController.discardOrphanedLocalPreviews();
-    // 상자 크기는 역변환의 분모라 표시 크기가 canonical과 다르면 기준점이 틀어진다
-    if (
-      !reclaimedOrphanPreview &&
-      (box.width !== canonical.width || box.height !== canonical.height)
-    ) {
-      refusePivotDrag('displayed box differs from canonical');
-      return;
-    }
+    const live = latestRef.current;
+    if (!live) return;
+    const liveSession = live.session;
     let pivotBase: PivotDragBase;
-    if (session) {
-      const canonicalPose = canonical.poses.find(
-        (candidate) => candidate.poseId === session.poseId,
-      );
-      if (!canonicalPose) {
-        refusePivotDrag('pose missing in canonical');
-        return;
-      }
-      const canonicalImagePivot = canonicalPose.pivot ?? canonical.pivot;
-      if (
-        !isSameSpriteAnchor(session.pivot, canonical.pivot) ||
-        !isSameSpriteAnchor(imagePivot, canonicalImagePivot)
-      ) {
-        refusePivotDrag('session pivot differs from canonical');
-        return;
-      }
-      if (!isSameSpriteTransform(session.transform, canonicalPose.transform)) {
-        refusePivotDrag('pose draft transform differs from canonical');
-        return;
-      }
-      const canonicalPlacement = placeSpriteVisual(
-        canonical,
-        spritePoseVisual(canonical, canonicalPose),
-      );
-      if (!isSameSpritePlacement(session.placement, canonicalPlacement)) {
-        refusePivotDrag('pose placement differs from canonical');
-        return;
-      }
+    let reclaimedOrphanPreview = false;
+    if (liveSession) {
+      // 자세 편집 중에는 세션이 표시 기하의 원천이다. 방금 정산된 필드 커밋이 canonical에
+      // 아직 닿지 않았어도 세션 프레임으로 역변환하고, 커밋은 저장 시점 최신 자세 위에 병합된다
       pivotBase = {
         kind: 'pose',
-        mode: locator.mode,
-        id,
-        canonical,
-        poseId: canonicalPose.poseId,
+        poseId: liveSession.poseId,
         frame: {
-          axis: spritePivotPx(canonical),
-          rect: canonicalPlacement.rect,
-          pivot: canonicalImagePivot,
-          transform: displayTransform,
+          axis: spritePivotPx({
+            width: liveSession.width,
+            height: liveSession.height,
+            pivot: liveSession.pivot,
+          }),
+          rect: liveSession.placement.rect,
+          pivot: liveSession.imagePivot,
+          transform: liveSession.transform,
         },
         grabOffset: { x: 0, y: 0 },
       };
     } else {
+      const id = live.sprite?.id;
+      if (!id || !isNativeElementId(id)) return;
+      const locator = resolveElementById('sprite', id);
+      if (!locator) return;
+      const canonical = findCanonicalSprite(locator.mode, id);
+      if (!canonical) return;
+      // 컨트롤러 소유권이 사라진 로컬 프리뷰는 새 조작보다 먼저 회수한다
+      reclaimedOrphanPreview =
+        editGestureController.discardOrphanedLocalPreviews();
+      // 상자 크기는 역변환의 분모라 표시 크기가 canonical과 다르면 기준점이 틀어진다
       if (
         !reclaimedOrphanPreview &&
-        !isSameSpriteAnchor(imagePivot, canonical.pivot)
+        (live.box.width !== canonical.width ||
+          live.box.height !== canonical.height)
+      ) {
+        refusePivotDrag('displayed box differs from canonical');
+        return;
+      }
+      if (
+        !reclaimedOrphanPreview &&
+        !isSameSpriteAnchor(live.imagePivot, canonical.pivot)
       ) {
         refusePivotDrag('displayed pivot differs from canonical');
         return;
       }
       if (
         !reclaimedOrphanPreview &&
-        !isSameSpriteTransform(displayTransform, canonical.idleTransform)
+        !isSameSpriteTransform(live.displayTransform, canonical.idleTransform)
       ) {
         refusePivotDrag('displayed transform differs from canonical');
         return;
@@ -947,25 +945,28 @@ const SpriteCanvasHandles = ({
     if (!tryAcquireDragSession()) return;
     grab(event, 'grabbing');
     pivotBase.grabOffset = {
-      x: local.x - pivotLocal.x,
-      y: local.y - pivotLocal.y,
+      x: local.x - live.pivotLocal.x,
+      y: local.y - live.pivotLocal.y,
     };
-    if (session) ownerGenerationRef.current = generationNow();
+    if (liveSession) ownerGenerationRef.current = generationNow();
     dragRef.current = {
       kind: 'pivot',
       pointerId: event.pointerId,
       sawPressedMove: false,
       startLocal: local,
       baseTransform: pivotBase.frame.transform,
-      axisLocal: pivotLocal,
+      axisLocal: live.pivotLocal,
       startAngle: 0,
       startDistance: 0,
-      session,
+      session: liveSession,
       pivotBase,
       snappedPivot: null,
     };
     if (reclaimedOrphanPreview && pivotBase.kind === 'base') {
-      const recoveredPivot = pivotForHandleTarget(pivotBase.frame, pivotLocal);
+      const recoveredPivot = pivotForHandleTarget(
+        pivotBase.frame,
+        live.pivotLocal,
+      );
       const recoveredTransform = compensateTransformForPivotDelta(
         pivotBase.frame,
         recoveredPivot,
