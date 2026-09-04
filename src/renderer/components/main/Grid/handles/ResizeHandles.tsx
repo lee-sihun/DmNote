@@ -16,6 +16,15 @@ import {
   createRafLatestScheduler,
   type ContinuousInputStrategy,
 } from '@utils/animation/rafLatestScheduler';
+import {
+  aspectScaleFromPrimary,
+  aspectScaleRange,
+  exactSizeFor,
+  scaleBoundsAnchored,
+  settleAspectScale,
+  type AspectPrimaryAxis,
+  type ScaleRange,
+} from './aspectResize';
 import { SELECTION_BORDER_CENTER } from './selectionOutline';
 
 /**
@@ -49,6 +58,12 @@ interface ResizeResult {
   handle: HandleDef;
   /** 플랫폼 primary modifier 유지 중 - 스마트 가이드·크기 일치 스냅 일시 해제 */
   suppressSmartSnap: boolean;
+  /** 비율 고정 중 - 스마트 스냅은 기준 축만 받고 반대 축은 같은 배율로 다시 구한다 */
+  aspect?: {
+    start: Bounds;
+    primary: AspectPrimaryAxis;
+    range: ScaleRange;
+  };
 }
 
 interface HandleProps {
@@ -332,23 +347,6 @@ const ResizeHandles = ({
 
       const snap = (value: number): number => snapToGrid(value, snapSize);
 
-      // 새 bounds 계산 (스냅 전)
-      let nextWidth = startBounds!.width;
-      let nextHeight = startBounds!.height;
-
-      // 핸들 방향에 따라 크기 조정 (크기만 계산)
-      if (handle!.dx === -1) {
-        nextWidth = Math.max(MIN_SIZE, startBounds!.width - rawDeltaX);
-      } else if (handle!.dx === 1) {
-        nextWidth = Math.max(MIN_SIZE, startBounds!.width + rawDeltaX);
-      }
-
-      if (handle!.dy === -1) {
-        nextHeight = Math.max(MIN_SIZE, startBounds!.height - rawDeltaY);
-      } else if (handle!.dy === 1) {
-        nextHeight = Math.max(MIN_SIZE, startBounds!.height + rawDeltaY);
-      }
-
       const keepAspect =
         (lockAspect || !!moveEvent.shiftKey) &&
         Number.isFinite(startAspectRatio) &&
@@ -358,12 +356,31 @@ const ResizeHandles = ({
         startBounds!.width > 0 &&
         startBounds!.height > 0;
 
-      let newWidth = nextWidth;
-      let newHeight = nextHeight;
+      let newX = startBounds!.x;
+      let newY = startBounds!.y;
+      let newWidth = startBounds!.width;
+      let newHeight = startBounds!.height;
+      let aspect: ResizeResult['aspect'];
 
       if (keepAspect) {
+        // 비율 고정은 배율 하나로만 움직인다. 하한 floor 없는 raw 후보로 기준 축을
+        // 고르고(변 핸들은 그 축, 모서리는 상대 변화가 큰 축) 공용 규칙으로 배율을
+        // 자른 뒤 잡지 않은 가장자리를 고정한다. 파생 축에 하한을 따로 먹이면
+        // 얇은 요소의 비율이 깨지고, 상한이 없으면 백엔드가 커밋을 거부한다
+        const rawWidth =
+          handle!.dx === -1
+            ? startBounds!.width - rawDeltaX
+            : handle!.dx === 1
+            ? startBounds!.width + rawDeltaX
+            : startBounds!.width;
+        const rawHeight =
+          handle!.dy === -1
+            ? startBounds!.height - rawDeltaY
+            : handle!.dy === 1
+            ? startBounds!.height + rawDeltaY
+            : startBounds!.height;
         const isCorner = handle!.dx !== 0 && handle!.dy !== 0;
-        const primary =
+        const primary: AspectPrimaryAxis =
           handle!.dx !== 0 && handle!.dy === 0
             ? 'width'
             : handle!.dy !== 0 && handle!.dx === 0
@@ -371,24 +388,70 @@ const ResizeHandles = ({
             : isCorner
             ? (() => {
                 const relW =
-                  Math.abs(newWidth - startBounds!.width) / startBounds!.width;
+                  Math.abs(rawWidth - startBounds!.width) / startBounds!.width;
                 const relH =
-                  Math.abs(newHeight - startBounds!.height) /
+                  Math.abs(rawHeight - startBounds!.height) /
                   startBounds!.height;
                 return relW >= relH ? 'width' : 'height';
               })()
             : 'width';
-
-        if (primary === 'width') {
-          newWidth = Math.max(MIN_SIZE, snap(newWidth));
-          const scale = newWidth / startBounds!.width;
-          newHeight = Math.max(MIN_SIZE, startBounds!.height * scale);
-        } else {
-          newHeight = Math.max(MIN_SIZE, snap(newHeight));
-          const scale = newHeight / startBounds!.height;
-          newWidth = Math.max(MIN_SIZE, startBounds!.width * scale);
-        }
+        // 그리드 스냅 기준은 방향별 현행 유지 - 오른쪽·아래는 크기, 왼쪽·위는
+        // 움직이는 가장자리 좌표
+        const snapPrimarySize = (size: number): number => {
+          if (primary === 'width') {
+            if (handle!.dx !== -1) return snap(size);
+            const right = startBounds!.x + startBounds!.width;
+            return right - snap(right - size);
+          }
+          if (handle!.dy !== -1) return snap(size);
+          const bottom = startBounds!.y + startBounds!.height;
+          return bottom - snap(bottom - size);
+        };
+        const range = aspectScaleRange(startBounds!, handle!, MIN_SIZE);
+        const primaryScale = aspectScaleFromPrimary(
+          startBounds!,
+          primary,
+          primary === 'width' ? rawWidth : rawHeight,
+          snapPrimarySize,
+          range,
+        );
+        const scale = settleAspectScale(
+          startBounds!,
+          primaryScale.scale,
+          handle!,
+          range,
+          primaryScale.exact,
+        );
+        const scaled = scaleBoundsAnchored(
+          startBounds!,
+          scale,
+          handle!,
+          exactSizeFor(
+            startBounds!,
+            scale,
+            primaryScale.scale,
+            primaryScale.exact,
+          ),
+        );
+        newX = scaled.x;
+        newY = scaled.y;
+        newWidth = scaled.width;
+        newHeight = scaled.height;
+        aspect = { start: { ...startBounds! }, primary, range };
       } else {
+        // 핸들 방향에 따라 크기 조정 (크기만 계산)
+        if (handle!.dx === -1) {
+          newWidth = Math.max(MIN_SIZE, startBounds!.width - rawDeltaX);
+        } else if (handle!.dx === 1) {
+          newWidth = Math.max(MIN_SIZE, startBounds!.width + rawDeltaX);
+        }
+
+        if (handle!.dy === -1) {
+          newHeight = Math.max(MIN_SIZE, startBounds!.height - rawDeltaY);
+        } else if (handle!.dy === 1) {
+          newHeight = Math.max(MIN_SIZE, startBounds!.height + rawDeltaY);
+        }
+
         // 드래그한 축만 스냅 - 반대 축까지 스냅하면 비배수 크기의 요소가
         // 가로/세로 전용 리사이즈마다 1px씩 밀린다 (중앙 보정이 절반을 이동)
         if (handle!.dx !== 0) {
@@ -397,41 +460,33 @@ const ResizeHandles = ({
         if (handle!.dy !== 0) {
           newHeight = Math.max(MIN_SIZE, snap(newHeight));
         }
+
+        // 위치 계산 (앵커 엣지 보존: 드래그하지 않은 쪽은 고정)
+        if (handle!.dx === -1) {
+          // 좌측 핸들: 우측 엣지가 앵커 - 위치 스냅 후 width를 앵커에서 역산
+          const rightAnchor = startBounds!.x + startBounds!.width;
+          newX = snap(rightAnchor - newWidth);
+          newWidth = rightAnchor - newX;
+        }
+        // dx === 1: newX = startBounds.x (좌측 앵커 유지)
+
+        if (handle!.dy === -1) {
+          // 상단 핸들: 하단 엣지가 앵커 - 위치 스냅 후 height를 앵커에서 역산
+          const bottomAnchor = startBounds!.y + startBounds!.height;
+          newY = snap(bottomAnchor - newHeight);
+          newHeight = bottomAnchor - newY;
+        }
+        // dy === 1: newY = startBounds.y (상단 앵커 유지)
       }
 
-      // 위치 계산 (앵커 엣지 보존: 드래그하지 않은 쪽은 고정)
-      let newX = startBounds!.x;
-      let newY = startBounds!.y;
-
-      if (handle!.dx === -1) {
-        // 좌측 핸들: 우측 엣지가 앵커 — 위치 스냅 후 width를 앵커에서 역산
-        const rightAnchor = startBounds!.x + startBounds!.width;
-        newX = snap(rightAnchor - newWidth);
-        newWidth = rightAnchor - newX;
-      } else if (handle!.dx === 0) {
-        // 비례 유지 시 중앙 정렬 (스냅 없이 앵커 보존)
-        newX = startBounds!.x + (startBounds!.width - newWidth) / 2;
-      }
-      // dx === 1: newX = startBounds.x (좌측 앵커 유지)
-
-      if (handle!.dy === -1) {
-        // 상단 핸들: 하단 엣지가 앵커 — 위치 스냅 후 height를 앵커에서 역산
-        const bottomAnchor = startBounds!.y + startBounds!.height;
-        newY = snap(bottomAnchor - newHeight);
-        newHeight = bottomAnchor - newY;
-      } else if (handle!.dy === 0) {
-        // 비례 유지 시 중앙 정렬 (스냅 없이 앵커 보존)
-        newY = startBounds!.y + (startBounds!.height - newHeight) / 2;
-      }
-      // dy === 1: newY = startBounds.y (상단 앵커 유지)
-
-      const result = {
+      const result: ResizeResult = {
         x: newX,
         y: newY,
         width: newWidth,
         height: newHeight,
         handle: handle!,
         suppressSmartSnap: isMac() ? moveEvent.metaKey : moveEvent.ctrlKey,
+        aspect,
       };
       const changed =
         result.x !== startBounds!.x ||

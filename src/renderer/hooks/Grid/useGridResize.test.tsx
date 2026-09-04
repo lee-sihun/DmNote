@@ -7,6 +7,7 @@ import type { CanonicalReactiveSpritePosition } from '@src/types/editor';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import { useSpriteStore } from '@stores/data/useSpriteStore';
 import type { ElementBounds } from '@utils/grid/smartGuides';
+import { aspectScaleRange } from '@components/main/Grid/handles/aspectResize';
 import { useGridResize } from './useGridResize';
 
 const mocks = vi.hoisted(() => ({
@@ -15,6 +16,9 @@ const mocks = vi.hoisted(() => ({
   updateElement: vi.fn(),
   setResizing: vi.fn(),
   clearGuides: vi.fn(),
+  setActiveGuides: vi.fn(),
+  setSpacingGuides: vi.fn(),
+  setSizeMatchGuides: vi.fn(),
   commitPatch: vi.fn(() => Promise.resolve()),
   beginMixedGesture: vi.fn(),
   commitMixedGesture: vi.fn(() => Promise.resolve()),
@@ -80,9 +84,9 @@ vi.mock('@stores/grid/useSmartGuidesStore', () => ({
     getState: () => ({
       clearGuides: mocks.clearGuides,
       setDraggedBounds: vi.fn(),
-      setActiveGuides: vi.fn(),
-      setSpacingGuides: vi.fn(),
-      setSizeMatchGuides: vi.fn(),
+      setActiveGuides: mocks.setActiveGuides,
+      setSpacingGuides: mocks.setSpacingGuides,
+      setSizeMatchGuides: mocks.setSizeMatchGuides,
     }),
   },
 }));
@@ -256,6 +260,9 @@ describe('useGridResize plugin gesture lifecycle', () => {
     mocks.updateElement.mockReset();
     mocks.setResizing.mockReset();
     mocks.clearGuides.mockReset();
+    mocks.setActiveGuides.mockReset();
+    mocks.setSpacingGuides.mockReset();
+    mocks.setSizeMatchGuides.mockReset();
     mocks.commitPatch.mockClear();
     mocks.commitGroupBounds.mockClear();
     mocks.commitSingleBounds.mockClear();
@@ -752,5 +759,253 @@ describe('useGridResize plugin gesture lifecycle', () => {
 
     expect(mocks.end).toHaveBeenCalledWith('plugin-a', 'token-1');
     expect(mocks.setResizing).toHaveBeenLastCalledWith(false);
+  });
+  it('비율 고정 리사이즈는 기준 축의 크기 일치만 받고 반대 축을 같은 배율로 놓는다', async () => {
+    mocks.gridSettings = {
+      alignmentGuides: true,
+      spacingGuides: false,
+      sizeMatchGuides: true,
+    };
+    useSpriteStore.setState({
+      positions: {
+        '4key': [{ ...spriteAt(STABLE_SPRITE), width: 110, height: 55 }],
+      },
+    });
+    // 폭 112는 임계값 4px 안, 높이 60은 밖. 가장자리는 멀리 둬 정렬 스냅은 없다
+    const other: ElementBounds = {
+      id: 'other',
+      left: 1000,
+      top: 1000,
+      right: 1112,
+      bottom: 1060,
+      centerX: 1056,
+      centerY: 1030,
+      width: 112,
+      height: 60,
+    };
+    await renderHarness(
+      [{ type: 'sprite', id: STABLE_SPRITE, index: 0 }],
+      () => [other],
+    );
+    const start = { x: 0, y: 0, width: 110, height: 55 };
+    const handle = { id: 'e', dx: 1, dy: 0 };
+    await act(async () => {
+      api.handleResizeStart();
+    });
+    await act(async () => {
+      api.handleResize({
+        ...start,
+        handle,
+        aspect: {
+          start,
+          primary: 'width',
+          range: aspectScaleRange(start, { dx: 1, dy: 0 }, 10),
+        },
+      });
+    });
+    expect(api.previewBounds?.width).toBe(112);
+    expect(api.previewBounds?.height).toBeCloseTo(56, 9);
+    expect(api.previewBounds?.y).toBeCloseTo(-0.5, 9);
+    expect(api.previewBounds?.x).toBe(0);
+  });
+
+  it('기준 축 스냅이 배율 범위를 넘으면 상한으로 자른다', async () => {
+    mocks.gridSettings = {
+      alignmentGuides: true,
+      spacingGuides: false,
+      sizeMatchGuides: true,
+    };
+    useSpriteStore.setState({
+      positions: {
+        '4key': [{ ...spriteAt(STABLE_SPRITE), width: 100, height: 100 }],
+      },
+    });
+    const other: ElementBounds = {
+      id: 'other',
+      left: 1000,
+      top: 1000,
+      right: 1104,
+      bottom: 1500,
+      centerX: 1052,
+      centerY: 1250,
+      width: 104,
+      height: 500,
+    };
+    await renderHarness(
+      [{ type: 'sprite', id: STABLE_SPRITE, index: 0 }],
+      () => [other],
+    );
+    const start = { x: 0, y: 0, width: 100, height: 100 };
+    await act(async () => {
+      api.handleResizeStart();
+    });
+    await act(async () => {
+      api.handleResize({
+        ...start,
+        handle: { id: 'e', dx: 1, dy: 0 },
+        aspect: { start, primary: 'width', range: { min: 0.5, max: 1.02 } },
+      });
+    });
+    // 크기 일치 104 → 배율 1.04 는 상한 1.02 밖 → 102x102, 세로는 중앙 고정
+    expect(api.previewBounds).toEqual({ x: 0, y: -1, width: 102, height: 102 });
+  });
+
+  it('잡지 않은 축의 크기 일치는 무시한다 (가로 핸들은 높이를 바꾸지 않는다)', async () => {
+    mocks.gridSettings = {
+      alignmentGuides: true,
+      spacingGuides: false,
+      sizeMatchGuides: true,
+    };
+    mocks.keyPositions = [
+      { id: STABLE_A, dx: 0, dy: 0, width: 120, height: 60 },
+    ];
+    // 높이 62는 임계값 안, 폭 500은 밖
+    const other: ElementBounds = {
+      id: 'other',
+      left: 1000,
+      top: 1000,
+      right: 1500,
+      bottom: 1062,
+      centerX: 1250,
+      centerY: 1031,
+      width: 500,
+      height: 62,
+    };
+    await renderHarness([stableKeySelection(STABLE_A)], () => [other]);
+    await act(async () => {
+      api.handleResizeStart();
+    });
+    await act(async () => {
+      api.handleResize({
+        x: 0,
+        y: 0,
+        width: 118,
+        height: 60,
+        handle: { id: 'e', dx: 1, dy: 0 },
+      });
+    });
+    expect(api.previewBounds).toEqual({ x: 0, y: 0, width: 118, height: 60 });
+  });
+  it('플러그인 단일 리사이즈도 비율 고정 재유도를 같은 경로로 받는다', async () => {
+    mocks.gridSettings = {
+      alignmentGuides: true,
+      spacingGuides: false,
+      sizeMatchGuides: true,
+    };
+    mocks.elements = [{ fullId: 'plugin-a', pluginId: 'plugin' }];
+    // 폭 104는 임계값 안, 높이 500은 밖
+    const other: ElementBounds = {
+      id: 'other',
+      left: 1000,
+      top: 1000,
+      right: 1104,
+      bottom: 1500,
+      centerX: 1052,
+      centerY: 1250,
+      width: 104,
+      height: 500,
+    };
+    await renderHarness([pluginSelection('plugin-a')], () => [other]);
+    const start = { x: 0, y: 0, width: 100, height: 100 };
+    await act(async () => {
+      api.handleResizeStart();
+    });
+    await act(async () => {
+      api.handleResize({
+        ...start,
+        handle: { id: 'se', dx: 1, dy: 1 },
+        aspect: { start, primary: 'width', range: { min: 0.1, max: 10 } },
+      });
+    });
+    // Shift 모서리: 폭 크기 일치 104 → 높이도 같은 배율 104
+    expect(api.previewBounds).toEqual({ x: 0, y: 0, width: 104, height: 104 });
+  });
+
+  it('비율 고정은 무시한 반대 축의 정렬 가이드를 그리지 않는다', async () => {
+    mocks.gridSettings = {
+      alignmentGuides: true,
+      spacingGuides: false,
+      sizeMatchGuides: false,
+    };
+    useSpriteStore.setState({
+      positions: {
+        '4key': [{ ...spriteAt(STABLE_SPRITE), width: 100, height: 100 }],
+      },
+    });
+    // 오른쪽 가장자리 105는 오른쪽 108에(3px), 위쪽 0은 위쪽 0에 정렬 후보 - 두 축 모두 임계값 안
+    const other: ElementBounds = {
+      id: 'other',
+      left: 8,
+      top: 0,
+      right: 108,
+      bottom: 100,
+      centerX: 58,
+      centerY: 50,
+      width: 100,
+      height: 100,
+    };
+    await renderHarness(
+      [{ type: 'sprite', id: STABLE_SPRITE, index: 0 }],
+      () => [other],
+    );
+    const start = { x: 0, y: 0, width: 100, height: 100 };
+    await act(async () => {
+      api.handleResizeStart();
+    });
+    await act(async () => {
+      api.handleResize({
+        x: 0,
+        y: 0,
+        width: 105,
+        height: 105,
+        handle: { id: 'se', dx: 1, dy: 1 },
+        aspect: { start, primary: 'width', range: { min: 0.1, max: 10 } },
+      });
+    });
+    // 폭만 108로 스냅되고 높이는 같은 배율로 108
+    expect(api.previewBounds).toEqual({ x: 0, y: 0, width: 108, height: 108 });
+    const guides = mocks.setActiveGuides.mock.calls.at(-1)?.[0] as Array<{
+      type: string;
+    }>;
+    expect(guides.length).toBeGreaterThan(0);
+    expect(guides.every((guide) => guide.type === 'vertical')).toBe(true);
+  });
+
+  it('잡지 않은 축은 정렬 후보가 있어도 위치를 옮기지 않는다', async () => {
+    mocks.gridSettings = {
+      alignmentGuides: true,
+      spacingGuides: false,
+      sizeMatchGuides: false,
+    };
+    mocks.keyPositions = [
+      { id: STABLE_A, dx: 3, dy: 0, width: 100, height: 100 },
+    ];
+    // 왼쪽 가장자리 3은 다른 요소의 왼쪽 0에 정렬 후보(3px) - 아래 핸들이라 X는 잡지 않은 축
+    const other: ElementBounds = {
+      id: 'other',
+      left: 0,
+      top: 500,
+      right: 100,
+      bottom: 600,
+      centerX: 50,
+      centerY: 550,
+      width: 100,
+      height: 100,
+    };
+    await renderHarness([stableKeySelection(STABLE_A)], () => [other]);
+    await act(async () => {
+      api.handleResizeStart();
+    });
+    await act(async () => {
+      api.handleResize({
+        x: 3,
+        y: 0,
+        width: 100,
+        height: 120,
+        handle: { id: 's', dx: 0, dy: 1 },
+      });
+    });
+    expect(api.previewBounds).toEqual({ x: 3, y: 0, width: 100, height: 120 });
+    expect(mocks.setActiveGuides).not.toHaveBeenCalled();
   });
 });

@@ -3,6 +3,7 @@ import {
   CANVAS_CENTER_X,
   CANVAS_CENTER_Y,
   calculateBounds,
+  calculateSizeSnap,
   calculateSnapPoints,
 } from './smartGuides';
 
@@ -83,5 +84,48 @@ describe('calculateSnapPoints 캔버스 중앙 그리드 스냅', () => {
       position: CANVAS_CENTER_Y,
       alignType: 'middle',
     });
+  });
+});
+
+describe('calculateSizeSnap 활성 축', () => {
+  const other = {
+    id: 'other',
+    left: 1000,
+    top: 1000,
+    right: 1100,
+    bottom: 1050,
+    centerX: 1050,
+    centerY: 1025,
+    width: 100,
+    height: 50,
+  };
+
+  it('기본은 두 축 모두 일치시킨다', () => {
+    const result = calculateSizeSnap(102, 52, [other]);
+    expect(result).toMatchObject({
+      didSnapWidth: true,
+      snappedWidth: 100,
+      didSnapHeight: true,
+      snappedHeight: 50,
+    });
+    expect(result.sizeMatchGuides.map((guide) => guide.dimension)).toEqual([
+      'width',
+      'height',
+    ]);
+  });
+
+  it('잡지 않은 축은 값도 가이드도 손대지 않는다', () => {
+    const result = calculateSizeSnap(102, 52, [other], '', {
+      matchHeight: false,
+    });
+    expect(result).toMatchObject({
+      didSnapWidth: true,
+      snappedWidth: 100,
+      didSnapHeight: false,
+      snappedHeight: 52,
+    });
+    expect(result.sizeMatchGuides.map((guide) => guide.dimension)).toEqual([
+      'width',
+    ]);
   });
 });

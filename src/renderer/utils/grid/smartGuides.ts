@@ -997,11 +997,19 @@ function calculateSpacingGuides(
  * 다른 요소와 동일한 width/height로 스냅
  * 여러 요소가 비슷한 크기일 경우, 가장 가까운 크기를 가진 요소에 스냅
  */
+export interface SizeSnapAxes {
+  /** 너비 일치 허용 - 잡은 핸들이 가로로 움직일 때만 */
+  matchWidth?: boolean;
+  /** 높이 일치 허용 - 잡은 핸들이 세로로 움직일 때만 */
+  matchHeight?: boolean;
+}
+
 export function calculateSizeSnap(
   currentWidth: number,
   currentHeight: number,
   otherElements: ElementBounds[],
   draggedId: string = '',
+  { matchWidth = true, matchHeight = true }: SizeSnapAxes = {},
 ): SizeSnapResult {
   const sizeMatchGuides: SizeMatchGuide[] = [];
   let snappedWidth = currentWidth;
@@ -1019,16 +1027,24 @@ export function calculateSizeSnap(
 
   // 첫 번째 패스: 임계값 내에서 가장 가까운 크기를 찾음
   for (const other of others) {
-    // width 일치 체크 - 가장 가까운 것 선택
+    // width 일치 체크 - 가장 가까운 것 선택. 잡지 않은 축은 손대지 않는다
     const widthDiff = Math.abs(currentWidth - other.width);
-    if (widthDiff <= SIZE_MATCH_THRESHOLD && widthDiff < closestWidthDiff) {
+    if (
+      matchWidth &&
+      widthDiff <= SIZE_MATCH_THRESHOLD &&
+      widthDiff < closestWidthDiff
+    ) {
       closestWidthDiff = widthDiff;
       closestWidthMatch = other;
     }
 
     // height 일치 체크 - 가장 가까운 것 선택
     const heightDiff = Math.abs(currentHeight - other.height);
-    if (heightDiff <= SIZE_MATCH_THRESHOLD && heightDiff < closestHeightDiff) {
+    if (
+      matchHeight &&
+      heightDiff <= SIZE_MATCH_THRESHOLD &&
+      heightDiff < closestHeightDiff
+    ) {
       closestHeightDiff = heightDiff;
       closestHeightMatch = other;
     }
