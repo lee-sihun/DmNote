@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
+
+import { EDITOR_BOUNDS_LIMITS } from '@src/types/editor';
 import {
+  limitGroupGrowth,
   elementBoundsChanged,
   projectGroupElementBounds,
   shrinkLimitSize,
@@ -7,6 +10,7 @@ import {
   type Bounds,
   type ElementBounds,
 } from './groupResizeUtils';
+import { isBoundsWithinEditorLimits } from './resizeLimits';
 
 const ID_A = '00000000-0000-0000-0000-000000000001';
 const ID_B = '00000000-0000-0000-0000-000000000002';
@@ -89,5 +93,172 @@ describe('projectGroupElementBounds', () => {
     expect(shrinkLimitSize(sprite, spriteBounds, 'y')).toBe(125);
     expect(shrinkLimitSize(key, { ...keyBounds, width: 80 }, 'x')).toBe(80);
     expect(shrinkLimitSize(key, { ...keyBounds, width: 80 }, 'y')).toBe(60);
+  });
+});
+
+describe('limitGroupGrowth', () => {
+  const limits = EDITOR_BOUNDS_LIMITS;
+  const key = { type: 'key', id: ID_A, index: 0 } as const;
+  const sprite = { type: 'sprite', id: ID_B, index: 0 } as const;
+  const bottomHandle = { dx: 0, dy: 1 } as const;
+  const rightHandle = { dx: 1, dy: 0 } as const;
+  const leftHandle = { dx: -1, dy: 0 } as const;
+
+  it('상한 안이면 후보를 그대로 돌려준다', () => {
+    const bounds: Bounds = { x: 0, y: 0, width: 200, height: 125 };
+    const candidate: Bounds = { x: 0, y: 0, width: 200, height: 250 };
+    expect(
+      limitGroupGrowth(
+        [{ element: sprite, bounds }],
+        { ...bounds },
+        candidate,
+        bottomHandle,
+        limits,
+      ),
+    ).toEqual({ bounds: candidate, limitedWidth: false, limitedHeight: false });
+  });
+
+  it('얇은 스프라이트의 세로 확대는 파생 폭이 32768에 닿는 진행 배율에서 멈춘다', () => {
+    const bounds: Bounds = { x: 0, y: 0, width: 400, height: 0.1 };
+    const start: Bounds = { ...bounds };
+    // 세로 배율 100 → 단일 배율로 폭 40000
+    const candidate: Bounds = { x: 0, y: 0, width: 400, height: 10 };
+    const result = limitGroupGrowth(
+      [{ element: sprite, bounds }],
+      start,
+      candidate,
+      bottomHandle,
+      limits,
+    );
+    expect(result.limitedHeight).toBe(true);
+    expect(result.limitedWidth).toBe(false);
+    const projected = projectGroupElementBounds(
+      sprite,
+      bounds,
+      start,
+      result.bounds,
+      bottomHandle,
+    );
+    expect(isBoundsWithinEditorLimits(projected)).toBe(true);
+    expect(projected.width).toBeGreaterThan(32767);
+    expect(projected.width / 400).toBeCloseTo(projected.height / 0.1, 6);
+  });
+
+  it('혼합 그룹은 가장 먼저 닿는 제약이 진행을 정한다 (여기서는 키의 저장 좌표)', () => {
+    const spriteBounds: Bounds = { x: 0, y: 0, width: 400, height: 0.1 };
+    const keyBounds: Bounds = { x: 500, y: 0, width: 100, height: 100 };
+    const elements = [
+      { element: sprite, bounds: spriteBounds },
+      { element: key, bounds: keyBounds },
+    ];
+    const start: Bounds = { x: 0, y: 0, width: 600, height: 100 };
+    // 가로 배율 1000. 스프라이트 폭은 81.92배, 키 x=500은 65.536배에서 32768에 닿는다
+    const candidate: Bounds = { x: 0, y: 0, width: 600000, height: 100 };
+    const result = limitGroupGrowth(
+      elements,
+      start,
+      candidate,
+      rightHandle,
+      limits,
+    );
+    const projected = elements.map(({ element, bounds }) =>
+      projectGroupElementBounds(
+        element,
+        bounds,
+        start,
+        result.bounds,
+        rightHandle,
+      ),
+    );
+    expect(projected.every(isBoundsWithinEditorLimits)).toBe(true);
+    expect(projected[1].x).toBeGreaterThan(32767);
+    expect(projected[0].width).toBeCloseTo(400 * 65.536, 3);
+  });
+
+  it('저장 좌표 상한도 진행을 막는다', () => {
+    // 왼쪽 핸들 확대는 요소 x를 -32768 아래로 민다
+    const bounds: Bounds = { x: -32000, y: 0, width: 100, height: 100 };
+    const start: Bounds = { ...bounds };
+    const candidate: Bounds = { x: -34000, y: 0, width: 2100, height: 100 };
+    const result = limitGroupGrowth(
+      [{ element: key, bounds }],
+      start,
+      candidate,
+      leftHandle,
+      limits,
+    );
+    const projected = projectGroupElementBounds(
+      key,
+      bounds,
+      start,
+      result.bounds,
+      leftHandle,
+    );
+    expect(projected.x).toBeGreaterThanOrEqual(-32768);
+    expect(projected.x).toBeLessThan(-32700);
+    expect(result.limitedWidth).toBe(true);
+  });
+
+  it('범위 밖 legacy 요소가 있어도 그 항목을 건드리지 않는 직교축 리사이즈는 통과한다', () => {
+    // 폭 40000 legacy 키 + 정상 키. 아래 핸들로 높이만 두 배
+    const legacyBounds: Bounds = { x: 0, y: 0, width: 40000, height: 100 };
+    const keyBounds: Bounds = { x: 0, y: 100, width: 100, height: 100 };
+    const elements = [
+      {
+        element: { type: 'key', id: ID_A, index: 0 } as const,
+        bounds: legacyBounds,
+      },
+      { element: key, bounds: keyBounds },
+    ];
+    const start: Bounds = { x: 0, y: 0, width: 40000, height: 200 };
+    const candidate: Bounds = { x: 0, y: 0, width: 40000, height: 400 };
+    const result = limitGroupGrowth(
+      elements,
+      start,
+      candidate,
+      bottomHandle,
+      limits,
+    );
+    expect(result).toEqual({
+      bounds: candidate,
+      limitedWidth: false,
+      limitedHeight: false,
+    });
+  });
+
+  it('안 움직인 축은 극단 좌표에서도 요소 값을 비트 단위로 보존한다', () => {
+    // 되돌린 뺄셈·덧셈이 1ulp 흔들리면 범위 밖 legacy x가 커진 것으로 거부되던 반례
+    const bounds: Bounds = {
+      x: 50577.53549435205,
+      y: 0,
+      width: 100,
+      height: 100,
+    };
+    const start: Bounds = {
+      x: -38245.44619570407,
+      y: 0,
+      width: 88922.98169005613,
+      height: 100,
+    };
+    const candidate: Bounds = { ...start, height: 200 };
+    const projected = projectGroupElementBounds(
+      key,
+      bounds,
+      start,
+      candidate,
+      bottomHandle,
+    );
+    expect(projected.x).toBe(bounds.x);
+    expect(projected.width).toBe(bounds.width);
+    expect(projected.height).toBe(200);
+    expect(
+      limitGroupGrowth(
+        [{ element: key, bounds }],
+        start,
+        candidate,
+        bottomHandle,
+        limits,
+      ),
+    ).toEqual({ bounds: candidate, limitedWidth: false, limitedHeight: false });
   });
 });

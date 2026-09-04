@@ -25,11 +25,15 @@ import {
   createRafLatestScheduler,
   type ContinuousInputStrategy,
 } from '@utils/animation/rafLatestScheduler';
-import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
+import {
+  EDITOR_BOUNDS_LIMITS,
+  type CanonicalEditorDocumentV1,
+} from '@src/types/editor';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import {
   isElementResizable,
   isAspectLockedElement,
+  limitGroupGrowth,
   getElementBounds,
   calculateGroupBounds,
   elementBoundsChanged,
@@ -502,20 +506,20 @@ const GroupResizeHandles = ({
         );
       }
 
-      // 최소 크기 보장
-      newGroupWidth = Math.max(MIN_SIZE, newGroupWidth);
-      newGroupHeight = Math.max(MIN_SIZE, newGroupHeight);
-
-      // 요소 하한 기준 그룹 최소 크기. 스냅이 maxShrink로 잘라 둔 델타를 다시 줄이면
-      // 잡지 않은 가장자리를 고정한 채 되돌리고, 되돌린 축을 알려 그 축의 스냅을 무효화한다
-      const minGroupWidth = Math.max(
-        MIN_SIZE,
-        startGroupBounds.width - maxShrinkX,
-      );
-      const minGroupHeight = Math.max(
-        MIN_SIZE,
-        startGroupBounds.height - maxShrinkY,
-      );
+      // 요소 하한 기준 그룹 최소 크기 - 잡은 핸들이 움직이는 축만. 잡지 않은 축은 시작값
+      // 그대로 둔다 (얇은 그룹의 높이를 가로 핸들이 10으로 키우면 요소가 밀려난다)
+      // - 스냅이 maxShrink로 잘라 둔 델타를 다시 줄이면 잡지 않은 가장자리를 고정한 채
+      // 되돌리고, 되돌린 축을 알려 그 축의 스냅을 무효화한다
+      const minGroupWidth =
+        handle.dx === 0
+          ? startGroupBounds.width
+          : Math.max(MIN_SIZE, startGroupBounds.width - maxShrinkX);
+      const minGroupHeight =
+        handle.dy === 0
+          ? startGroupBounds.height
+          : Math.max(MIN_SIZE, startGroupBounds.height - maxShrinkY);
+      newGroupWidth = Math.max(minGroupWidth, newGroupWidth);
+      newGroupHeight = Math.max(minGroupHeight, newGroupHeight);
       const enforceMinGroupSize = (): { width: boolean; height: boolean } => {
         const clamped = { width: false, height: false };
         if (newGroupWidth < minGroupWidth) {
@@ -533,6 +537,34 @@ const GroupResizeHandles = ({
           clamped.height = true;
         }
         return clamped;
+      };
+
+      // 요소 상한(치수·저장 좌표)까지 한 번에. 후보를 요소에 투영해 넘치면 시작 →
+      // 후보 진행 배율을 줄인다. 되돌린 축은 하한과 같은 규칙으로 가이드에서 뺀다
+      const enforceGroupLimits = (): { width: boolean; height: boolean } => {
+        const clamped = enforceMinGroupSize();
+        const growth = limitGroupGrowth(
+          startElementBounds,
+          startGroupBounds,
+          {
+            x: newGroupX,
+            y: newGroupY,
+            width: newGroupWidth,
+            height: newGroupHeight,
+          },
+          handle,
+          EDITOR_BOUNDS_LIMITS,
+        );
+        if (growth.limitedWidth || growth.limitedHeight) {
+          newGroupX = growth.bounds.x;
+          newGroupY = growth.bounds.y;
+          newGroupWidth = growth.bounds.width;
+          newGroupHeight = growth.bounds.height;
+        }
+        return {
+          width: clamped.width || growth.limitedWidth,
+          height: clamped.height || growth.limitedHeight,
+        };
       };
 
       // === 스마트 가이드 스냅 적용 (그룹 바운딩 박스 기준) ===
@@ -616,11 +648,13 @@ const GroupResizeHandles = ({
         // Size Matching: 다른 요소와 동일한 크기로 스냅
         let sizeSnapResult: SizeSnapResult | null = null;
         if (sizeMatchGuidesEnabled) {
+          // 잡은 핸들이 움직이는 축만 - 가로 핸들이 그룹 높이를 바꾸면 안 된다
           sizeSnapResult = calculateSizeSnap(
             newGroupWidth,
             newGroupHeight,
             otherElements,
             'group',
+            { matchWidth: handle.dx !== 0, matchHeight: handle.dy !== 0 },
           );
 
           if (sizeSnapResult.didSnapWidth) {
@@ -642,7 +676,7 @@ const GroupResizeHandles = ({
 
         // 스냅이 요소 하한 아래로 내려갔으면 되돌린다. 되돌린 축의 정렬·간격·크기 일치는
         // 화면에서 성립하지 않으므로 가이드에서도 뺀다 - 가이드는 최종 결과를 따라야 한다
-        const clamped = enforceMinGroupSize();
+        const clamped = enforceGroupLimits();
         const alignSnapX = snapResult.didSnapX && !clamped.width;
         const alignSnapY = snapResult.didSnapY && !clamped.height;
         const sizeSnapWidth =
@@ -754,8 +788,8 @@ const GroupResizeHandles = ({
         }
       }
 
-      // 스마트 스냅을 건너뛴 경로도 같은 하한을 지킨다 (스냅 경로에서는 이미 적용돼 무변화)
-      enforceMinGroupSize();
+      // 스마트 스냅을 건너뛴 경로도 같은 하한·상한을 지킨다 (스냅 경로에서는 이미 적용돼 무변화)
+      enforceGroupLimits();
 
       // 각 리사이즈 가능한 요소에 그룹 변환 투영 (스냅 적용된 그룹 bounds 기준).
       // 스냅은 그룹 bounds에서만 처리하고, 비율 고정 요소는 단일 배율을 따른다
