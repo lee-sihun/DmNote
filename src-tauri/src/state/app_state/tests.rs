@@ -449,7 +449,6 @@ fn custom_tab_delete_preserves_unflushed_runtime_counters() {
                     id: tab_id.clone(),
                     name: "Delete".to_string(),
                 });
-                store.tab_order.push(tab_id.clone());
                 store.keys.insert(tab_id.clone(), Vec::new());
                 store.key_positions.insert(tab_id.clone(), Vec::new());
                 store.selected_key_type = tab_id.clone();
@@ -494,7 +493,6 @@ fn custom_tab_delete_preserves_unflushed_runtime_counters() {
                     runtime_counters,
                     |store| {
                         store.custom_tabs.retain(|tab| tab.id != tab_id);
-                        store.tab_order.retain(|id| id != &tab_id);
                         store.keys.remove(&tab_id);
                         store.key_positions.remove(&tab_id);
                         store.stat_positions.remove(&tab_id);
@@ -567,7 +565,6 @@ fn custom_tab_restore_history_preserves_unflushed_runtime_counters() {
                     id: tab_id.clone(),
                     name: "Before".to_string(),
                 });
-                store.tab_order.push(tab_id.clone());
                 store.keys.insert(tab_id.clone(), Vec::new());
                 store.key_positions.insert(tab_id.clone(), Vec::new());
                 Ok(())

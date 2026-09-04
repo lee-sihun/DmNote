@@ -1,5 +1,7 @@
 # 코드 품질 리팩터링 결과와 후속 계획
 
+> 아래 최초 완료 기록은 2026-08-31 기준이다. 2026-09-05 병합 재검토에서 이전 main 통합의 탭 정규화 누락을 발견해 수정했다. 최신 기준선과 재현·수정·검증 결과는 문서 끝의 「2026-09-05 병합 재검토」를 따른다.
+
 ## 목표와 판정 원칙
 
 리팩터링 기준 커밋은 `af1bc19c`이며 작업 브랜치는 `refactor/code-quality-modularization`이다. 최종 검증 기준선은 2.0.2 태그를 포함한 `origin/main`의 `4b4d6c22`다. 이번 작업의 최우선 조건은 **의도한 동작 변경이 없는 책임 분리**와 **작업 중 추가된 선행 변경의 완전한 수용**이다.
@@ -183,3 +185,46 @@ cargo test --lib --features asio-backend audio::engine
 - 대형 프론트엔드·백엔드 파일의 고가치 책임 경계 분리 완료
 - 마지막 독립 감사에서 즉시 진행할 추가 P0–P2 후보 없음
 - 실제 장치·GPU·native window가 필요한 항목과 기존 결함은 검증 조건을 붙여 후속 범위로 보존
+
+## 2026-09-05 병합 재검토
+
+### 검토 기준과 최신 main 통합
+
+- 검토한 PR #154 원본: `5c59f104668d211a456974c20e8eda3531618a56`
+- 최신 main: `926454969409dab92de1144d6b7f7309871feb57`
+- PR이 마지막으로 통합한 main `4b4d6c22` 이후 14개 커밋을 추가 통합했다. 텍스트 충돌은 없었다.
+- macOS 접근성 권한 자동 요청(`380a8f04`), macOS 설치 안내·기여자 표·릴리즈 노트 수정, Dependabot PR #156·#157·#158의 lockfile 변경을 보존했다.
+- 원래 분기점 `af1bc19c` 이후 main 변경 파일 114개 중 94개는 통합 결과와 바이트 단위로 동일했다. 나머지 20개는 리팩터링으로 분리된 모듈과 대조했다.
+
+### 발견하고 수정한 병합 누락
+
+`f3cdd7e0`은 탭 컬렉션 변경 시 `tabOrder`를 정규화하고 `barCount`를 유효 범위로 제한하는 계약을 도입했다. 이전 통합 커밋 `b85bfa77`에서는 필드와 함수 이름을 가져왔지만 아래 세 구현의 일부 동작을 누락했다.
+
+1. `store/legacy_transactions.rs`의 `commit_legacy_editor_transaction_inner`: `CustomTabs`·`PresetFull` 트랜잭션 updater 실행 후 탭 순서와 표시 개수를 정규화하는 처리가 빠졌다. updater가 탭 컬렉션만 변경하면 불완전한 순서가 히스토리에 남아 undo/redo가 `tab order is incomplete or contains invalid entries`로 실패할 수 있었다.
+2. `store/history_restore.rs`의 `commit_custom_tabs_history_locked`와 `commit_preset_full_history_locked`: `normalize_bar_count` 대신 스냅샷 값을 직접 대입했다. 범위를 벗어난 과거 값이 복원되는 것을 막던 main의 방어 처리가 사라졌다.
+3. 기존 테스트가 탭 순서를 직접 보정하도록 변경됐고, 프리셋 undo/redo 테스트의 순서·표시 개수 변경 및 assertion도 빠졌다. 이 때문에 원본 PR의 전체 테스트가 통과해도 위 누락을 발견하지 못했다.
+
+세 구현은 기존 모듈 경계를 유지하면서 최신 main의 처리와 동일하게 복원했다. main의 테스트 6개도 원래 계약으로 되돌렸다. 그중 탭 테스트 5개는 수정 전 실제 실패를 확인했으며, 프리셋 테스트는 사라진 순서·표시 개수 검증을 복원했다.
+
+추가한 회귀 테스트 2개는 탭·프리셋의 각 트랜잭션 진입점에서 중복·미등록·누락된 탭 순서, 표시 개수 0과 255, undo/redo 및 저장 파일 반영을 검사한다. 수정 전에는 불완전한 순서가 그대로 저장되고 표시 개수 0이 그대로 복원되는 실패를 확인했다.
+
+### 추가 대조 범위
+
+- Rust 함수 본문과 struct·enum·type·const·static 선언 3,920개를 구문 트리로 수집해 이동 전후 토큰을 대조했다. 주석·가시성을 제외한 3,847개가 동일했고, 나머지는 함수 추출, 모듈 경로, 테스트 fixture 경로, 포맷 차이와 ASIO 정책 주입점 등을 확인했다. 이름이 바뀐 ASIO 함수·상수와 OBS envelope 변환은 새 구현으로 추적했다. 이 비교는 전체 런타임 동작의 수학적 동일성 증명은 아니다.
+- main에서 추가된 프론트엔드 callback은 구문 트리 비교와 변경 내역 검토를 함께 사용했다. 탭 메타데이터 generation guard, counter resync 순서, pointer focus 예외, pending/active popup drag의 닫힘 구분, overlay 메뉴의 탭 순서를 확인했다.
+- Windows panel drag와 overlay 배치의 main 대비 차이는 모듈 경로·가시성·Clippy 보정이었다. 좌표 단위, native position 신뢰 판정, terminal outcome 로직의 추가 누락은 발견하지 못했다.
+- 자산 참조 수집, 30일 trash 격리, 복구 세션 sweep 생략, 인덱스 결합 배열 복구, editor/plugin 트랜잭션의 저장·rollback 경계를 대조했다.
+- Tauri command 150개의 이름과 등록 순서가 main과 동일하다. permissions, 생성 schema, 공개 타입·API 구현, `docs/content`의 계약 변경은 없다. OBS allowlist와 이벤트 forwarding도 유지된다.
+
+### 통합 결과의 로컬 검증
+
+- 최신 lockfile로 `npm ci --no-audit --no-fund` 실행
+- `npx tsc --noEmit`, `npm run lint`, `npm run format:check`, `npm run build` 통과
+- `npm run format` 실행 후 프론트엔드 변경 없음 확인
+- Vitest: 372개 파일 통과, 18개 파일 skip; 테스트 3,596개 통과, 18개 skip
+- Rust: `cargo test --all-targets --locked --quiet`에서 1,046개 통과, 6개 ignored
+- `cargo check --all-targets --locked`, `cargo clippy --all-targets --locked -- -D warnings` 통과
+- `asio-backend` feature의 all-target check·Clippy 통과, 오디오 정책 테스트 18개 통과
+- `cargo fmt --all` 실행 및 `cargo fmt --all -- --check`, `git diff --check` 통과
+
+Vitest의 기존 React `act(...)`·mock DOM prop·CSS parser stderr와 Vite의 700 kB 초과 chunk 경고는 남아 있다. Windows ASIO CI는 이 보정까지 포함한 PR 커밋에서 별도로 확인해야 한다. 실제 ASIO 장치, Windows 혼합 DPI 창 조작, Tauri WebView timing과 GPU 수명에 대한 기존 실기 검증 한계는 유지한다.

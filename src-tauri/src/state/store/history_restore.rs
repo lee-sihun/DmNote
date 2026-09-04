@@ -471,7 +471,8 @@ impl AppStore {
         target.document.apply_to_store(&mut scratch);
         scratch.custom_tabs = target.custom_tabs.clone();
         scratch.tab_order = target.tab_order.clone();
-        scratch.bar_count = target.bar_count;
+        scratch.bar_count =
+            crate::state::tab_metadata::normalize_bar_count(target.bar_count, &scratch.tab_order);
         scratch.selected_key_type = target.selected_key_type.clone();
         scratch.key_counters = project_history_key_counters(
             current_key_counters,
@@ -569,7 +570,8 @@ impl AppStore {
         target.document.apply_to_store(&mut scratch);
         scratch.custom_tabs = target.custom_tabs.clone();
         scratch.tab_order = target.tab_order.clone();
-        scratch.bar_count = target.bar_count;
+        scratch.bar_count =
+            crate::state::tab_metadata::normalize_bar_count(target.bar_count, &scratch.tab_order);
         scratch.selected_key_type = target.selected_key_type.clone();
         scratch.key_counters = project_history_key_counters(
             current_key_counters,

@@ -458,6 +458,19 @@ impl AppStore {
             scratch.key_counters = counters.clone();
         }
         let value = updater(&mut scratch)?;
+        if matches!(
+            history_options.scope,
+            Some(HistoryScope::CustomTabs | HistoryScope::PresetFull)
+        ) {
+            scratch.tab_order = crate::state::tab_metadata::normalize_tab_order(
+                &scratch.tab_order,
+                &scratch.custom_tabs,
+            );
+            scratch.bar_count = crate::state::tab_metadata::normalize_bar_count(
+                scratch.bar_count,
+                &scratch.tab_order,
+            );
+        }
         let plugin_reset_applied =
             history_options
                 .plugin_instances_reset
