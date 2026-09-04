@@ -1,5 +1,8 @@
 import { create } from 'zustand';
-import type { SpritePose } from '@src/types/key/sprites';
+import type {
+  SpriteReferenceNaturalSize,
+  SpritePose,
+} from '@src/types/key/sprites';
 
 /**
  * 스프라이트 편집 캔버스 프리뷰 - 자세 팝업이 열려 있는 동안 캔버스가 그 자세를
@@ -13,6 +16,8 @@ export interface SpriteEditPreview {
   poseId: string;
   /** composed poses에 없거나(신규 draft) 커밋 불가 상태일 때 그릴 스냅샷 */
   fallbackPose: SpritePose;
+  /** 담당 키 지정 전 고른 첫 상태 이미지의 기준 크기 */
+  referenceNaturalSize?: SpriteReferenceNaturalSize | null;
   /** 무효 draft 편집 중 - composed의 옛 canonical 값 대신 스냅샷을 우선한다 */
   preferFallback: boolean;
 }
@@ -21,6 +26,7 @@ const previewEquals = (a: SpriteEditPreview, b: SpriteEditPreview): boolean =>
   a.positionId === b.positionId &&
   a.poseId === b.poseId &&
   a.fallbackPose === b.fallbackPose &&
+  a.referenceNaturalSize === b.referenceNaturalSize &&
   a.preferFallback === b.preferFallback;
 
 interface SpriteEditPreviewStore {

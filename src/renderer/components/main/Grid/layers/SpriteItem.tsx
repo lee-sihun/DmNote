@@ -6,7 +6,10 @@ import {
   isErrorForCurrentSrc,
   useFailedImageSrcs,
 } from '@hooks/overlay/useFailedImageSrcs';
-import { resolveImageSource } from '@utils/core/imageSource';
+import {
+  resolveImageSource,
+  toRenderableImageRef,
+} from '@utils/core/imageSource';
 import { computeSpriteImageStyle } from '@utils/sprite/spriteImageStyles';
 import SpriteImagePlaceholder from '@components/main/common/SpriteImagePlaceholder';
 import { resolvePoseImage } from '@utils/sprite/poseResolver';
@@ -67,6 +70,15 @@ const SpriteItem = ({
       : position.poses.find((pose) => pose.poseId === posePreview.poseId) ??
         posePreview.fallbackPose
     : null;
+  const effectivePosition =
+    posePreview?.referenceNaturalSize &&
+    toRenderableImageRef(position.baseImage) === null &&
+    !position.referenceNaturalSize
+      ? {
+          ...position,
+          referenceNaturalSize: posePreview.referenceNaturalSize,
+        }
+      : position;
 
   // 유실 이미지를 그대로 두면 캔버스에 깨진 아이콘이 박히고, 송출 화면(오버레이)은
   // 폴백을 그려 미리보기가 결과와 어긋난다. 폴백 규칙은 오버레이와 같다.
@@ -83,13 +95,13 @@ const SpriteItem = ({
   );
   // 이미지·원본 크기는 한 벌로 움직인다 - 폴백도 기본 이미지 배치로 함께 간다
   let visual = previewPose
-    ? spritePoseVisual(position, previewPose)
+    ? spritePoseVisual(effectivePosition, previewPose)
     : spriteIdleVisual(position);
   if (imageSrc && failedImageSrcs.has(imageSrc)) {
     imageSrc = fallbackSrc;
     visual = spriteIdleVisual(position);
   }
-  const placement = placeSpriteVisual(position, visual);
+  const placement = placeSpriteVisual(effectivePosition, visual);
   const transform = previewPose
     ? previewPose.transform
     : position.idleTransform;

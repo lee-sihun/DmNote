@@ -47,6 +47,7 @@ import {
   type ReactiveSpritePosition,
   type SpriteActivation,
   type SpriteAnchor,
+  type SpriteReferenceNaturalSize,
   type SpritePose,
   type SpriteTransform,
 } from '@src/types/key/sprites';
@@ -110,6 +111,25 @@ const isSameEditorTarget = (
   current.positionId === next.positionId &&
   current.poseId === next.poseId;
 
+// 담당 키 지정 전 고른 이미지의 기준 크기는 최신 저장값이 없을 때만 채운다
+const initialPoseReferencePatch = (
+  current: ReactiveSpritePosition,
+  reference: SpriteReferenceNaturalSize | null | undefined,
+): Partial<ReactiveSpritePosition> =>
+  reference &&
+  toRenderableImageRef(current.baseImage) === null &&
+  !current.referenceNaturalSize
+    ? { referenceNaturalSize: reference }
+    : {};
+
+const retainDraftReference = (
+  poses: SpritePose[],
+  reference: SpriteReferenceNaturalSize | null | undefined,
+): SpriteReferenceNaturalSize | null | undefined =>
+  poses.some((pose) => toRenderableImageRef(pose.imageOverride) !== null)
+    ? reference
+    : undefined;
+
 interface SingleSpritePanelProps {
   setPanelElement: (el: HTMLDivElement | null) => void;
   panelElement: HTMLDivElement | null;
@@ -163,6 +183,7 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
   const [posesDraft, setPosesDraft] = useState<{
     id: string;
     poses: SpritePose[];
+    referenceNaturalSize?: SpriteReferenceNaturalSize | null;
   } | null>(null);
   const [pendingPoseWrites, setPendingPoseWrites] = useState<
     ReadonlySet<symbol>
@@ -232,7 +253,7 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
       if (resizeLanded) {
         if (posesDraft && posesDraft.id === canonicalPosition.id) {
           setPosesDraft({
-            id: posesDraft.id,
+            ...posesDraft,
             poses: projectSpriteResize(
               { ...lastPositionSnapshot, poses: posesDraft.poses },
               nextBounds,
@@ -272,11 +293,18 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
           stableStringify(canonicalPosition.poses);
       if (pivotLanded) {
         const rebased = spritePivotChangePatch(
-          { ...lastPositionSnapshot, poses: posesDraft.poses },
+          {
+            ...lastPositionSnapshot,
+            ...initialPoseReferencePatch(
+              lastPositionSnapshot,
+              posesDraft.referenceNaturalSize,
+            ),
+            poses: posesDraft.poses,
+          },
           canonicalPosition.pivot,
         );
         if (rebased) {
-          setPosesDraft({ id: posesDraft.id, poses: rebased.poses });
+          setPosesDraft({ ...posesDraft, poses: rebased.poses });
           draftRebased = true;
         }
       }
@@ -295,7 +323,7 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
     ) {
       if (pendingPoseWrites.size > 0) {
         setPosesDraft({
-          id: posesDraft.id,
+          ...posesDraft,
           poses: rebaseSpritePoseIntent(
             lastPositionSnapshot.poses,
             posesDraft.poses,
@@ -333,6 +361,8 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
     posesDraft && posesDraft.id === position.id
       ? posesDraft.poses
       : position.poses;
+  const pendingReference =
+    posesDraft?.id === position.id ? posesDraft.referenceNaturalSize : null;
   const duplicatePose = findDuplicateTriggerPose(displayPoses);
   const hasEmptyTriggerPose = displayPoses.some(
     (pose) => pose.triggers.length === 0,
@@ -367,6 +397,7 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
         positionId: activeEditorTarget.positionId,
         poseId: editingPose.poseId,
         fallbackPose: editingPose,
+        referenceNaturalSize: pendingReference,
         // 무효 draft는 canonical에 착지하지 못하므로 캔버스가 스냅샷을 우선한다
         preferFallback:
           !posesCommittable ||
@@ -381,6 +412,7 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
     posesCommittable,
     posesDraft,
     position.id,
+    pendingReference,
   ]);
   // 언마운트 잔류 방지 - layout 시점에 회수해 한 프레임 잔상도 남기지 않는다
   useLayoutEffect(() => () => useSpriteEditPreviewStore.getState().clear(), []);
@@ -541,18 +573,20 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
     previewFields(patch);
   };
 
-  // extra는 poses와 한 커밋으로 실어야 하는 스프라이트 필드(기준 크기 초기화 등)
+  // 새 이미지의 기준 크기는 자세와 한 커밋으로 저장
   const updatePoses = (
     rawPoses: SpritePose[],
-    extra: Partial<ReactiveSpritePosition> = {},
-    generateExtra?: (
-      current: ReactiveSpritePosition,
-    ) => Partial<ReactiveSpritePosition> | null,
+    initialReference?: SpriteReferenceNaturalSize,
+    imagePoseId?: string,
   ) => {
     // draft와 커밋이 같은 wire 정규형(트리거 정렬·dedup)을 공유해야
     // canonical 착지 비교가 일치해 draft가 제때 풀린다
     const nextPoses = toSpriteWireShape({ ...position, poses: rawPoses }).poses;
-    setPosesDraft({ id: position.id, poses: nextPoses });
+    const referenceNaturalSize = retainDraftReference(
+      nextPoses,
+      pendingReference ?? initialReference,
+    );
+    setPosesDraft({ id: position.id, poses: nextPoses, referenceNaturalSize });
     const blocked =
       nextPoses.some((pose) => pose.triggers.length === 0) ||
       findDuplicateTriggerPose(nextPoses) !== null;
@@ -563,12 +597,24 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
     }
     const basePoses = canonicalPosition.poses;
     trackPoseWrite(
-      commitFields({ ...extra, poses: nextPoses }, (current) => {
-        const latestExtra = generateExtra ? generateExtra(current) : extra;
-        if (latestExtra === null) return null;
+      commitFields({ poses: nextPoses }, (current) => {
+        if (
+          imagePoseId &&
+          !current.poses.some((pose) => pose.poseId === imagePoseId)
+        ) {
+          return null;
+        }
+        const poses = rebaseSpritePoseIntent(
+          basePoses,
+          nextPoses,
+          current.poses,
+        );
         return {
-          ...latestExtra,
-          poses: rebaseSpritePoseIntent(basePoses, nextPoses, current.poses),
+          ...initialPoseReferencePatch(
+            current,
+            retainDraftReference(poses, referenceNaturalSize),
+          ),
+          poses,
         };
       }),
     );
@@ -592,7 +638,15 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
         pose.poseId === targetPoseId ? { ...pose, ...patch } : pose,
       ),
     }).poses;
-    setPosesDraft({ id: position.id, poses: nextPoses });
+    const referenceNaturalSize = retainDraftReference(
+      nextPoses,
+      pendingReference,
+    );
+    setPosesDraft({
+      id: position.id,
+      poses: nextPoses,
+      referenceNaturalSize,
+    });
     const blocked =
       nextPoses.some((pose) => pose.triggers.length === 0) ||
       findDuplicateTriggerPose(nextPoses) !== null;
@@ -609,7 +663,11 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
           nextPoses,
           current.poses,
         );
-        if (!generatePatch) return { poses: rebasedPoses };
+        const referencePatch = initialPoseReferencePatch(
+          current,
+          retainDraftReference(rebasedPoses, referenceNaturalSize),
+        );
+        if (!generatePatch) return { ...referencePatch, poses: rebasedPoses };
         const currentPose = current.poses.find(
           (pose) => pose.poseId === targetPoseId,
         );
@@ -617,6 +675,7 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
         const latestPatch = generatePatch(current, currentPose);
         if (!latestPatch) return null;
         return {
+          ...referencePatch,
           poses: rebasedPoses.map((pose) =>
             pose.poseId === targetPoseId ? { ...pose, ...latestPatch } : pose,
           ),
@@ -634,6 +693,7 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
       positionId: position.id,
       poseId: editingPose.poseId,
       fallbackPose: { ...editingPose, ...patch },
+      referenceNaturalSize: pendingReference,
       preferFallback: true,
     });
   };
@@ -662,7 +722,14 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
   const posePivotPatch = (next: SpriteAnchor | null) => {
     const base = editBasePose();
     return base
-      ? spritePosePivotChangePatch(canonicalPosition, base, next)
+      ? spritePosePivotChangePatch(
+          {
+            ...canonicalPosition,
+            ...initialPoseReferencePatch(canonicalPosition, pendingReference),
+          },
+          base,
+          next,
+        )
       : null;
   };
 
@@ -713,6 +780,7 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
         positionId: position.id,
         poseId: editingPose.poseId,
         fallbackPose: editingPose,
+        referenceNaturalSize: pendingReference,
         preferFallback: true,
       });
     }
@@ -746,18 +814,22 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
   useLayoutEffect(() => {
     const store = useSpritePoseHandleStore.getState();
     if (activeEditorTarget && editingPose) {
+      const effectivePosition = {
+        ...position,
+        ...initialPoseReferencePatch(position, pendingReference),
+      };
       store.setSession({
-        positionId: position.id,
+        positionId: effectivePosition.id,
         poseId: editingPose.poseId,
-        origin: { dx: position.dx, dy: position.dy },
-        width: position.width,
-        height: position.height,
-        pivot: position.pivot,
-        imagePivot: editingPose.pivot ?? position.pivot,
+        origin: { dx: effectivePosition.dx, dy: effectivePosition.dy },
+        width: effectivePosition.width,
+        height: effectivePosition.height,
+        pivot: effectivePosition.pivot,
+        imagePivot: editingPose.pivot ?? effectivePosition.pivot,
         followsBasePivot: editingPose.pivot == null,
         placement: placeSpriteVisual(
-          position,
-          spritePoseVisual(position, editingPose),
+          effectivePosition,
+          spritePoseVisual(effectivePosition, editingPose),
         ),
         transform: editingPose.transform,
         preview: (next) => handleCallbacksRef.current?.preview(next),
@@ -773,7 +845,7 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
     }
     // 배치 기하가 위치의 여러 필드(상자·기준점·기준 크기·기본 이미지)에서
     // 파생되므로 위치 전체를 의존성으로 둔다
-  }, [activeEditorTarget, editingPose, position]);
+  }, [activeEditorTarget, editingPose, position, pendingReference]);
   // 언마운트 뒤에도 핸들은 드래그 시작 시점 세션을 붙들고 취소를 부른다. 마지막
   // 렌더의 배선이 남아 있으면 무효 draft를 fallback preview로 다시 발행해 버린 자세가
   // 캔버스에 남으므로, 게스처만 닫는 배선으로 바꾼 뒤 세션을 내린다
@@ -1057,18 +1129,6 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
     // 자세가 사라졌으면 폐기하고, 최신 poses에 다시 결합한다
     const latest = latestPosesRef.current;
     if (!latest.some((pose) => pose.poseId === poseId)) return;
-    // 기본 이미지도 기준 크기도 없으면 첫 자세 이미지가 기준이 된다 (source 없음)
-    const referenceInit: Partial<ReactiveSpritePosition> =
-      toRenderableImageRef(position.baseImage) === null &&
-      !position.referenceNaturalSize
-        ? {
-            referenceNaturalSize: {
-              source: null,
-              width: picked.width,
-              height: picked.height,
-            },
-          }
-        : {};
     updatePoses(
       latest.map((pose) =>
         pose.poseId === poseId
@@ -1083,14 +1143,8 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
             }
           : pose,
       ),
-      referenceInit,
-      (current) => {
-        if (!current.poses.some((pose) => pose.poseId === poseId)) return null;
-        return toRenderableImageRef(current.baseImage) === null &&
-          !current.referenceNaturalSize
-          ? referenceInit
-          : {};
-      },
+      { source: null, width: picked.width, height: picked.height },
+      poseId,
     );
   };
 

@@ -215,6 +215,36 @@ describe('SpriteItem 자세 편집 프리뷰', () => {
     useSpriteEditPreviewStore.setState({ preview: null });
   });
 
+  it('무효 상태의 기준 이미지 크기는 캔버스 배율에 반영되고 최신 기준 크기를 덮지 않는다', () => {
+    const previewPose = pose('pose-1', {
+      imageOverride: 'pose.png',
+      imageOverrideMetrics: { source: 'pose.png', width: 32, height: 32 },
+    });
+    act(() =>
+      useSpriteEditPreviewStore.getState().publish({
+        kind: 'pose',
+        positionId: SPRITE_ID,
+        poseId: previewPose.poseId,
+        fallbackPose: previewPose,
+        preferFallback: true,
+        referenceNaturalSize: { source: null, width: 64, height: 32 },
+      }),
+    );
+    const position = spritePosition({ width: 200, height: 150 });
+    let host = renderSprite(position);
+    let img = host?.querySelector<HTMLImageElement>('img');
+    expect(img?.style.width).toBe('100px');
+    expect(img?.style.height).toBe('150px');
+
+    host = renderSprite({
+      ...position,
+      referenceNaturalSize: { source: null, width: 32, height: 32 },
+    });
+    img = host?.querySelector<HTMLImageElement>('img');
+    expect(img?.style.width).toBe('200px');
+    expect(img?.style.height).toBe('150px');
+  });
+
   it('발행된 자세는 composed poses의 최신 값이 스냅샷보다 우선한다', () => {
     act(() =>
       useSpriteEditPreviewStore.getState().publish({

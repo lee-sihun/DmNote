@@ -12,6 +12,10 @@ import {
 } from '@stores/grid/useSpritePoseHandleStore';
 import { makeSpritePose } from '@utils/sprite/spriteFixtures';
 import { projectSpriteResize } from '@utils/sprite/resizeProjection';
+import {
+  placeSpriteVisual,
+  spritePoseVisual,
+} from '@utils/sprite/spritePlacement';
 import type { CanonicalReactiveSpritePosition } from '@src/types/editor';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -1889,6 +1893,245 @@ describe('SingleSpritePanel 자세 편집', () => {
       current: CanonicalReactiveSpritePosition,
     ) => Partial<CanonicalReactiveSpritePosition> | null;
     expect(generatePatch(spritePosition({ poses: [] }))).toBeNull();
+  });
+
+  it('담당 키보다 먼저 고른 첫 상태 이미지의 기준 크기를 후속 저장에 보존한다', async () => {
+    const position = spritePosition();
+    seed(position);
+    render(position);
+
+    act(() => buttonByText('propertiesPanel.spriteAddPose').click());
+    mocks.imageLoad.mockResolvedValue({
+      success: true,
+      imagePath: 'first-pose.png',
+    });
+    const pickButton = posePopup()!.querySelector<HTMLButtonElement>(
+      'button[aria-label="propertiesPanel.spriteImageSelect"]',
+    )!;
+    await act(async () => pickButton.click());
+    expect(mocks.patchPosition).not.toHaveBeenCalled();
+    expect(
+      useSpriteEditPreviewStore.getState().preview?.referenceNaturalSize,
+    ).toEqual({ source: null, width: 64, height: 32 });
+
+    await act(async () =>
+      triggerDropdownByText('propertiesPanel.spriteTriggerPlaceholder').click(),
+    );
+    await act(async () => menuOptionByText('A').click());
+
+    expect(mocks.patchPosition).toHaveBeenCalledOnce();
+    const generatePatch = mocks.patchPosition.mock.calls[0][4] as (
+      current: CanonicalReactiveSpritePosition,
+    ) => Partial<CanonicalReactiveSpritePosition>;
+    expect(generatePatch(position).referenceNaturalSize).toEqual({
+      source: null,
+      width: 64,
+      height: 32,
+    });
+    const restored = JSON.parse(
+      JSON.stringify({
+        ...position,
+        ...generatePatch(position),
+      }),
+    ) as CanonicalReactiveSpritePosition;
+    const secondPose = makeSpritePose({
+      imageOverride: 'second-pose.png',
+      imageOverrideMetrics: {
+        source: 'second-pose.png',
+        width: 32,
+        height: 32,
+      },
+    });
+    expect(
+      placeSpriteVisual(restored, spritePoseVisual(restored, secondPose)).rect,
+    ).toEqual({ x: 50, y: 0, width: 100, height: 150 });
+
+    // 대기 중 기본 이미지나 다른 상태가 기준 크기를 먼저 저장했으면 최신값 유지
+    expect(
+      generatePatch(
+        spritePosition({
+          baseImage: 'base.png',
+          referenceNaturalSize: { source: 'base.png', width: 200, height: 100 },
+        }),
+      ),
+    ).not.toHaveProperty('referenceNaturalSize');
+    expect(
+      generatePatch(
+        spritePosition({
+          referenceNaturalSize: { source: null, width: 120, height: 90 },
+        }),
+      ),
+    ).not.toHaveProperty('referenceNaturalSize');
+  });
+
+  it('미저장 첫 이미지 기준 크기는 다른 상태 이미지와 핸들에도 같은 배율을 준다', async () => {
+    const position = spritePosition();
+    seed(position);
+    render(position);
+
+    act(() => buttonByText('propertiesPanel.spriteAddPose').click());
+    mocks.imageLoad.mockResolvedValue({
+      success: true,
+      imagePath: 'first-pose.png',
+    });
+    await act(async () =>
+      posePopup()!
+        .querySelector<HTMLButtonElement>(
+          'button[aria-label="propertiesPanel.spriteImageSelect"]',
+        )!
+        .click(),
+    );
+
+    act(() => buttonByText('propertiesPanel.spriteAddPose').click());
+    mocks.imageLoad.mockResolvedValue({
+      success: true,
+      imagePath: 'second-pose.png',
+    });
+    mocks.probeImageSize.mockResolvedValue({ width: 32, height: 32 });
+    await act(async () =>
+      posePopup()!
+        .querySelector<HTMLButtonElement>(
+          'button[aria-label="propertiesPanel.spriteImageSelect"]',
+        )!
+        .click(),
+    );
+
+    expect(mocks.patchPosition).not.toHaveBeenCalled();
+    expect(
+      useSpriteEditPreviewStore.getState().preview?.referenceNaturalSize,
+    ).toEqual({ source: null, width: 64, height: 32 });
+    expect(useSpritePoseHandleStore.getState().session?.placement.rect).toEqual(
+      { x: 50, y: 0, width: 100, height: 150 },
+    );
+  });
+
+  it.each([
+    { savedReference: null, keepKeyPose: false },
+    {
+      savedReference: { source: null, width: 120, height: 90 },
+      keepKeyPose: false,
+    },
+    { savedReference: null, keepKeyPose: true },
+    {
+      savedReference: { source: null, width: 120, height: 90 },
+      keepKeyPose: true,
+    },
+  ])(
+    '이미지 초안 삭제는 보류 기준 크기만 버린다: 저장값 $savedReference, 키 자세 유지 $keepKeyPose',
+    async ({ savedReference, keepKeyPose }) => {
+      let position = spritePosition({
+        referenceNaturalSize: savedReference,
+        poses: keepKeyPose ? [makeSpritePose({ triggers: [KEY_ID_A] })] : [],
+      });
+      seed(position);
+      render(position);
+
+      act(() => buttonByText('propertiesPanel.spriteAddPose').click());
+      mocks.imageLoad.mockResolvedValue({
+        success: true,
+        imagePath: 'discarded-pose.png',
+      });
+      await act(async () =>
+        posePopup()!
+          .querySelector<HTMLButtonElement>(
+            'button[aria-label="propertiesPanel.spriteImageSelect"]',
+          )!
+          .click(),
+      );
+      expect(mocks.patchPosition).not.toHaveBeenCalled();
+
+      openPoseRowMenu(poseEditButtons().at(-1)!);
+      await flushPreview();
+      await act(async () => menuItemByText('propertiesPanel.delete').click());
+
+      const generateDelete = mocks.patchPosition.mock.calls[0][4] as (
+        current: CanonicalReactiveSpritePosition,
+      ) => Partial<CanonicalReactiveSpritePosition>;
+      expect(generateDelete(position)).not.toHaveProperty(
+        'referenceNaturalSize',
+      );
+      position = { ...position, ...generateDelete(position) };
+      expect(position.referenceNaturalSize).toEqual(savedReference);
+      expect(position.poses).toHaveLength(keepKeyPose ? 1 : 0);
+      act(() => seed(position));
+      render(position);
+      mocks.patchPosition.mockClear();
+
+      act(() => buttonByText('propertiesPanel.spriteAddPose').click());
+      mocks.imageLoad.mockResolvedValue({
+        success: true,
+        imagePath: 'new-pose.png',
+      });
+      mocks.probeImageSize.mockResolvedValue({ width: 32, height: 32 });
+      await act(async () =>
+        posePopup()!
+          .querySelector<HTMLButtonElement>(
+            'button[aria-label="propertiesPanel.spriteImageSelect"]',
+          )!
+          .click(),
+      );
+      await act(async () =>
+        triggerDropdownByText(
+          'propertiesPanel.spriteTriggerPlaceholder',
+        ).click(),
+      );
+      await act(async () => menuOptionByText(keepKeyPose ? 'S' : 'A').click());
+
+      const generateNewPose = mocks.patchPosition.mock.calls[0][4] as (
+        current: CanonicalReactiveSpritePosition,
+      ) => Partial<CanonicalReactiveSpritePosition>;
+      position = { ...position, ...generateNewPose(position) };
+      expect(position.referenceNaturalSize).toEqual(
+        savedReference ?? { source: null, width: 32, height: 32 },
+      );
+    },
+  );
+
+  it('이미지 초안 초기화 후 키만 지정해도 버린 기준 크기를 저장하지 않는다', async () => {
+    const position = spritePosition();
+    seed(position);
+    render(position);
+    act(() => buttonByText('propertiesPanel.spriteAddPose').click());
+    mocks.imageLoad.mockResolvedValue({
+      success: true,
+      imagePath: 'discarded-pose.png',
+    });
+    await act(async () =>
+      posePopup()!
+        .querySelector<HTMLButtonElement>(
+          'button[aria-label="propertiesPanel.spriteImageSelect"]',
+        )!
+        .click(),
+    );
+    await act(async () =>
+      posePopup()!
+        .querySelector<HTMLButtonElement>(
+          'button[aria-label="imagePicker.reset"]',
+        )!
+        .click(),
+    );
+    expect(mocks.patchPosition).not.toHaveBeenCalled();
+    expect(
+      useSpriteEditPreviewStore.getState().preview?.referenceNaturalSize,
+    ).toBeUndefined();
+
+    await act(async () =>
+      triggerDropdownByText('propertiesPanel.spriteTriggerPlaceholder').click(),
+    );
+    await act(async () => menuOptionByText('A').click());
+
+    const generatePatch = mocks.patchPosition.mock.calls[0][4] as (
+      current: CanonicalReactiveSpritePosition,
+    ) => Partial<CanonicalReactiveSpritePosition>;
+    const patch = generatePatch(position);
+    expect(patch).not.toHaveProperty('referenceNaturalSize');
+    expect(patch.poses).toEqual([
+      expect.objectContaining({
+        triggers: [KEY_ID_A],
+        imageOverride: null,
+        imageOverrideMetrics: null,
+      }),
+    ]);
   });
 
   it('기준점 커밋 착지는 무효 draft를 같은 보정으로 rebase해 편집 중인 값을 지키지 않는다', async () => {
