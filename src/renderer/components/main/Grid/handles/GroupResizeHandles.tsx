@@ -29,9 +29,12 @@ import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import {
   isElementResizable,
+  isAspectLockedElement,
   getElementBounds,
   calculateGroupBounds,
   elementBoundsChanged,
+  projectGroupElementBounds,
+  shrinkLimitSize,
   type Bounds,
   type SelectedElement,
   type ElementBounds,
@@ -369,8 +372,8 @@ const GroupResizeHandles = ({
     ): number => {
       if (!Number.isFinite(groupSize) || groupSize <= 0) return 0;
       let minScale = 0;
-      for (const { bounds } of boundsList) {
-        const size = axis === 'x' ? bounds.width : bounds.height;
+      for (const { element, bounds } of boundsList) {
+        const size = shrinkLimitSize(element, bounds, axis);
         if (!Number.isFinite(size) || size <= 0) continue;
         if (size >= MIN_SIZE) {
           minScale = Math.max(minScale, MIN_SIZE / size);
@@ -433,7 +436,8 @@ const GroupResizeHandles = ({
         handleDir: -1 | 0 | 1,
         maxShrink: number,
       ): number => {
-        if (!Number.isFinite(maxShrink) || maxShrink <= 0) return delta;
+        // maxShrink 0은 더 못 줄인다는 뜻이라 여기서도 잘라야 한다
+        if (!Number.isFinite(maxShrink) || maxShrink < 0) return delta;
         const maxSnapped =
           snapSize > 0
             ? Math.floor(maxShrink / snapSize) * snapSize
@@ -501,6 +505,35 @@ const GroupResizeHandles = ({
       // 최소 크기 보장
       newGroupWidth = Math.max(MIN_SIZE, newGroupWidth);
       newGroupHeight = Math.max(MIN_SIZE, newGroupHeight);
+
+      // 요소 하한 기준 그룹 최소 크기. 스냅이 maxShrink로 잘라 둔 델타를 다시 줄이면
+      // 잡지 않은 가장자리를 고정한 채 되돌리고, 되돌린 축을 알려 그 축의 스냅을 무효화한다
+      const minGroupWidth = Math.max(
+        MIN_SIZE,
+        startGroupBounds.width - maxShrinkX,
+      );
+      const minGroupHeight = Math.max(
+        MIN_SIZE,
+        startGroupBounds.height - maxShrinkY,
+      );
+      const enforceMinGroupSize = (): { width: boolean; height: boolean } => {
+        const clamped = { width: false, height: false };
+        if (newGroupWidth < minGroupWidth) {
+          if (handle.dx === -1) {
+            newGroupX = newGroupX + newGroupWidth - minGroupWidth;
+          }
+          newGroupWidth = minGroupWidth;
+          clamped.width = true;
+        }
+        if (newGroupHeight < minGroupHeight) {
+          if (handle.dy === -1) {
+            newGroupY = newGroupY + newGroupHeight - minGroupHeight;
+          }
+          newGroupHeight = minGroupHeight;
+          clamped.height = true;
+        }
+        return clamped;
+      };
 
       // === 스마트 가이드 스냅 적용 (그룹 바운딩 박스 기준) ===
       const smartGuidesStore = useSmartGuidesStore.getState();
@@ -607,17 +640,37 @@ const GroupResizeHandles = ({
           }
         }
 
+        // 스냅이 요소 하한 아래로 내려갔으면 되돌린다. 되돌린 축의 정렬·간격·크기 일치는
+        // 화면에서 성립하지 않으므로 가이드에서도 뺀다 - 가이드는 최종 결과를 따라야 한다
+        const clamped = enforceMinGroupSize();
+        const alignSnapX = snapResult.didSnapX && !clamped.width;
+        const alignSnapY = snapResult.didSnapY && !clamped.height;
+        const sizeSnapWidth =
+          sizeSnapResult?.didSnapWidth === true && !clamped.width;
+        const sizeSnapHeight =
+          sizeSnapResult?.didSnapHeight === true && !clamped.height;
+        const activeGuides = snapResult.guides.filter((guide) =>
+          guide.type === 'vertical' ? alignSnapX : alignSnapY,
+        );
+        const activeSpacingGuides = (snapResult.spacingGuides ?? []).filter(
+          (guide) =>
+            guide.direction === 'horizontal' ? alignSnapX : alignSnapY,
+        );
+        const activeSizeMatchGuides = (
+          sizeSnapResult?.sizeMatchGuides ?? []
+        ).filter((guide) =>
+          guide.dimension === 'width' ? sizeSnapWidth : sizeSnapHeight,
+        );
+
         // 가이드라인 업데이트
         const hasAlignSnap =
           (handle.dx !== 0 &&
-            snapResult.didSnapX &&
+            alignSnapX &&
             !(snapResult.didSpacingSnapX && !spacingGuidesEnabled)) ||
           (handle.dy !== 0 &&
-            snapResult.didSnapY &&
+            alignSnapY &&
             !(snapResult.didSpacingSnapY && !spacingGuidesEnabled));
-        const hasSizeSnap =
-          sizeSnapResult &&
-          (sizeSnapResult.didSnapWidth || sizeSnapResult.didSnapHeight);
+        const hasSizeSnap = sizeSnapWidth || sizeSnapHeight;
 
         if (hasAlignSnap || hasSizeSnap) {
           const snappedBounds = calculateBounds(
@@ -630,14 +683,10 @@ const GroupResizeHandles = ({
           smartGuidesStore.setDraggedBounds(snappedBounds);
 
           if (hasAlignSnap) {
-            smartGuidesStore.setActiveGuides(snapResult.guides);
-            if (
-              spacingGuidesEnabled &&
-              snapResult.spacingGuides &&
-              snapResult.spacingGuides.length > 0
-            ) {
+            smartGuidesStore.setActiveGuides(activeGuides);
+            if (spacingGuidesEnabled && activeSpacingGuides.length > 0) {
               // 핸들 방향에 따라 간격 가이드 필터링
-              const filteredSpacingGuides = snapResult.spacingGuides.filter(
+              const filteredSpacingGuides = activeSpacingGuides.filter(
                 (guide: SpacingGuide) => {
                   // 수평 방향 간격 가이드 (좌우 간격)
                   if (guide.direction === 'horizontal') {
@@ -696,9 +745,7 @@ const GroupResizeHandles = ({
           }
 
           if (hasSizeSnap) {
-            smartGuidesStore.setSizeMatchGuides(
-              sizeSnapResult!.sizeMatchGuides,
-            );
+            smartGuidesStore.setSizeMatchGuides(activeSizeMatchGuides);
           } else {
             smartGuidesStore.setSizeMatchGuides([]);
           }
@@ -707,43 +754,28 @@ const GroupResizeHandles = ({
         }
       }
 
-      // 최소 크기 재보장 (스마트 가이드 스냅 후)
-      newGroupWidth = Math.max(MIN_SIZE, newGroupWidth);
-      newGroupHeight = Math.max(MIN_SIZE, newGroupHeight);
+      // 스마트 스냅을 건너뛴 경로도 같은 하한을 지킨다 (스냅 경로에서는 이미 적용돼 무변화)
+      enforceMinGroupSize();
 
-      // 스케일 비율 계산 (스냅 적용된 그룹 bounds 기준)
-      const scaleX =
-        startGroupBounds.width > 0 ? newGroupWidth / startGroupBounds.width : 1;
-      const scaleY =
-        startGroupBounds.height > 0
-          ? newGroupHeight / startGroupBounds.height
-          : 1;
-
-      // 각 리사이즈 가능한 요소의 새 위치/크기 계산 (그룹 스케일만 적용)
+      // 각 리사이즈 가능한 요소에 그룹 변환 투영 (스냅 적용된 그룹 bounds 기준).
+      // 스냅은 그룹 bounds에서만 처리하고, 비율 고정 요소는 단일 배율을 따른다
+      const nextGroupBounds: Bounds = {
+        x: newGroupX,
+        y: newGroupY,
+        width: newGroupWidth,
+        height: newGroupHeight,
+      };
       const newElementBounds: ElementBounds[] = startElementBounds.map(
-        ({ element, bounds }) => {
-          // 그룹 내에서의 상대 위치
-          const relativeX = bounds.x - startGroupBounds.x;
-          const relativeY = bounds.y - startGroupBounds.y;
-
-          // 새 위치 계산 (스케일 적용)
-          const newX = newGroupX + relativeX * scaleX;
-          const newY = newGroupY + relativeY * scaleY;
-          const newWidth = bounds.width * scaleX;
-          const newHeight = bounds.height * scaleY;
-
-          // 내부 요소는 스케일만 적용해 비율을 유지한다. (스냅은 그룹 bounds에서만 처리)
-
-          return {
+        ({ element, bounds }) => ({
+          element,
+          bounds: projectGroupElementBounds(
             element,
-            bounds: {
-              x: newX,
-              y: newY,
-              width: newWidth,
-              height: newHeight,
-            },
-          };
-        },
+            bounds,
+            startGroupBounds,
+            nextGroupBounds,
+            handle,
+          ),
+        }),
       );
 
       // 새 그룹 bounds 계산
@@ -754,12 +786,19 @@ const GroupResizeHandles = ({
       let finalGroupMaxX = newGroupX + newGroupWidth;
       let finalGroupMaxY = newGroupY + newGroupHeight;
 
-      // 리사이즈 불가능한 요소들 (원래 위치 유지)
-      for (const { bounds } of nonResizableElementBounds || []) {
+      const includeInGroup = (bounds: Bounds) => {
         finalGroupMinX = Math.min(finalGroupMinX, bounds.x);
         finalGroupMinY = Math.min(finalGroupMinY, bounds.y);
         finalGroupMaxX = Math.max(finalGroupMaxX, bounds.x + bounds.width);
         finalGroupMaxY = Math.max(finalGroupMaxY, bounds.y + bounds.height);
+      };
+      // 리사이즈 불가능한 요소들 (원래 위치 유지)
+      for (const { bounds } of nonResizableElementBounds || []) {
+        includeInGroup(bounds);
+      }
+      // 비율 고정 요소는 한 축만 끌어도 반대 축이 함께 자라 그룹 변환 밖으로 나갈 수 있다
+      for (const { element, bounds } of newElementBounds) {
+        if (isAspectLockedElement(element)) includeInGroup(bounds);
       }
 
       const result = {

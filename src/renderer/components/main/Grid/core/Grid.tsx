@@ -58,6 +58,7 @@ import { useGradientEditStore } from '@stores/grid/useGradientEditStore';
 import GroupResizeHandles from '../handles/GroupResizeHandles';
 import {
   getElementBounds,
+  isAspectLockedElement,
   isElementResizable,
 } from '../handles/groupResizeUtils';
 import { getGridViewportLayerStyles } from '@utils/core/gridViewportStyles';
@@ -1825,7 +1826,7 @@ const Grid = ({
               elementId={elementId}
               getOtherElements={getOtherElements}
               // 스프라이트는 그림 레이어라 늘리지 않는다
-              lockAspect={el.type === 'sprite'}
+              lockAspect={isAspectLockedElement(el)}
               occupiedHandle={occupiedHandle}
             />
           );
