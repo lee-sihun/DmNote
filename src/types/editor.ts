@@ -151,6 +151,13 @@ export interface EditorBoundsV1 {
   height: number;
 }
 
+// 백엔드 validate_bounds_metrics 상한 (editor.rs MAX_DIMENSION·MAX_ABS_COORDINATE)
+// - 저장 좌표 dx·dy의 절댓값과 치수만 검사하고 오른쪽·아래 가장자리는 보지 않는다
+export const EDITOR_BOUNDS_LIMITS = {
+  maxDimension: 32_768,
+  maxAbsCoordinate: 32_768,
+} as const;
+
 export interface EditorSetBoundsOpV1 {
   kind: 'setBounds';
   elementType: EditorElementTypeV1;
