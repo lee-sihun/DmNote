@@ -290,6 +290,7 @@ mod tests {
     // 한도 헬퍼를 쓰는 소스. 손목록끼리만 대조하면 백엔드에 새 한도 코드가
     // 생겨도 전부 green이라, 실제 호출부를 스캔해 결합한다
     const EDITOR_SOURCE: &str = include_str!("state/editor.rs");
+    const EDITOR_LIMITS_SOURCE: &str = include_str!("state/editor/limits.rs");
     const PLUGIN_SOURCE: &str = include_str!("state/plugin.rs");
 
     /// 용량 목록에 넣지 않는 한도 코드와 사유. 새 한도 코드는 목록에 넣거나
@@ -347,6 +348,7 @@ mod tests {
     #[test]
     fn every_limit_helper_code_is_classified() {
         let mut found = limit_codes_in(EDITOR_SOURCE);
+        found.extend(limit_codes_in(EDITOR_LIMITS_SOURCE));
         found.extend(limit_codes_in(PLUGIN_SOURCE));
         found.sort();
         found.dedup();

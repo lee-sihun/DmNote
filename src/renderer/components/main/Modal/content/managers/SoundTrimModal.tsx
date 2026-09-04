@@ -1,20 +1,24 @@
-import { beginDragCursor, endDragCursor } from '@utils/core/dragCursor';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import FullSurfaceModalLayout from '@components/main/Modal/FullSurfaceModalLayout';
 import { isTopmostPopupLayer } from '@components/main/Modal/popupLayer';
 import IconSwap from '@components/main/common/IconSwap';
-import {
-  getCursor,
-  setCustomCursorHover,
-  lockCustomCursor,
-  unlockCustomCursor,
-} from '@utils/grid/cursorUtils';
-import {
-  createRafLatestScheduler,
-  type ContinuousInputStrategy,
-} from '@utils/animation/rafLatestScheduler';
+import { setCustomCursorHover } from '@utils/grid/cursorUtils';
+import { type ContinuousInputStrategy } from '@utils/animation/rafLatestScheduler';
 import { soundApi } from '@api/modules/resourceApi';
+import {
+  arrayBufferToBase64,
+  base64ToArrayBuffer,
+  decodeAudioFromArrayBuffer,
+  drawWaveform,
+  encodeWavBase64,
+  extractWaveformPeaks,
+  formatSecLabel,
+  stripExtension,
+  type SoundTrimDragTarget,
+} from './soundTrimModel';
+import { createSoundTrimPlaybackRuntime } from './soundTrimPlaybackRuntime';
+import { useSoundTrimWaveformSession } from './useSoundTrimWaveformSession';
 
 interface SoundTrimModalProps {
   isOpen: boolean;
@@ -28,289 +32,6 @@ interface SoundTrimModalProps {
   initialFile?: File | null;
   /** 성능 계측용 비교 전략. 제품 경로는 프레임당 최신 입력만 반영한다. */
   continuousInputStrategy?: ContinuousInputStrategy;
-}
-
-type DragTarget = 'start' | 'end' | null;
-
-const WAVEFORM_PEAK_COUNT = 1600;
-const WAVEFORM_PAD_X = 12;
-const HANDLE_PICK_PX = 10;
-const MIN_VIEW_ZOOM = 1;
-const MAX_VIEW_ZOOM = 16;
-
-function formatSecLabel(ms: number): string {
-  return `${(ms / 1000).toFixed(2)}s`;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  if (value < min) return min;
-  if (value > max) return max;
-  return value;
-}
-
-function createAudioContext(): AudioContext {
-  const ctor =
-    window.AudioContext ||
-    (window as unknown as { webkitAudioContext: typeof AudioContext })
-      .webkitAudioContext;
-  return new ctor();
-}
-
-async function decodeAudioFromArrayBuffer(
-  buffer: ArrayBuffer,
-): Promise<AudioBuffer> {
-  const context = createAudioContext();
-  try {
-    return await context.decodeAudioData(buffer.slice(0));
-  } finally {
-    void context.close();
-  }
-}
-
-function extractWaveformPeaks(
-  buffer: AudioBuffer,
-  peakCount = WAVEFORM_PEAK_COUNT,
-): Float32Array {
-  const channelData = buffer.getChannelData(0);
-  if (channelData.length === 0) {
-    return new Float32Array(peakCount).fill(0);
-  }
-
-  const peaks = new Float32Array(peakCount);
-  const blockSize = Math.max(1, Math.floor(channelData.length / peakCount));
-
-  for (let i = 0; i < peakCount; i += 1) {
-    const start = i * blockSize;
-    const end = Math.min(channelData.length, start + blockSize);
-    let max = 0;
-
-    for (let j = start; j < end; j += 1) {
-      const sample = Math.abs(channelData[j]);
-      if (sample > max) {
-        max = sample;
-      }
-    }
-
-    peaks[i] = max;
-  }
-
-  return peaks;
-}
-
-function drawWaveform(
-  canvas: HTMLCanvasElement,
-  peaks: Float32Array,
-  startRatio: number,
-  endRatio: number,
-  playbackRatio: number | null = null,
-  viewStart: number = 0,
-  viewEnd: number = 1,
-) {
-  const dpr = window.devicePixelRatio || 1;
-  const width = canvas.clientWidth;
-  const height = canvas.clientHeight;
-  const displayWidth = Math.max(1, Math.floor(width * dpr));
-  const displayHeight = Math.max(1, Math.floor(height * dpr));
-
-  if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
-    canvas.width = displayWidth;
-    canvas.height = displayHeight;
-  }
-
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-
-  // canvas 2D는 var()를 못 읽어 토큰 계산값을 드로우마다 해석
-  const tokens = getComputedStyle(canvas);
-  const selectionFillColor = tokens
-    .getPropertyValue('--ui-selection-fill')
-    .trim();
-  const selectionColor = tokens.getPropertyValue('--ui-selection').trim();
-  const dimBarColor = tokens.getPropertyValue('--ui-fg-disabled').trim();
-  const chromeColor = tokens.getPropertyValue('--ui-fg').trim();
-
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, width, height);
-
-  const padX = WAVEFORM_PAD_X;
-  const drawableW = width - padX * 2;
-  const minBarHeight = 1;
-  const centerY = height / 2;
-  const viewSpan = Math.max(1e-9, viewEnd - viewStart);
-
-  const audioToX = (ratio: number) =>
-    padX + ((ratio - viewStart) / viewSpan) * drawableW;
-
-  const startX = audioToX(startRatio);
-  const endX = audioToX(endRatio);
-
-  // 트림 범위 하이라이트 (보이는 영역 제한)
-  const visStartX = Math.max(padX, startX);
-  const visEndX = Math.min(padX + drawableW, endX);
-  if (visEndX > visStartX) {
-    ctx.fillStyle = selectionFillColor;
-    ctx.fillRect(visStartX, 0, visEndX - visStartX, height);
-  }
-
-  for (let px = 0; px < drawableW; px += 1) {
-    const audioRatio = viewStart + (px / Math.max(1, drawableW - 1)) * viewSpan;
-    const peakIndex = Math.floor(clamp(audioRatio, 0, 1) * (peaks.length - 1));
-    const amplitude = peaks[peakIndex] ?? 0;
-    const barHeight = Math.max(minBarHeight, amplitude * (height - 4));
-    const y = centerY - barHeight / 2;
-    const x = padX + px;
-
-    const inRange = x >= startX && x <= endX;
-    ctx.fillStyle = inRange ? selectionColor : dimBarColor;
-    ctx.fillRect(x, y, 1, barHeight);
-  }
-
-  const handlePadY = 6;
-  const handleLineW = 3;
-  const handleLineH = height - handlePadY * 2;
-  const handleLineR = 1.5;
-  const gripW = 7;
-  const gripH = 22;
-  const gripR = 3;
-
-  const drawHandle = (cx: number) => {
-    ctx.fillStyle = chromeColor;
-    roundRect(
-      ctx,
-      cx - handleLineW / 2,
-      handlePadY,
-      handleLineW,
-      handleLineH,
-      handleLineR,
-    );
-    ctx.fill();
-
-    roundRect(ctx, cx - gripW / 2, height / 2 - gripH / 2, gripW, gripH, gripR);
-    ctx.fill();
-  };
-
-  // 보이는 캔버스 영역 내 핸들만 렌더
-  const handleMargin = gripW;
-  if (
-    startX >= padX - handleMargin &&
-    startX <= padX + drawableW + handleMargin
-  ) {
-    drawHandle(startX);
-  }
-  if (endX >= padX - handleMargin && endX <= padX + drawableW + handleMargin) {
-    drawHandle(endX);
-  }
-
-  // 재생 위치 표시기
-  if (playbackRatio !== null) {
-    const playX = audioToX(playbackRatio);
-    if (playX >= padX && playX <= padX + drawableW) {
-      ctx.fillStyle = chromeColor;
-      ctx.globalAlpha = 0.9;
-      ctx.fillRect(playX - 0.5, 0, 1, height);
-      ctx.globalAlpha = 1;
-    }
-  }
-}
-
-function roundRect(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number,
-) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
-}
-
-function encodeWavBase64(
-  source: AudioBuffer,
-  startFrame: number,
-  endFrame: number,
-): string {
-  const channels = source.numberOfChannels;
-  const sampleRate = source.sampleRate;
-  const frameCount = Math.max(1, endFrame - startFrame);
-  const bytesPerSample = 2;
-  const blockAlign = channels * bytesPerSample;
-  const byteRate = sampleRate * blockAlign;
-  const dataSize = frameCount * blockAlign;
-  const buffer = new ArrayBuffer(44 + dataSize);
-  const view = new DataView(buffer);
-
-  const writeAscii = (offset: number, value: string) => {
-    for (let i = 0; i < value.length; i += 1) {
-      view.setUint8(offset + i, value.charCodeAt(i));
-    }
-  };
-
-  writeAscii(0, 'RIFF');
-  view.setUint32(4, 36 + dataSize, true);
-  writeAscii(8, 'WAVE');
-  writeAscii(12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, channels, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, byteRate, true);
-  view.setUint16(32, blockAlign, true);
-  view.setUint16(34, 16, true);
-  writeAscii(36, 'data');
-  view.setUint32(40, dataSize, true);
-
-  let offset = 44;
-  const channelData = new Array(channels)
-    .fill(null)
-    .map((_, channel) => source.getChannelData(channel));
-
-  for (let frame = 0; frame < frameCount; frame += 1) {
-    const sourceFrame = startFrame + frame;
-    for (let channel = 0; channel < channels; channel += 1) {
-      const sample = channelData[channel][sourceFrame] ?? 0;
-      const clamped = clamp(sample, -1, 1);
-      const pcm = clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff;
-      view.setInt16(offset, pcm, true);
-      offset += 2;
-    }
-  }
-
-  return arrayBufferToBase64(buffer);
-}
-
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.subarray(i, i + chunkSize);
-    binary += String.fromCharCode(...chunk);
-  }
-  return btoa(binary);
-}
-
-function base64ToArrayBuffer(base64: string): ArrayBuffer {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes.buffer;
-}
-
-function stripExtension(name: string): string {
-  const lastDot = name.lastIndexOf('.');
-  return lastDot > 0 ? name.slice(0, lastDot) : name;
 }
 
 const SoundTrimModal = ({
@@ -337,7 +58,7 @@ const SoundTrimModal = ({
     waveformRef.current = node;
     setWaveformHost(node);
   }, []);
-  const dragTargetRef = useRef<DragTarget>(null);
+  const dragTargetRef = useRef<SoundTrimDragTarget>(null);
 
   const isEditMode = !!editingSoundPath;
 
@@ -397,136 +118,26 @@ const SoundTrimModal = ({
   const viewEndRef = useRef(viewEnd);
   viewEndRef.current = viewEnd;
 
-  const teardownAudio = () => {
-    if (animFrameRef.current) {
-      cancelAnimationFrame(animFrameRef.current);
-      animFrameRef.current = 0;
-    }
-    if (playSourceRef.current) {
-      playSourceRef.current.onended = null;
-      try {
-        playSourceRef.current.stop();
-      } catch {
-        /* 이미 정지됨 */
-      }
-      playSourceRef.current = null;
-    }
-    if (playContextRef.current) {
-      void playContextRef.current.close();
-      playContextRef.current = null;
-    }
-    setIsPlaying(false);
-  };
-
-  const redrawWaveformStatic = (pausedRatio?: number | null) => {
-    const canvas = canvasRef.current;
-    const currentPeaks = peaksRef.current;
-    if (canvas && currentPeaks.length > 0) {
-      drawWaveform(
-        canvas,
-        currentPeaks,
-        startRatioRef.current,
-        endRatioRef.current,
-        pausedRatio ?? null,
-        viewStartRef.current,
-        viewEndRef.current,
-      );
-    }
-  };
-
-  // 일시정지: 현재 위치 저장 및 일시정지 위치에 표시기 표시
-  const pausePlayback = () => {
-    const playCtx = playContextRef.current;
-    if (playCtx) {
-      const elapsed = playCtx.currentTime - playStartCtxTimeRef.current;
-      const totalDur = playDurationSecRef.current;
-      const progress = totalDur > 0 ? clamp(elapsed / totalDur, 0, 1) : 0;
-      const sR = playStartRatioRef.current;
-      const eR = playEndRatioRef.current;
-      pausedAtRatioRef.current = sR + progress * (eR - sR);
-    }
-    teardownAudio();
-    redrawWaveformStatic(pausedAtRatioRef.current);
-  };
-
-  // 완전 정지: 범위 시작 위치로 초기화
-  const stopPlayback = () => {
-    pausedAtRatioRef.current = null;
-    teardownAudio();
-    redrawWaveformStatic();
-  };
-
-  const handlePlay = () => {
-    if (!audioBuffer) return;
-
-    // 재생 중 → 일시정지
-    if (playSourceRef.current) {
-      pausePlayback();
-      return;
-    }
-
-    const ctx = createAudioContext();
-    const gainNode = ctx.createGain();
-    gainNode.gain.value = clamp(previewVolume / 100, 0, 2);
-    gainNode.connect(ctx.destination);
-    const source = ctx.createBufferSource();
-    source.buffer = audioBuffer;
-    source.connect(gainNode);
-
-    const sR = startRatioRef.current;
-    const eR = endRatioRef.current;
-
-    // 일시정지 위치부터 재개, 또는 범위 시작부터 재생
-    const resumeRatio = pausedAtRatioRef.current ?? sR;
-    const offsetSec = audioBuffer.duration * resumeRatio;
-    const remainingSec = audioBuffer.duration * (eR - resumeRatio);
-    pausedAtRatioRef.current = null;
-
-    source.onended = () => {
-      // 자연 종료 → 위치 초기화
-      stopPlayback();
-    };
-
-    playContextRef.current = ctx;
-    playSourceRef.current = source;
-    playStartCtxTimeRef.current = ctx.currentTime;
-    playDurationSecRef.current = remainingSec;
-    playStartRatioRef.current = resumeRatio;
-    playEndRatioRef.current = eR;
-    setIsPlaying(true);
-
-    source.start(0, offsetSec, remainingSec);
-
-    // 재생 표시기 애니메이션 루프 시작
-    const animate = () => {
-      const playCtx = playContextRef.current;
-      const canvas = canvasRef.current;
-      const currentPeaks = peaksRef.current;
-      if (!playCtx || !canvas || currentPeaks.length === 0) return;
-
-      const elapsed = playCtx.currentTime - playStartCtxTimeRef.current;
-      const totalDur = playDurationSecRef.current;
-      const progress = totalDur > 0 ? clamp(elapsed / totalDur, 0, 1) : 0;
-      const animSR = playStartRatioRef.current;
-      const animER = playEndRatioRef.current;
-      const playbackRatio = animSR + progress * (animER - animSR);
-
-      drawWaveform(
-        canvas,
-        currentPeaks,
-        startRatioRef.current,
-        endRatioRef.current,
-        playbackRatio,
-        viewStartRef.current,
-        viewEndRef.current,
-      );
-
-      if (progress < 1) {
-        animFrameRef.current = requestAnimationFrame(animate);
-      }
-    };
-    animFrameRef.current = requestAnimationFrame(animate);
-  };
+  const { teardownAudio, redrawWaveformStatic, stopPlayback, handlePlay } =
+    createSoundTrimPlaybackRuntime({
+      audioBuffer,
+      previewVolume,
+      canvasRef,
+      peaksRef,
+      startRatioRef,
+      endRatioRef,
+      viewStartRef,
+      viewEndRef,
+      playContextRef,
+      playSourceRef,
+      playStartCtxTimeRef,
+      playDurationSecRef,
+      playStartRatioRef,
+      playEndRatioRef,
+      animFrameRef,
+      pausedAtRatioRef,
+      setIsPlaying,
+    });
 
   const handlePlayRef = useRef<() => void>(() => {});
   handlePlayRef.current = handlePlay;
@@ -760,285 +371,31 @@ const SoundTrimModal = ({
     void processFile(file);
   };
 
-  // 휠 줌: 마우스 위치 기준 줌 인/아웃
-  const viewZoomRef = useRef(viewZoom);
-  viewZoomRef.current = viewZoom;
-  const viewPanRatioRef = useRef(viewPanRatio);
-  viewPanRatioRef.current = viewPanRatio;
-  const wheelDeltaRef = useRef(0);
-
-  // 최신 값은 전부 ref로 읽으므로 노드가 붙을 때만 다시 건다. 매 렌더 재등록하면
-  // 정리 시 스케줄러가 아직 안 흘린 휠 델타를 버린다
-  useEffect(() => {
-    if (!isOpen) return;
-    const node = waveformHost;
-    if (!node) return;
-    const applyWheel = (e: WheelEvent, deltaY: number) => {
-      if (!audioBufferRef.current) return;
-
-      const rect = node.getBoundingClientRect();
-      const drawableW = rect.width - WAVEFORM_PAD_X * 2;
-      const mouseScreenRatio = clamp(
-        (e.clientX - rect.left - WAVEFORM_PAD_X) / Math.max(1, drawableW),
-        0,
-        1,
-      );
-
-      const curZoom = viewZoomRef.current;
-      const curPan = viewPanRatioRef.current;
-      const curViewSpan = 1 / curZoom;
-      const mouseAudioRatio = curPan + mouseScreenRatio * curViewSpan;
-
-      const zoomFactor = Math.exp(-deltaY * 0.0018);
-      const newZoom = clamp(curZoom * zoomFactor, MIN_VIEW_ZOOM, MAX_VIEW_ZOOM);
-      const newViewSpan = 1 / newZoom;
-
-      let newPan = mouseAudioRatio - mouseScreenRatio * newViewSpan;
-      newPan = clamp(newPan, 0, Math.max(0, 1 - newViewSpan));
-
-      setViewZoom(newZoom);
-      setViewPanRatio(newPan);
-    };
-    const scheduler = createRafLatestScheduler<WheelEvent>((event) => {
-      const deltaY = wheelDeltaRef.current;
-      wheelDeltaRef.current = 0;
-      applyWheel(event, deltaY);
-    }, continuousInputStrategy);
-    const handleWheel = (event: WheelEvent) => {
-      event.preventDefault();
-      wheelDeltaRef.current += event.deltaY;
-      scheduler.push(event);
-    };
-    node.addEventListener('wheel', handleWheel, { passive: false });
-    return () => {
-      scheduler.cancel();
-      wheelDeltaRef.current = 0;
-      node.removeEventListener('wheel', handleWheel);
-    };
-  }, [continuousInputStrategy, isOpen, waveformHost]);
-
-  // 중간 버튼 드래그: 줌 시 수평 패닝
-  const handleMiddleDown = useCallback(
-    (e: MouseEvent) => {
-      if (e.button !== 1) return;
-      if (!audioBufferRef.current) return;
-      e.preventDefault();
-
-      const host = waveformRef.current;
-      if (!host) return;
-      const rect = host.getBoundingClientRect();
-      const drawableW = rect.width - WAVEFORM_PAD_X * 2;
-
-      const startX = e.clientX;
-      const startPan = viewPanRatioRef.current;
-      const curZoom = viewZoomRef.current;
-      const viewSpan = 1 / curZoom;
-
-      setCustomCursorHover(null);
-      const canvas = canvasRef.current;
-      if (canvas) canvas.style.cursor = '';
-      host.style.cursor = 'grabbing';
-      // 잡는 동안 전역 유지 - 호스트 밖으로 나가도 복귀하지 않게
-      beginDragCursor('grabbing');
-
-      const applyMouseMove = (moveEvent: MouseEvent) => {
-        const deltaX = moveEvent.clientX - startX;
-        let newPan = startPan - (deltaX / Math.max(1, drawableW)) * viewSpan;
-        newPan = clamp(newPan, 0, Math.max(0, 1 - viewSpan));
-        setViewPanRatio(newPan);
-      };
-      const moveScheduler = createRafLatestScheduler(
-        applyMouseMove,
-        continuousInputStrategy,
-      );
-      const handleMouseMove = (moveEvent: MouseEvent) =>
-        moveScheduler.push(moveEvent);
-
-      const cleanup = () => {
-        moveScheduler.flush();
-        moveScheduler.cancel();
-        endDragCursor();
-        host.style.cursor = '';
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', cleanup);
-        window.removeEventListener('blur', cleanup);
-        window.removeEventListener('pointercancel', cleanup);
-        middleDragCleanupRef.current = null;
-      };
-
-      middleDragCleanupRef.current = cleanup;
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', cleanup);
-      // 드래그 중 포커스 상실·포인터 취소 시에도 커서 복구
-      window.addEventListener('blur', cleanup);
-      window.addEventListener('pointercancel', cleanup);
-    },
-    [continuousInputStrategy],
-  );
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const node = waveformHost;
-    if (!node) return;
-    node.addEventListener('mousedown', handleMiddleDown);
-    return () => {
-      node.removeEventListener('mousedown', handleMiddleDown);
-      middleDragCleanupRef.current?.();
-    };
-  }, [handleMiddleDown, isOpen, waveformHost]);
-
-  // 커서 overlay 루트가 모달 포털보다 DOM 순서상 위에 위치하도록 보장
-  useEffect(() => {
-    if (!isOpen) return;
-    const overlay = document.getElementById('dmn-cursor-overlay');
-    if (overlay?.parentNode) {
-      overlay.parentNode.appendChild(overlay);
-    }
-  }, [isOpen]);
-
-  // 캔버스 커서 hover: macOS overlay 커서용 네이티브 addEventListener
-  useEffect(() => {
-    if (!isOpen || !audioBuffer) return;
-    const canvas = canvasRef.current;
-    const host = waveformHost;
-    if (!canvas || !host) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (dragTargetRef.current || middleDragCleanupRef.current) return;
-      const rect = host.getBoundingClientRect();
-      const drawableW = rect.width - WAVEFORM_PAD_X * 2;
-      const x = e.clientX - rect.left;
-      const vStart = viewStartRef.current;
-      const vEnd = viewEndRef.current;
-      const viewSpan = vEnd - vStart;
-      const sR = startRatioRef.current;
-      const eR = endRatioRef.current;
-      const startHandleX =
-        WAVEFORM_PAD_X + ((sR - vStart) / viewSpan) * drawableW;
-      const endHandleX =
-        WAVEFORM_PAD_X + ((eR - vStart) / viewSpan) * drawableW;
-      const nearHandle =
-        Math.abs(x - startHandleX) <= HANDLE_PICK_PX ||
-        Math.abs(x - endHandleX) <= HANDLE_PICK_PX;
-
-      // macOS: SVG overlay 커서 / Windows: getCursor CSS 폴백
-      setCustomCursorHover(nearHandle ? 'ew-resize' : null, e);
-      canvas.style.cursor = nearHandle ? getCursor('ew-resize') : '';
-    };
-
-    const handleMouseLeave = () => {
-      if (!dragTargetRef.current && !middleDragCleanupRef.current) {
-        setCustomCursorHover(null);
-        canvas.style.cursor = '';
-      }
-    };
-
-    canvas.addEventListener('mousemove', handleMouseMove);
-    canvas.addEventListener('mouseleave', handleMouseLeave);
-    return () => {
-      canvas.removeEventListener('mousemove', handleMouseMove);
-      canvas.removeEventListener('mouseleave', handleMouseLeave);
-      setCustomCursorHover(null);
-    };
-  }, [isOpen, audioBuffer, waveformHost]);
-
-  const updateFromClientX = (clientX: number, target: DragTarget) => {
-    const host = waveformRef.current;
-    if (!host || !target) return;
-    const rect = host.getBoundingClientRect();
-    const drawableW = rect.width - WAVEFORM_PAD_X * 2;
-    const screenRatio =
-      (clientX - rect.left - WAVEFORM_PAD_X) / Math.max(1, drawableW);
-    const vStart = viewStartRef.current;
-    const vEnd = viewEndRef.current;
-    const ratio = clamp(vStart + screenRatio * (vEnd - vStart), 0, 1);
-
-    if (target === 'start') {
-      setStartRatio(clamp(ratio, 0, endRatioRef.current));
-    } else if (target === 'end') {
-      setEndRatio(clamp(ratio, startRatioRef.current, 1));
-    }
-  };
-
-  const handlePointerMove = (event: PointerEvent) => {
-    const target = dragTargetRef.current;
-    if (!target) return;
-    updateFromClientX(event.clientX, target);
-  };
-
-  const handlePointerUp = () => {
-    handleDragCleanupRef.current?.();
-  };
-
-  const handleWaveformPointerDown = (
-    event: React.PointerEvent<HTMLDivElement>,
-  ) => {
-    if (event.button !== 0) return;
-    if (!audioBuffer) return;
-    const host = waveformRef.current;
-    if (!host) return;
-
-    // 핸들 드래그 시 재생 중지 및 일시정지 위치 초기화
-    if (playSourceRef.current) {
-      teardownAudio();
-    }
-    pausedAtRatioRef.current = null;
-
-    const rect = host.getBoundingClientRect();
-    const drawableW = rect.width - WAVEFORM_PAD_X * 2;
-    const x = clamp(event.clientX - rect.left, 0, rect.width);
-    const vStart = viewStartRef.current;
-    const vEnd = viewEndRef.current;
-    const viewSpan = vEnd - vStart;
-    const sR = startRatioRef.current;
-    const eR = endRatioRef.current;
-    const startX = WAVEFORM_PAD_X + ((sR - vStart) / viewSpan) * drawableW;
-    const endX = WAVEFORM_PAD_X + ((eR - vStart) / viewSpan) * drawableW;
-
-    const pickStart = Math.abs(x - startX) <= HANDLE_PICK_PX;
-    const pickEnd = Math.abs(x - endX) <= HANDLE_PICK_PX;
-
-    let nextTarget: DragTarget;
-    if (pickStart && pickEnd) {
-      nextTarget = x < (startX + endX) / 2 ? 'start' : 'end';
-    } else if (pickStart) {
-      nextTarget = 'start';
-    } else if (pickEnd) {
-      nextTarget = 'end';
-    } else {
-      nextTarget = Math.abs(x - startX) < Math.abs(x - endX) ? 'start' : 'end';
-    }
-
-    dragTargetRef.current = nextTarget;
-    lockCustomCursor('ew-resize', event.nativeEvent as unknown as MouseEvent);
-    updateFromClientX(event.clientX, nextTarget);
-
-    const moveScheduler = createRafLatestScheduler(
-      handlePointerMove,
-      continuousInputStrategy,
-    );
-    const registeredMove = (moveEvent: PointerEvent) =>
-      moveScheduler.push(moveEvent);
-    const registeredUp = handlePointerUp;
-
-    handleDragCleanupRef.current = () => {
-      moveScheduler.flush();
-      moveScheduler.cancel();
-      dragTargetRef.current = null;
-      unlockCustomCursor();
-      window.removeEventListener('pointermove', registeredMove);
-      window.removeEventListener('pointerup', registeredUp);
-      window.removeEventListener('pointercancel', registeredUp);
-      window.removeEventListener('blur', registeredUp);
-      handleDragCleanupRef.current = null;
-    };
-
-    window.addEventListener('pointermove', registeredMove);
-    window.addEventListener('pointerup', registeredUp);
-    // 드래그 중 포커스 상실·포인터 취소 시에도 커서·드래그 상태 복구
-    window.addEventListener('pointercancel', registeredUp);
-    window.addEventListener('blur', registeredUp);
-  };
+  const { handleWaveformPointerDown } = useSoundTrimWaveformSession({
+    isOpen,
+    audioBuffer,
+    waveformHost,
+    waveformRef,
+    canvasRef,
+    audioBufferRef,
+    startRatioRef,
+    endRatioRef,
+    viewStartRef,
+    viewEndRef,
+    dragTargetRef,
+    middleDragCleanupRef,
+    handleDragCleanupRef,
+    playSourceRef,
+    pausedAtRatioRef,
+    viewZoom,
+    viewPanRatio,
+    setViewZoom,
+    setViewPanRatio,
+    setStartRatio,
+    setEndRatio,
+    teardownAudio,
+    continuousInputStrategy,
+  });
 
   const handleSave = async () => {
     if (!audioBuffer || savingRef.current || isDecoding) return;

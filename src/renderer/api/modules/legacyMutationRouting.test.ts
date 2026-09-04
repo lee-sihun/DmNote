@@ -48,6 +48,24 @@ describe('legacy mutation 라우팅', () => {
     expect(routing.legacy).toHaveBeenCalledTimes(1);
   });
 
+  it('custom tab API가 백엔드 command명과 payload를 그대로 사용한다', async () => {
+    const customTabs = [{ id: 'tab-a', name: 'A' }];
+
+    await keysApi.customTabs.list();
+    await keysApi.customTabs.create('New tab');
+    await keysApi.customTabs.delete('tab-a');
+    await keysApi.customTabs.select('tab-b');
+    await keysApi.customTabs.restore(customTabs, 'tab-a');
+
+    expect(routing.invoke.mock.calls).toEqual([
+      ['custom_tabs_list'],
+      ['custom_tabs_create', { name: 'New tab' }],
+      ['custom_tabs_delete', { id: 'tab-a' }],
+      ['custom_tabs_select', { id: 'tab-b' }],
+      ['custom_tabs_restore', { customTabs, selectedKeyType: 'tab-a' }],
+    ]);
+  });
+
   it('counter animation preflight는 배타 슬롯 안 invoke 직전에 실행된다', async () => {
     const preflight = vi.fn();
     let run: (() => Promise<unknown>) | undefined;

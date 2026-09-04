@@ -19,7 +19,7 @@ describe('statistics item wire contract', () => {
     expect(uiTypes).toEqual(new Set(STAT_ITEM_TYPES));
 
     const rustSource = readFileSync(
-      resolve(process.cwd(), 'src-tauri/src/models/mod.rs'),
+      resolve(process.cwd(), 'src-tauri/src/models/element_positions.rs'),
       'utf8',
     );
     const declaration = rustSource.match(
