@@ -101,8 +101,8 @@ interface ResizeState {
   startGroupBounds: Bounds | null;
   startElementBounds: ElementBounds[];
   nonResizableElementBounds?: ElementBounds[];
-  maxShrinkX: number;
-  maxShrinkY: number;
+  minGroupWidth: number;
+  minGroupHeight: number;
   handle?: HandleDef;
 }
 
@@ -295,8 +295,8 @@ const GroupResizeHandles = ({
     startMouseY: 0,
     startGroupBounds: null,
     startElementBounds: [],
-    maxShrinkX: 0,
-    maxShrinkY: 0,
+    minGroupWidth: 0,
+    minGroupHeight: 0,
   });
   const activeResizeCleanupRef = useRef<(() => void) | null>(null);
 
@@ -369,23 +369,40 @@ const GroupResizeHandles = ({
         ),
     );
 
-    const getMaxShrink = (
+    const getMinGroupSize = (
       boundsList: ElementBounds[],
       groupSize: number,
       axis: 'x' | 'y',
     ): number => {
-      if (!Number.isFinite(groupSize) || groupSize <= 0) return 0;
+      if (!Number.isFinite(groupSize) || groupSize <= 0) return groupSize;
       let minScale = 0;
+      const guardedSizes: number[] = [];
       for (const { element, bounds } of boundsList) {
-        const size = shrinkLimitSize(element, bounds, axis);
+        const size = shrinkLimitSize(element, bounds, axis, MIN_SIZE);
         if (!Number.isFinite(size) || size <= 0) continue;
         if (size >= MIN_SIZE) {
+          guardedSizes.push(size);
           minScale = Math.max(minScale, MIN_SIZE / size);
+        } else if (isAspectLockedElement(element)) {
+          minScale = 1;
         }
       }
-      const groupMinScale = MIN_SIZE / groupSize;
-      minScale = Math.min(1, Math.max(minScale, groupMinScale));
-      return groupSize * (1 - minScale);
+      // 그룹 자체 10px 하한은 얇은 스프라이트의 정상 축소까지 막으므로
+      // 보호할 요소 축에서만 유도하고 보호 축이 없으면 현재 크기 유지
+      minScale = minScale > 0 ? Math.min(1, minScale) : 1;
+      let minGroupSize = groupSize * minScale;
+      // 그룹 크기에서 배율을 다시 나눠 요소에 곱하는 실제 투영까지 하한 보장
+      while (
+        guardedSizes.some(
+          (size) => size * (minGroupSize / groupSize) < MIN_SIZE,
+        )
+      ) {
+        minGroupSize += Math.max(
+          Number.MIN_VALUE,
+          minGroupSize * Number.EPSILON,
+        );
+      }
+      return minGroupSize;
     };
 
     resizeRef.current = {
@@ -401,8 +418,16 @@ const GroupResizeHandles = ({
       },
       startElementBounds: resizableElementBounds,
       nonResizableElementBounds: nonResizableElementBounds,
-      maxShrinkX: getMaxShrink(resizableElementBounds, groupData.width, 'x'),
-      maxShrinkY: getMaxShrink(resizableElementBounds, groupData.height, 'y'),
+      minGroupWidth: getMinGroupSize(
+        resizableElementBounds,
+        groupData.width,
+        'x',
+      ),
+      minGroupHeight: getMinGroupSize(
+        resizableElementBounds,
+        groupData.height,
+        'y',
+      ),
       handle,
     };
 
@@ -419,8 +444,8 @@ const GroupResizeHandles = ({
         startGroupBounds,
         startElementBounds,
         nonResizableElementBounds,
-        maxShrinkX,
-        maxShrinkY,
+        minGroupWidth: minimumWidth,
+        minGroupHeight: minimumHeight,
       } = resizeRef.current;
 
       if (!handle || !startGroupBounds) return;
@@ -459,10 +484,18 @@ const GroupResizeHandles = ({
       let snappedDeltaY = handle.dy !== 0 ? snapDelta(rawDeltaY) : 0;
 
       if (handle.dx !== 0) {
-        snappedDeltaX = clampShrinkDelta(snappedDeltaX, handle.dx, maxShrinkX);
+        snappedDeltaX = clampShrinkDelta(
+          snappedDeltaX,
+          handle.dx,
+          startGroupBounds.width - minimumWidth,
+        );
       }
       if (handle.dy !== 0) {
-        snappedDeltaY = clampShrinkDelta(snappedDeltaY, handle.dy, maxShrinkY);
+        snappedDeltaY = clampShrinkDelta(
+          snappedDeltaY,
+          handle.dy,
+          startGroupBounds.height - minimumHeight,
+        );
       }
 
       // 새 그룹 bounds 계산
@@ -474,52 +507,40 @@ const GroupResizeHandles = ({
       // 핸들 방향에 따라 크기 조정
       if (handle.dx === -1) {
         newGroupWidth = Math.max(
-          MIN_SIZE,
+          minimumWidth,
           startGroupBounds.width - snappedDeltaX,
         );
-        if (newGroupWidth > MIN_SIZE) {
-          newGroupX = startGroupBounds.x + snappedDeltaX;
-        } else {
-          newGroupX = startGroupBounds.x + startGroupBounds.width - MIN_SIZE;
-        }
+        newGroupX =
+          startGroupBounds.x + (startGroupBounds.width - newGroupWidth);
       } else if (handle.dx === 1) {
         newGroupWidth = Math.max(
-          MIN_SIZE,
+          minimumWidth,
           startGroupBounds.width + snappedDeltaX,
         );
       }
 
       if (handle.dy === -1) {
         newGroupHeight = Math.max(
-          MIN_SIZE,
+          minimumHeight,
           startGroupBounds.height - snappedDeltaY,
         );
-        if (newGroupHeight > MIN_SIZE) {
-          newGroupY = startGroupBounds.y + snappedDeltaY;
-        } else {
-          newGroupY = startGroupBounds.y + startGroupBounds.height - MIN_SIZE;
-        }
+        newGroupY =
+          startGroupBounds.y + (startGroupBounds.height - newGroupHeight);
       } else if (handle.dy === 1) {
         newGroupHeight = Math.max(
-          MIN_SIZE,
+          minimumHeight,
           startGroupBounds.height + snappedDeltaY,
         );
       }
 
       // 요소 하한 기준 그룹 최소 크기 - 잡은 핸들이 움직이는 축만. 잡지 않은 축은 시작값
       // 그대로 둔다 (얇은 그룹의 높이를 가로 핸들이 10으로 키우면 요소가 밀려난다)
-      // - 스냅이 maxShrink로 잘라 둔 델타를 다시 줄이면 잡지 않은 가장자리를 고정한 채
+      // - 스마트 스냅이 하한을 다시 넘으면 잡지 않은 가장자리를 고정한 채
       // 되돌리고, 되돌린 축을 알려 그 축의 스냅을 무효화한다
       const minGroupWidth =
-        handle.dx === 0
-          ? startGroupBounds.width
-          : Math.max(MIN_SIZE, startGroupBounds.width - maxShrinkX);
+        handle.dx === 0 ? startGroupBounds.width : minimumWidth;
       const minGroupHeight =
-        handle.dy === 0
-          ? startGroupBounds.height
-          : Math.max(MIN_SIZE, startGroupBounds.height - maxShrinkY);
-      newGroupWidth = Math.max(minGroupWidth, newGroupWidth);
-      newGroupHeight = Math.max(minGroupHeight, newGroupHeight);
+        handle.dy === 0 ? startGroupBounds.height : minimumHeight;
       const enforceMinGroupSize = (): { width: boolean; height: boolean } => {
         const clamped = { width: false, height: false };
         if (newGroupWidth < minGroupWidth) {

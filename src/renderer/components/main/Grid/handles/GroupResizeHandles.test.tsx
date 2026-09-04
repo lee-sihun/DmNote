@@ -4,8 +4,10 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { makeCanonicalSpritePosition } from '@utils/sprite/spriteFixtures';
+import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
 import type { ElementBounds as SmartGuideElementBounds } from '@utils/grid/smartGuides';
 import { useSmartGuidesStore } from '@stores/grid/useSmartGuidesStore';
+import { useSettingsStore } from '@stores/useSettingsStore';
 import GroupResizeHandles from './GroupResizeHandles';
 import { isBoundsWithinEditorLimits } from './resizeLimits';
 
@@ -30,8 +32,10 @@ describe('GroupResizeHandles 최소 크기', () => {
   let host: HTMLDivElement;
   let root: Root;
   let callbacks: Map<number, FrameRequestCallback>;
+  let initialSnapSize: number;
 
   beforeEach(() => {
+    initialSnapSize = useSettingsStore.getState().gridSettings.gridSnapSize;
     callbacks = new Map();
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
       callbacks.set(1, callback);
@@ -49,6 +53,9 @@ describe('GroupResizeHandles 최소 크기', () => {
     host.remove();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    useSettingsStore.setState((state) => ({
+      gridSettings: { ...state.gridSettings, gridSnapSize: initialSnapSize },
+    }));
   });
 
   it('크기 스냅이 그룹을 더 줄여도 요소는 10px 밑으로 내려가지 않는다', async () => {
@@ -177,13 +184,354 @@ describe('GroupResizeHandles 최소 크기', () => {
     callbacks.clear();
     act(() => callback(performance.now()));
     act(() => document.dispatchEvent(new MouseEvent('mouseup')));
-    return onGroupResize.mock.calls[0][0] as {
-      groupBounds: { x: number; y: number; width: number; height: number };
-      elementBounds: Array<{
+    const result = onGroupResize.mock.lastCall?.[0];
+    return {
+      groupBounds: result?.groupBounds,
+      elementBounds: (result?.elementBounds ??
+        spritePositions['4key'].map((position) => ({
+          bounds: {
+            x: position.dx,
+            y: position.dy,
+            width: position.width,
+            height: position.height,
+          },
+        }))) as Array<{
         bounds: { x: number; y: number; width: number; height: number };
-      }>;
+      }>,
+      previewCount: onGroupResize.mock.calls.length,
     };
   };
+
+  it('그룹 축소도 투영 반올림으로 요소 하한 아래에 저장하지 않는다', async () => {
+    const result = await dragGroup(
+      {
+        '4key': [
+          makeCanonicalSpritePosition({
+            id: SPRITE_A,
+            dx: 0,
+            dy: 0,
+            width: 77,
+            height: 77,
+          }),
+          makeCanonicalSpritePosition({
+            id: SPRITE_B,
+            dx: 308,
+            dy: 0,
+            width: 77,
+            height: 77,
+          }),
+        ],
+      },
+      'e',
+      { x: 385, y: 0 },
+      { x: 0, y: 0 },
+    );
+    expect(result.previewCount).toBe(1);
+    for (const { bounds } of result.elementBounds) {
+      expect(bounds.width).toBeGreaterThanOrEqual(10);
+      expect(bounds.height).toBeGreaterThanOrEqual(10);
+      expect(bounds.width).toBeCloseTo(10, 9);
+    }
+  });
+
+  it('한 축이 얇아도 그룹 축소는 스프라이트의 정상 축 하한을 지킨다', async () => {
+    const result = await dragGroup(
+      {
+        '4key': [
+          makeCanonicalSpritePosition({
+            id: SPRITE_A,
+            dx: 0,
+            dy: 0,
+            width: 400,
+            height: 0.1,
+          }),
+          makeCanonicalSpritePosition({
+            id: SPRITE_B,
+            dx: 1600,
+            dy: 0,
+            width: 400,
+            height: 0.1,
+          }),
+        ],
+      },
+      'e',
+      { x: 2000, y: 0 },
+      { x: 0, y: 0 },
+    );
+    expect(result.previewCount).toBe(1);
+    for (const { bounds } of result.elementBounds) {
+      expect(bounds.width).toBeGreaterThanOrEqual(10);
+      expect(bounds.width).toBeCloseTo(10, 9);
+      expect(bounds.width / 400).toBeCloseTo(bounds.height / 0.1, 9);
+    }
+  });
+
+  it('8방향과 스냅별 연속 축소는 최소 크기와 고정 가장자리를 보존한다', async () => {
+    const handles = [
+      { id: 'nw', dx: -1, dy: -1 },
+      { id: 'n', dx: 0, dy: -1 },
+      { id: 'ne', dx: 1, dy: -1 },
+      { id: 'w', dx: -1, dy: 0 },
+      { id: 'e', dx: 1, dy: 0 },
+      { id: 'sw', dx: -1, dy: 1 },
+      { id: 's', dx: 0, dy: 1 },
+      { id: 'se', dx: 1, dy: 1 },
+    ];
+    for (const snapSize of [0, 1, 5, 10]) {
+      useSettingsStore.setState((state) => ({
+        gridSettings: { ...state.gridSettings, gridSnapSize: snapSize },
+      }));
+      for (const handle of handles) {
+        let sprites = [
+          makeCanonicalSpritePosition({
+            id: SPRITE_A,
+            dx: 3,
+            dy: 7,
+            width: 77,
+            height: 77,
+          }),
+          makeCanonicalSpritePosition({
+            id: SPRITE_B,
+            dx: 311,
+            dy: 315,
+            width: 77,
+            height: 77,
+          }),
+        ];
+        for (let round = 0; round < 3; round += 1) {
+          const result = await dragGroup(
+            { '4key': sprites },
+            handle.id,
+            { x: 0, y: 0 },
+            { x: -1000 * handle.dx, y: -1000 * handle.dy },
+          );
+          for (const { bounds } of result.elementBounds) {
+            expect(bounds.width).toBeGreaterThanOrEqual(10);
+            expect(bounds.height).toBeGreaterThanOrEqual(10);
+            expect(bounds.width).toBe(bounds.height);
+          }
+          if (result.groupBounds && handle.dx !== 0 && handle.dy !== 0) {
+            const beforeX = Math.min(...sprites.map((sprite) => sprite.dx));
+            const beforeY = Math.min(...sprites.map((sprite) => sprite.dy));
+            const beforeRight = Math.max(
+              ...sprites.map((sprite) => sprite.dx + sprite.width),
+            );
+            const beforeBottom = Math.max(
+              ...sprites.map((sprite) => sprite.dy + sprite.height),
+            );
+            expect(
+              handle.dx === 1
+                ? result.groupBounds.x
+                : result.groupBounds.x + result.groupBounds.width,
+            ).toBeCloseTo(handle.dx === 1 ? beforeX : beforeRight, 9);
+            expect(
+              handle.dy === 1
+                ? result.groupBounds.y
+                : result.groupBounds.y + result.groupBounds.height,
+            ).toBeCloseTo(handle.dy === 1 ? beforeY : beforeBottom, 9);
+          }
+          sprites = sprites.map((sprite, index) => ({
+            ...sprite,
+            dx: result.elementBounds[index].bounds.x,
+            dy: result.elementBounds[index].bounds.y,
+            width: result.elementBounds[index].bounds.width,
+            height: result.elementBounds[index].bounds.height,
+          }));
+        }
+      }
+    }
+  });
+
+  it('이미 두 축이 얇은 그룹을 줄여도 강제로 키우거나 더 줄이지 않는다', async () => {
+    const result = await dragGroup(
+      {
+        '4key': [
+          makeCanonicalSpritePosition({
+            id: SPRITE_A,
+            dx: 0,
+            dy: 0,
+            width: 1,
+            height: 1,
+          }),
+          makeCanonicalSpritePosition({
+            id: SPRITE_B,
+            dx: 2,
+            dy: 0,
+            width: 1,
+            height: 1,
+          }),
+        ],
+      },
+      'e',
+      { x: 3, y: 0 },
+      { x: -100, y: 0 },
+    );
+    expect(result.previewCount).toBe(0);
+  });
+
+  it.each([
+    { id: 'e', dx: 1, dy: 0 },
+    { id: 's', dx: 0, dy: 1 },
+    { id: 'se', dx: 1, dy: 1 },
+  ])(
+    '두 축이 얇은 스프라이트와 큰 키를 함께 $id 방향으로 줄이면 크기를 유지하고 확대는 허용한다',
+    async ({ id, dx, dy }) => {
+      useSettingsStore.setState((state) => ({
+        gridSettings: { ...state.gridSettings, gridSnapSize: 0 },
+      }));
+      const onGroupResize =
+        vi.fn<
+          NonNullable<
+            React.ComponentProps<typeof GroupResizeHandles>['onGroupResize']
+          >
+        >();
+      const onGroupResizeStart = vi.fn();
+      const onGroupResizeEnd = vi.fn();
+      const sprite = makeCanonicalSpritePosition({
+        id: SPRITE_A,
+        dx: 0,
+        dy: 0,
+        width: 1,
+        height: 2,
+      });
+      const key = {
+        ...createDefaultKeyPosition(100, 100),
+        id: SPRITE_B,
+        width: 100,
+        height: 100,
+      };
+      await act(async () => {
+        root.render(
+          <GroupResizeHandles
+            selectedElements={[
+              { type: 'sprite', id: SPRITE_A, index: 0 },
+              { type: 'key', id: SPRITE_B, index: 0 },
+            ]}
+            positions={{ '4key': [key] }}
+            statPositions={{}}
+            graphPositions={{}}
+            knobPositions={{}}
+            spritePositions={{ '4key': [sprite] }}
+            selectedKeyType="4key"
+            pluginElements={[]}
+            getOtherElements={() => []}
+            onGroupResize={onGroupResize}
+            onGroupResizeStart={onGroupResizeStart}
+            onGroupResizeEnd={onGroupResizeEnd}
+          />,
+        );
+      });
+      const handle = host.querySelector<HTMLElement>(
+        `[data-group-resize-handle="${id}"]`,
+      )!;
+      act(() => {
+        handle.dispatchEvent(
+          new MouseEvent('mousedown', {
+            clientX: 0,
+            clientY: 0,
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+      });
+      const moveAndFlush = (distance: number) => {
+        document.dispatchEvent(
+          new MouseEvent('mousemove', {
+            clientX: dx * distance,
+            clientY: dy * distance,
+          }),
+        );
+        const callback = callbacks.get(1)!;
+        callbacks.clear();
+        act(() => callback(performance.now()));
+      };
+
+      moveAndFlush(-100);
+      expect(onGroupResize).not.toHaveBeenCalled();
+      expect(onGroupResizeStart).not.toHaveBeenCalled();
+      expect(onGroupResizeEnd).not.toHaveBeenCalled();
+
+      moveAndFlush(50);
+      expect(onGroupResize).toHaveBeenCalledTimes(1);
+      expect(onGroupResizeStart).toHaveBeenCalledTimes(1);
+      const result = onGroupResize.mock.lastCall![0];
+      const spriteBounds = result.elementBounds.find(
+        ({ element }) => element.id === SPRITE_A,
+      )!.bounds;
+      const keyBounds = result.elementBounds.find(
+        ({ element }) => element.id === SPRITE_B,
+      )!.bounds;
+      expect(spriteBounds.width).toBe(1.25);
+      expect(spriteBounds.height).toBe(2.5);
+      expect(keyBounds.width).toBe(dx === 0 ? 100 : 125);
+      expect(keyBounds.height).toBe(dy === 0 ? 100 : 125);
+      expect(
+        result.elementBounds.every(({ bounds }) =>
+          isBoundsWithinEditorLimits(bounds),
+        ),
+      ).toBe(true);
+      act(() => document.dispatchEvent(new MouseEvent('mouseup')));
+      expect(onGroupResizeEnd).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each(['s', 'e'])(
+    '얇은 그룹의 %s 핸들도 정상 축이 하한에 닿기 전까지 축소한다',
+    async (handleId) => {
+      useSettingsStore.setState((state) => ({
+        gridSettings: { ...state.gridSettings, gridSnapSize: 0 },
+      }));
+      const vertical = handleId === 's';
+      const result = await dragGroup(
+        {
+          '4key': [SPRITE_A, SPRITE_B].map((id, index) =>
+            makeCanonicalSpritePosition({
+              id,
+              dx: vertical ? 0 : index * 0.1,
+              dy: vertical ? index * 0.1 : 0,
+              width: vertical ? 400 : 0.1,
+              height: vertical ? 0.1 : 400,
+            }),
+          ),
+        },
+        handleId,
+        { x: 0, y: 0 },
+        { x: vertical ? 0 : -0.1, y: vertical ? -0.1 : 0 },
+      );
+      expect(result.previewCount).toBe(1);
+      for (const { bounds } of result.elementBounds) {
+        expect(vertical ? bounds.width : bounds.height).toBeCloseTo(200, 9);
+        expect(vertical ? bounds.height : bounds.width).toBeCloseTo(0.05, 9);
+      }
+    },
+  );
+
+  it('극소 두께 그룹도 하한 반올림 보정이 멈추지 않고 끝난다', async () => {
+    useSettingsStore.setState((state) => ({
+      gridSettings: { ...state.gridSettings, gridSnapSize: 0 },
+    }));
+    const result = await dragGroup(
+      {
+        '4key': [SPRITE_A, SPRITE_B].map((id, index) =>
+          makeCanonicalSpritePosition({
+            id,
+            dx: 0,
+            dy: index * 1e-320,
+            width: 400,
+            height: 1e-320,
+          }),
+        ),
+      },
+      'e',
+      { x: 0, y: 0 },
+      { x: -390, y: 0 },
+    );
+    expect(result.previewCount).toBe(1);
+    for (const { bounds } of result.elementBounds) {
+      expect(bounds.width).toBeGreaterThanOrEqual(10);
+      expect(bounds.height).toBeGreaterThan(0);
+    }
+  });
 
   it('얇은 스프라이트 그룹의 세로 확대는 파생 폭 상한에서 멈춘다', async () => {
     // 400x0.1 둘이 세로로 붙은 0.2 높이 그룹 - 아래 핸들 100px는 배율 500

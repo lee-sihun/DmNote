@@ -94,6 +94,13 @@ describe('projectGroupElementBounds', () => {
     expect(shrinkLimitSize(key, { ...keyBounds, width: 80 }, 'x')).toBe(80);
     expect(shrinkLimitSize(key, { ...keyBounds, width: 80 }, 'y')).toBe(60);
   });
+
+  it('비율 고정 요소에 이미 얇은 축이 있으면 정상 축을 하한 기준으로 쓴다', () => {
+    const thin = { ...spriteBounds, width: 400, height: 0.1 };
+    expect(shrinkLimitSize(sprite, thin, 'x', 10)).toBe(400);
+    expect(shrinkLimitSize(sprite, thin, 'y', 10)).toBe(400);
+    expect(shrinkLimitSize(sprite, { ...thin, width: 1 }, 'x', 10)).toBe(0.1);
+  });
 });
 
 describe('limitGroupGrowth', () => {

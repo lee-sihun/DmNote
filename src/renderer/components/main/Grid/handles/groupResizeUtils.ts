@@ -199,16 +199,22 @@ export function limitGroupGrowth(
 }
 
 /**
- * 축소 한계 계산에 쓸 요소 치수. 비율 고정 요소는 어느 축을 끌어도 짧은 변이
- * 함께 줄어드므로 짧은 변으로 잰다
+ * 축소 한계 계산에 쓸 요소 치수. 비율 고정 요소는 어느 축을 끌어도 함께
+ * 줄어드는 보호 축 중 짧은 변으로 잰다
  */
 export function shrinkLimitSize(
   element: SelectedElement,
   bounds: Bounds,
   axis: 'x' | 'y',
+  minSize = 0,
 ): number {
   if (isAspectLockedElement(element)) {
-    return Math.min(bounds.width, bounds.height);
+    const guarded = [bounds.width, bounds.height].filter(
+      (size) => size >= minSize,
+    );
+    return guarded.length > 0
+      ? Math.min(...guarded)
+      : Math.min(bounds.width, bounds.height);
   }
   return axis === 'x' ? bounds.width : bounds.height;
 }
