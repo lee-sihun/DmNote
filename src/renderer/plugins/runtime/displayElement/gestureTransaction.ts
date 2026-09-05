@@ -13,6 +13,7 @@ import {
 } from '@plugins/runtime/pluginModelRevision';
 import {
   applyCanonicalPluginInstances,
+  cancelPendingPluginInstanceSaves,
   notePluginInstancesMutation,
 } from './instancesUndoSync';
 import { buildSavedPluginInstances } from '../api/defineElement';
@@ -109,9 +110,21 @@ export const cancelMixedGestureTransaction = (gestureId: string): void => {
 // staged가 남으면 barrier가 영구 대기하므로, 커밋이 시작되지 않은 것만 정산
 export const cancelUncommittedMixedGestureTransaction = (
   gestureId: string,
+  options: {
+    discardPendingSave?: boolean;
+    beforeDiscard?: (pluginId: string) => void;
+  } = {},
 ): void => {
   const staged = stagedGestures.get(gestureId);
   if (!staged || staged.committing) return;
+  if (options.discardPendingSave) {
+    staged.pluginIds.forEach((pluginId) => {
+      if (getStagedPluginInstancesGestureId(pluginId) === gestureId) {
+        options.beforeDiscard?.(pluginId);
+        cancelPendingPluginInstanceSaves(pluginId);
+      }
+    });
+  }
   settleMixedGestureTransaction(gestureId);
 };
 

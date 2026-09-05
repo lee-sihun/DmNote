@@ -14,7 +14,12 @@ import {
   commitSingleElementBoundsById,
   elementBoundsOp,
 } from '@src/renderer/editor/runtime/elementOps';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
+import {
+  isHistoryEditorFlushLocked,
+  subscribeHistoryEditorFlushStart,
+} from '@src/renderer/editor/runtime/historyEditorFlushLock';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useSmartGuidesStore } from '@stores/grid/useSmartGuidesStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
@@ -132,7 +137,7 @@ export function useGridResize({
     });
   };
 
-  const endPluginResizeSessions = () => {
+  const endPluginResizeSessions = useCallback(() => {
     const tokens = pluginResizeTokensRef.current;
     pluginResizeTokensRef.current = new Map();
     tokens.forEach((token, pluginId) => {
@@ -142,7 +147,41 @@ export function useGridResize({
     const gestureId = resizeGestureIdRef.current;
     if (gestureId) cancelUncommittedMixedGestureTransaction(gestureId);
     resizeGestureIdRef.current = null;
-  };
+  }, []);
+
+  const cancelResize = useCallback(() => {
+    resizeStartRef.current = false;
+    frozenResizeTargetsRef.current = [];
+    finalBoundsRef.current = null;
+    finalGroupBoundsRef.current = null;
+    setPreviewBounds(null);
+    setPreviewGroupBounds(null);
+    setPreviewElementBounds(null);
+    useGridSelectionStore.getState().setResizing(false);
+    useSmartGuidesStore.getState().clearGuides();
+    endPluginResizeSessions();
+  }, [endPluginResizeSessions]);
+
+  useEffect(
+    () =>
+      useCommittedApplyStore.subscribe((state, previous) => {
+        if (
+          state.historyTick === previous.historyTick ||
+          !resizeStartRef.current
+        )
+          return;
+        cancelResize();
+      }),
+    [cancelResize],
+  );
+
+  useEffect(
+    () =>
+      subscribeHistoryEditorFlushStart(() => {
+        if (resizeStartRef.current) cancelResize();
+      }),
+    [cancelResize],
+  );
 
   useEffect(
     () => () => {
@@ -154,11 +193,11 @@ export function useGridResize({
       endPluginResizeSessions();
       if (gestureId) cancelUncommittedMixedGestureTransaction(gestureId);
     },
-    [],
+    [endPluginResizeSessions],
   );
 
   const handleResizeStart = (_handle?: ResizeHandle) => {
-    if (resizeStartRef.current) return;
+    if (resizeStartRef.current || isHistoryEditorFlushLocked()) return;
     resizeStartRef.current = true;
     const gestureId = crypto.randomUUID();
     resizeGestureIdRef.current = gestureId;
@@ -481,7 +520,7 @@ export function useGridResize({
       range: ScaleRange;
     };
   }) => {
-    if (selectedElements.length !== 1) return;
+    if (!resizeStartRef.current || selectedElements.length !== 1) return;
 
     const frozenTarget = frozenResizeTargetsRef.current[0];
     if (
@@ -501,6 +540,11 @@ export function useGridResize({
 
   // 리사이즈 종료 처리 - 실제 요소에 최종 bounds 적용
   const handleResizeComplete = () => {
+    if (!resizeStartRef.current) return;
+    if (isHistoryEditorFlushLocked()) {
+      cancelResize();
+      return;
+    }
     resizeStartRef.current = false;
 
     // 스마트 가이드 클리어
@@ -576,6 +620,7 @@ export function useGridResize({
 
   // 그룹 리사이즈 핸들러 - 프리뷰 모드
   const handleGroupResize = (result: GroupResizeResult) => {
+    if (!resizeStartRef.current) return;
     setPreviewGroupBounds(result.groupBounds);
     setPreviewElementBounds(result.elementBounds);
     finalGroupBoundsRef.current = {
@@ -586,6 +631,11 @@ export function useGridResize({
 
   // 그룹 리사이즈 완료 처리 - 실제 요소들에 최종 bounds 적용
   const handleGroupResizeComplete = () => {
+    if (!resizeStartRef.current) return;
+    if (isHistoryEditorFlushLocked()) {
+      cancelResize();
+      return;
+    }
     resizeStartRef.current = false;
     let groupHandledNatively = false;
     let groupPluginInvolved = false;

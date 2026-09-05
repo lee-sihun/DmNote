@@ -15,6 +15,11 @@ import {
 } from '@utils/grid/cursorUtils';
 import { DRAG_THRESHOLD } from './constants';
 import { tryAcquireDragSession, releaseDragSession } from './dragSession';
+import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
+import {
+  isHistoryEditorFlushLocked,
+  subscribeHistoryEditorFlushStart,
+} from '@src/renderer/editor/runtime/historyEditorFlushLock';
 
 interface ElementBounds {
   id: string;
@@ -33,7 +38,7 @@ interface UseDraggableOptions {
   initialX?: number;
   initialY?: number;
   onPositionChange?: (x: number, y: number) => void;
-  onDragStart?: () => void | (() => void);
+  onDragStart?: () => void | ((commit?: boolean) => void);
   zoom?: number;
   panX?: number;
   panY?: number;
@@ -114,6 +119,7 @@ export const useDraggable = ({
   const activeDragRef = useRef(false);
   const activePointerIdRef = useRef<number | null>(null);
   const activeDragCleanupRef = useRef<(() => void) | null>(null);
+  const cancelHistoryDragRef = useRef<(() => void) | null>(null);
   // dblclick은 두 press의 합성 — 직전 press의 이동까지 기억해야
   // 드래그(제자리 복귀 포함) 직후의 빠른 재클릭이 편집 진입으로 새지 않음
   const movedThisPressRef = useRef(false);
@@ -123,6 +129,22 @@ export const useDraggable = ({
   // 드래그 세션 중 disabled 전이가 오면 표식 청소를 세션 종료 후로 보류
   const pendingDisabledResetRef = useRef(false);
   const disabledResetTimerRef = useRef<number | null>(null);
+
+  useEffect(
+    () =>
+      useCommittedApplyStore.subscribe((state, previous) => {
+        if (state.historyTick !== previous.historyTick) {
+          cancelHistoryDragRef.current?.();
+        }
+      }),
+    [],
+  );
+
+  useEffect(
+    () =>
+      subscribeHistoryEditorFlushStart(() => cancelHistoryDragRef.current?.()),
+    [],
+  );
 
   useEffect(() => {
     zoomRef.current = zoom;
@@ -257,7 +279,7 @@ export const useDraggable = ({
     let rafId: number | null = null;
     let latestMoveEvent: PointerEvent | null = null;
     let pendingFrameCallback: (() => void) | null = null;
-    let finishGesture: (() => void) | null = null;
+    let finishGesture: ((commit?: boolean) => void) | null = null;
     // 드래그 종료 플래그 (rAF 콜백에서 체크)
     let dragEnded = false;
     // Shift 키 드래그 시 축 고정을 위한 변수
@@ -447,8 +469,9 @@ export const useDraggable = ({
       rafId = requestAnimationFrame(pendingFrameCallback);
     };
 
-    const finishDrag = () => {
+    const finishDrag = (commit = true) => {
       if (dragEnded) return;
+      commit = commit && !isHistoryEditorFlushLocked();
 
       // 마지막 프레임 대기 입력을 커밋 전에 동기 반영
       if (rafId) {
@@ -456,13 +479,14 @@ export const useDraggable = ({
         rafId = null;
         const flush = pendingFrameCallback;
         pendingFrameCallback = null;
-        flush?.();
+        if (commit) flush?.();
       }
       dragEnded = true;
       const pointerId = activePointerIdRef.current;
       activeDragRef.current = false;
       activePointerIdRef.current = null;
       activeDragCleanupRef.current = null;
+      cancelHistoryDragRef.current = null;
       releaseDragSession();
       if (pointerId !== null && dragTarget.hasPointerCapture(pointerId)) {
         dragTarget.releasePointerCapture(pointerId);
@@ -472,8 +496,8 @@ export const useDraggable = ({
       dragTarget.removeEventListener('pointermove', handlePointerMove);
       dragTarget.removeEventListener('pointerup', handlePointerEnd);
       dragTarget.removeEventListener('pointercancel', handlePointerEnd);
-      dragTarget.removeEventListener('lostpointercapture', finishDrag);
-      window.removeEventListener('blur', finishDrag);
+      dragTarget.removeEventListener('lostpointercapture', completeDrag);
+      window.removeEventListener('blur', completeDrag);
 
       setIsDragging(false);
 
@@ -489,9 +513,14 @@ export const useDraggable = ({
         // 최종 위치만 부모에 커밋
         const { dx: finalDx, dy: finalDy } = lastSnappedRef.current;
         try {
-          onPositionChange?.(finalDx, finalDy);
+          if (commit) onPositionChange?.(finalDx, finalDy);
+          else {
+            const restored = pendingInitialSyncRef.current ?? initialPosition;
+            lastSnappedRef.current = restored;
+            setOffset(restored);
+          }
         } finally {
-          finishGesture?.();
+          finishGesture?.(commit);
           finishGesture = null;
           // 드래그 결과가 최신 의도 - 유예된 외부 동기화는 폐기하고 커밋
           // 이후의 props 재동기화에 맡긴다
@@ -529,14 +558,16 @@ export const useDraggable = ({
       finishDrag();
     };
 
-    activeDragCleanupRef.current = finishDrag;
+    const completeDrag = () => finishDrag();
+    activeDragCleanupRef.current = completeDrag;
+    cancelHistoryDragRef.current = () => finishDrag(false);
     dragTarget.addEventListener('pointermove', handlePointerMove, {
       passive: true,
     });
     dragTarget.addEventListener('pointerup', handlePointerEnd);
     dragTarget.addEventListener('pointercancel', handlePointerEnd);
-    dragTarget.addEventListener('lostpointercapture', finishDrag);
-    window.addEventListener('blur', finishDrag);
+    dragTarget.addEventListener('lostpointercapture', completeDrag);
+    window.addEventListener('blur', completeDrag);
   };
 
   useEffect(() => {

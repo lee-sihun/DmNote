@@ -11,6 +11,11 @@ import {
 } from 'vitest';
 import { useSelectionDrag } from './useSelectionDrag';
 import { releaseDragSession } from './dragSession';
+import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
+import {
+  acquireHistoryEditorFlushLock,
+  resetHistoryEditorFlushLock,
+} from '@src/renderer/editor/runtime/historyEditorFlushLock';
 import {
   calculateGroupBounds,
   type ElementBounds,
@@ -252,10 +257,12 @@ describe('useSelectionDrag', () => {
     clearGuides.mockClear();
     setDraggingOrResizing.mockClear();
     releaseDragSession();
+    resetHistoryEditorFlushLock();
   });
 
   afterEach(async () => {
     await act(async () => root.unmount());
+    resetHistoryEditorFlushLock();
     host.remove();
     document.body.innerHTML = '';
     vi.restoreAllMocks();
@@ -277,6 +284,40 @@ describe('useSelectionDrag', () => {
     expect(onMultiDragEnd).not.toHaveBeenCalled();
     expect(onMovedCheck).toHaveBeenCalledWith(false);
   });
+
+  it.each([
+    { painted: false, boundary: 'applied' },
+    { painted: true, boundary: 'applied' },
+    { painted: false, boundary: 'locked' },
+    { painted: true, boundary: 'locked' },
+  ])(
+    'history $boundary, 프레임 처리 $painted 뒤 선택 드래그는 저장하지 않는다',
+    async ({ painted, boundary }) => {
+      const finish = vi.fn();
+      onMultiDragStart.mockReturnValue(finish);
+      const element = await renderHarness();
+      await act(async () => {
+        element.dispatchEvent(pointerEvent('pointerdown'));
+        element.dispatchEvent(pointerEvent('pointermove', { clientX: 20 }));
+        if (painted) flushRaf();
+        if (boundary === 'applied')
+          useCommittedApplyStore.getState().bump('historyRedo');
+        else acquireHistoryEditorFlushLock('selection-release');
+        element.dispatchEvent(pointerEvent('pointerup', { clientX: 20 }));
+        expect(onMultiDragEnd).not.toHaveBeenCalled();
+        if (boundary === 'locked')
+          useCommittedApplyStore.getState().bump('historyRedo');
+        flushRaf();
+      });
+      expect(onMultiDrag).toHaveBeenCalledTimes(painted ? 1 : 0);
+      expect(onMultiDragEnd).not.toHaveBeenCalled();
+      expect(finish).toHaveBeenCalledTimes(painted ? 1 : 0);
+      if (painted) expect(finish).toHaveBeenCalledWith(false);
+      expect(element.hasPointerCapture(1)).toBe(false);
+      expect(document.body.classList.contains('dmn-dragging')).toBe(false);
+      expect(rafCallbacks.size).toBe(0);
+    },
+  );
 
   it('임계 돌파 후 시작 좌표 기준 스냅 delta로 이동한다', async () => {
     const element = await renderHarness();
@@ -389,7 +430,7 @@ describe('useSelectionDrag', () => {
     });
 
     expect(onMultiDragEnd).toHaveBeenCalledTimes(1);
-    expect(cleanup).toHaveBeenCalledOnce();
+    expect(cleanup).toHaveBeenCalledExactlyOnceWith(true);
     expect(onMultiDragEnd.mock.invocationCallOrder[0]).toBeLessThan(
       cleanup.mock.invocationCallOrder[0]!,
     );
@@ -411,7 +452,7 @@ describe('useSelectionDrag', () => {
     });
 
     expect(onMultiDragEnd).toHaveBeenCalledOnce();
-    expect(cleanup).toHaveBeenCalledOnce();
+    expect(cleanup).toHaveBeenCalledExactlyOnceWith(true);
   });
 
   it('드래그 도중 enabled가 꺼지면 세션을 종료하고 이후 이동을 무시한다', async () => {
@@ -698,10 +739,12 @@ describe('pressMovedRef 클릭 가드 계약', () => {
       rafCallbacks.delete(id);
     });
     releaseDragSession();
+    resetHistoryEditorFlushLock();
   });
 
   afterEach(async () => {
     await act(async () => root.unmount());
+    resetHistoryEditorFlushLock();
     host.remove();
     document.body.innerHTML = '';
     vi.restoreAllMocks();

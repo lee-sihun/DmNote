@@ -202,6 +202,57 @@ export const createPropertyReceipt = (
   };
 };
 
+// 드래그 중 쓴 위치만 복원하고 도중에 도착한 다른 writer의 값은 보존
+export const createNativePositionDragReceipt = (
+  targets: readonly { type: NativeElementType; id: string }[],
+) => {
+  const types = new Set(targets.map((target) => target.type));
+  const readPositions = () => {
+    const positions = new Map<
+      string,
+      { id: string } & Record<string, unknown>
+    >();
+    for (const type of types) {
+      for (const list of Object.values(readRecord(type))) {
+        for (const position of list)
+          positions.set(`${type}:${position.id}`, position);
+      }
+    }
+    return positions;
+  };
+  const initial = readPositions();
+  const entries = targets.flatMap(({ type, id }): PropertyReceiptEntry[] => {
+    const position = initial.get(`${type}:${id}`);
+    return position
+      ? ['dx', 'dy'].map((field) => ({
+          type,
+          id,
+          field,
+          before: position[field],
+          expected: position[field],
+        }))
+      : [];
+  });
+  const receipt = createPropertyReceipt(entries);
+  return {
+    apply: (mutate: () => void) => {
+      const before = readPositions();
+      for (const entry of entries) {
+        const position = before.get(`${entry.type}:${entry.id}`);
+        if (position && position[entry.field] !== entry.expected)
+          entry.before = position[entry.field];
+      }
+      mutate();
+      const after = readPositions();
+      for (const entry of entries) {
+        const position = after.get(`${entry.type}:${entry.id}`);
+        if (position) entry.expected = position[entry.field];
+      }
+    },
+    rollback: () => receipt?.rollback(),
+  };
+};
+
 // 여러 receipt를 역순 롤백 하나로 결합
 export const combineReceipts = (
   ...receipts: Array<ElementIntentReceipt | null>

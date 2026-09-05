@@ -12,6 +12,7 @@ import {
 import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
 import { spriteItemsApi } from '@api/modules/itemsApi';
+import { subscribeHistoryEditorFlushStart } from '@src/renderer/editor/runtime/historyEditorFlushLock';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
@@ -245,6 +246,10 @@ const SpriteCanvasHandles = ({
   // 활성 드래그 취소 배선 - 세션 종료·대상 교체·언마운트에서
   // window 리스너·포인터 캡처·전역 드래그 락·열린 preview 제스처를 함께 정리한다
   const cancelDragRef = useRef<(() => void) | null>(null);
+  useEffect(
+    () => subscribeHistoryEditorFlushStart(() => cancelDragRef.current?.()),
+    [],
+  );
   const ownerKey = session
     ? `${session.positionId}\n${session.poseId}`
     : sprite
@@ -267,15 +272,16 @@ const SpriteCanvasHandles = ({
 
   // undo/redo 반영은 대상도 세대도 바꾸지 않아 위 배선에 걸리지 않는다. 그대로 두면
   // 저장값이 되돌아간 뒤 pointerup이 시작 시점 값으로 푼 결과를 다시 커밋한다
-  const historyTick = useCommittedApplyStore((state) => state.historyTick);
-  const historyTickRef = useRef(historyTick);
-  useEffect(() => {
-    if (historyTickRef.current === historyTick) return;
-    historyTickRef.current = historyTick;
-    if (dragRef.current) cancelDragRef.current?.();
-    pendingBasePivotGenerationRef.current += 1;
-    setPendingBasePivotLanding(null);
-  }, [historyTick]);
+  useEffect(
+    () =>
+      useCommittedApplyStore.subscribe((state, previous) => {
+        if (state.historyTick === previous.historyTick) return;
+        cancelDragRef.current?.();
+        pendingBasePivotGenerationRef.current += 1;
+        setPendingBasePivotLanding(null);
+      }),
+    [],
+  );
 
   if (!sprite && !session) {
     // eslint-disable-next-line react-hooks/refs

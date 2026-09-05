@@ -1,14 +1,21 @@
 const COMPLETED_HISTORY_FLUSH_LIMIT = 16;
 
-interface ActiveHistoryFlushLock {
-  handshakeId: string;
+interface LockedHistoryDocument {
   root: HTMLElement;
   wasInert: boolean;
   previousAriaBusy: string | null;
+  eventTarget: Window | Document;
+}
+
+interface ActiveHistoryFlushLock {
+  handshakeId: string;
+  documents: Map<Document, LockedHistoryDocument>;
 }
 
 let activeLock: ActiveHistoryFlushLock | null = null;
+const registeredDocuments = new Set<Document>();
 const completedHandshakeIds: string[] = [];
+const flushStartListeners = new Set<() => void>();
 const BLOCKED_EVENT_TYPES = [
   'keydown',
   'keyup',
@@ -25,14 +32,53 @@ const blockInteraction = (event: Event) => {
   event.stopImmediatePropagation();
 };
 
-const setInteractionBlocker = (enabled: boolean) => {
+const setInteractionBlocker = (target: Window | Document, enabled: boolean) => {
   BLOCKED_EVENT_TYPES.forEach((eventType) => {
     if (enabled) {
-      window.addEventListener(eventType, blockInteraction, true);
+      target.addEventListener(eventType, blockInteraction, true);
     } else {
-      window.removeEventListener(eventType, blockInteraction, true);
+      target.removeEventListener(eventType, blockInteraction, true);
     }
   });
+};
+
+const lockDocument = (doc: Document) => {
+  if (!activeLock || activeLock.documents.has(doc)) return;
+  const root = doc.documentElement;
+  const eventTarget = doc.defaultView ?? doc;
+  activeLock.documents.set(doc, {
+    root,
+    wasInert: root.inert === true,
+    previousAriaBusy: root.getAttribute('aria-busy'),
+    eventTarget,
+  });
+  root.inert = true;
+  root.setAttribute('aria-busy', 'true');
+  setInteractionBlocker(eventTarget, true);
+};
+
+const unlockDocument = (doc: Document) => {
+  const locked = activeLock?.documents.get(doc);
+  if (!locked) return;
+  setInteractionBlocker(locked.eventTarget, false);
+  locked.root.inert = locked.wasInert;
+  if (locked.previousAriaBusy === null) {
+    locked.root.removeAttribute('aria-busy');
+  } else {
+    locked.root.setAttribute('aria-busy', locked.previousAriaBusy);
+  }
+  activeLock?.documents.delete(doc);
+};
+
+export const registerHistoryEditorFlushDocument = (
+  doc: Document,
+): (() => void) => {
+  registeredDocuments.add(doc);
+  lockDocument(doc);
+  return () => {
+    registeredDocuments.delete(doc);
+    unlockDocument(doc);
+  };
 };
 
 const rememberCompletedHandshake = (handshakeId: string) => {
@@ -45,13 +91,7 @@ const rememberCompletedHandshake = (handshakeId: string) => {
 
 const restoreActiveLock = () => {
   if (!activeLock) return;
-  setInteractionBlocker(false);
-  activeLock.root.inert = activeLock.wasInert;
-  if (activeLock.previousAriaBusy === null) {
-    activeLock.root.removeAttribute('aria-busy');
-  } else {
-    activeLock.root.setAttribute('aria-busy', activeLock.previousAriaBusy);
-  }
+  [...activeLock.documents.keys()].forEach(unlockDocument);
   activeLock = null;
 };
 
@@ -60,17 +100,31 @@ export const acquireHistoryEditorFlushLock = (handshakeId: string): boolean => {
   if (activeLock?.handshakeId === handshakeId) return true;
 
   restoreActiveLock();
-  const root = document.documentElement;
   activeLock = {
     handshakeId,
-    root,
-    wasInert: root.inert === true,
-    previousAriaBusy: root.getAttribute('aria-busy'),
+    documents: new Map(),
   };
-  root.inert = true;
-  root.setAttribute('aria-busy', 'true');
-  setInteractionBlocker(true);
+  const errors: unknown[] = [];
+  flushStartListeners.forEach((listener) => {
+    try {
+      listener();
+    } catch (error) {
+      errors.push(error);
+    }
+  });
+  lockDocument(document);
+  registeredDocuments.forEach(lockDocument);
+  if (errors.length > 0) throw errors[0];
   return true;
+};
+
+export const subscribeHistoryEditorFlushStart = (
+  listener: () => void,
+): (() => void) => {
+  flushStartListeners.add(listener);
+  return () => {
+    flushStartListeners.delete(listener);
+  };
 };
 
 export const releaseHistoryEditorFlushLock = (handshakeId: string): void => {

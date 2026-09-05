@@ -3,8 +3,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   acquireHistoryEditorFlushLock,
   isHistoryEditorFlushLocked,
+  registerHistoryEditorFlushDocument,
   releaseHistoryEditorFlushLock,
   resetHistoryEditorFlushLock,
+  subscribeHistoryEditorFlushStart,
 } from './historyEditorFlushLock';
 
 beforeEach(() => {
@@ -20,6 +22,62 @@ afterEach(() => {
 });
 
 describe('history editor flush lock', () => {
+  it.each([
+    ['오류 객체', new Error('first cancellation failed')],
+    ['undefined', undefined],
+  ])('%s 예외 뒤에도 나머지 취소와 문서 잠금을 마친다', (_label, failure) => {
+    const child = document.implementation.createHTMLDocument();
+    const unregisterDocument = registerHistoryEditorFlushDocument(child);
+    const seen: number[] = [];
+    const unsubscribers = [
+      subscribeHistoryEditorFlushStart(() => {
+        seen.push(1);
+        throw failure;
+      }),
+      subscribeHistoryEditorFlushStart(() => {
+        seen.push(2);
+        throw new Error('second cancellation failed');
+      }),
+      subscribeHistoryEditorFlushStart(() => seen.push(3)),
+    ];
+    try {
+      let caught: { error: unknown } | null = null;
+      try {
+        acquireHistoryEditorFlushLock('failed-cancellation');
+      } catch (error) {
+        caught = { error };
+      }
+      expect(caught).toEqual({ error: failure });
+      expect(seen).toEqual([1, 2, 3]);
+      expect(document.documentElement.inert).toBe(true);
+      expect(child.documentElement.inert).toBe(true);
+      releaseHistoryEditorFlushLock('failed-cancellation');
+      expect(isHistoryEditorFlushLocked()).toBe(false);
+      expect(document.documentElement.inert).toBe(false);
+      expect(child.documentElement.inert).toBe(false);
+    } finally {
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
+      unregisterDocument();
+    }
+  });
+
+  it('새 lock은 inert 적용 전에 한 번만 취소를 알리고 해제한 구독은 호출하지 않는다', () => {
+    const seen: Array<{ locked: boolean; inert: boolean }> = [];
+    const unsubscribe = subscribeHistoryEditorFlushStart(() => {
+      seen.push({
+        locked: isHistoryEditorFlushLocked(),
+        inert: document.documentElement.inert,
+      });
+    });
+    acquireHistoryEditorFlushLock('history-start');
+    acquireHistoryEditorFlushLock('history-start');
+    expect(seen).toEqual([{ locked: true, inert: false }]);
+    releaseHistoryEditorFlushLock('history-start');
+    unsubscribe();
+    acquireHistoryEditorFlushLock('history-next');
+    expect(seen).toHaveLength(1);
+  });
+
   it('일치하는 완료 ID에서만 기존 inert 상태로 복원한다', () => {
     expect(acquireHistoryEditorFlushLock('history-1')).toBe(true);
     expect(document.documentElement.inert).toBe(true);

@@ -12,6 +12,11 @@ import {
 } from 'vitest';
 import { useDraggable } from './useDraggable';
 import { releaseDragSession } from './dragSession';
+import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
+import {
+  acquireHistoryEditorFlushLock,
+  resetHistoryEditorFlushLock,
+} from '@src/renderer/editor/runtime/historyEditorFlushLock';
 import {
   isCustomCursorHoverSuspended,
   setCustomCursorHover,
@@ -189,10 +194,12 @@ describe('useDraggable pointer contract', () => {
     setDraggingOrResizing.mockClear();
     document.body.classList.remove(DRAG_CLASS);
     releaseDragSession();
+    resetHistoryEditorFlushLock();
   });
 
   afterEach(async () => {
     await act(async () => root.unmount());
+    resetHistoryEditorFlushLock();
     host.remove();
     document.body.innerHTML = '';
     vi.restoreAllMocks();
@@ -211,6 +218,41 @@ describe('useDraggable pointer contract', () => {
     expect(onDragStart).not.toHaveBeenCalled();
     expect(onPositionChange).not.toHaveBeenCalled();
   });
+
+  it.each([
+    { painted: false, boundary: 'applied' },
+    { painted: true, boundary: 'applied' },
+    { painted: false, boundary: 'locked' },
+    { painted: true, boundary: 'locked' },
+  ])(
+    'history $boundary, 프레임 처리 $painted 뒤 늦은 릴리즈는 저장하지 않는다',
+    async ({ painted, boundary }) => {
+      const finish = vi.fn();
+      onDragStart.mockReturnValue(finish);
+      const element = await renderHarness();
+      await act(async () => {
+        dispatchPointer(element, 'pointerdown');
+        dispatchPointer(element, 'pointermove', { clientX: 20 });
+        if (painted) flushRaf();
+        if (boundary === 'applied')
+          useCommittedApplyStore.getState().bump('historyUndo');
+        else acquireHistoryEditorFlushLock('drag-release');
+        dispatchPointer(element, 'pointerup', { clientX: 20 });
+        expect(onPositionChange).not.toHaveBeenCalled();
+        if (boundary === 'locked')
+          useCommittedApplyStore.getState().bump('historyUndo');
+        flushRaf();
+      });
+      expect(onPositionChange).not.toHaveBeenCalled();
+      expect(rafCallbacks.size).toBe(0);
+      expect(element.hasPointerCapture(1)).toBe(false);
+      expect(document.body.classList.contains(DRAG_CLASS)).toBe(false);
+      expect(finish).toHaveBeenCalledExactlyOnceWith(false);
+      await renderHarness('select', { x: -15, y: 10 });
+      expect(element.dataset.dx).toBe('-15');
+      expect(element.dataset.dy).toBe('10');
+    },
+  );
 
   it('allows only a stationary unmodified select-mode double click', async () => {
     const element = await renderHarness();
@@ -280,7 +322,7 @@ describe('useDraggable pointer contract', () => {
     expect(onPositionChange).toHaveBeenCalledTimes(1);
     expect(onPositionChange).toHaveBeenCalledWith(10, 0);
     expect(onDragStart).toHaveBeenCalledOnce();
-    expect(cleanup).toHaveBeenCalledOnce();
+    expect(cleanup).toHaveBeenCalledExactlyOnceWith(true);
     expect(onPositionChange.mock.invocationCallOrder[0]).toBeLessThan(
       cleanup.mock.invocationCallOrder[0]!,
     );
@@ -346,7 +388,7 @@ describe('useDraggable pointer contract', () => {
 
     expect(document.body.classList.contains(DRAG_CLASS)).toBe(false);
     expect(onPositionChange).toHaveBeenCalledTimes(1);
-    expect(cleanup).toHaveBeenCalledOnce();
+    expect(cleanup).toHaveBeenCalledExactlyOnceWith(true);
   });
 
   it('press에서 드래그 커서 클래스를 붙이고 정지 릴리즈에 제거한다', async () => {
@@ -425,7 +467,7 @@ describe('useDraggable pointer contract', () => {
     });
 
     expect(onPositionChange).toHaveBeenCalledOnce();
-    expect(cleanup).toHaveBeenCalledOnce();
+    expect(cleanup).toHaveBeenCalledExactlyOnceWith(true);
   });
 
   it('ignores non-primary pointers', async () => {
@@ -560,7 +602,7 @@ describe('useDraggable pointer contract', () => {
     });
 
     expect(onPositionChange).toHaveBeenCalledTimes(1);
-    expect(cleanup).toHaveBeenCalledOnce();
+    expect(cleanup).toHaveBeenCalledExactlyOnceWith(true);
     expect(setDraggingOrResizing).toHaveBeenLastCalledWith(false);
     expect(
       setDraggingOrResizing.mock.calls.filter(([value]) => value === false),

@@ -9,6 +9,11 @@ import { useSpriteStore } from '@stores/data/useSpriteStore';
 import type { ElementBounds } from '@utils/grid/smartGuides';
 import { aspectScaleRange } from '@components/main/Grid/handles/aspectResize';
 import { useGridResize } from './useGridResize';
+import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
+import {
+  acquireHistoryEditorFlushLock,
+  resetHistoryEditorFlushLock,
+} from '@src/renderer/editor/runtime/historyEditorFlushLock';
 
 const mocks = vi.hoisted(() => ({
   begin: vi.fn(),
@@ -230,6 +235,73 @@ describe('useGridResize plugin gesture lifecycle', () => {
   let events: string[];
   let pluginGestureIds: string[];
 
+  it('history 잠금 중 새 resize는 시작하거나 저장하지 않는다', async () => {
+    await renderHarness([stableKeySelection(STABLE_A)]);
+    acquireHistoryEditorFlushLock('resize-start');
+    try {
+      await act(async () => {
+        api.handleResizeStart();
+        api.handleResize({ x: 10, y: 20, width: 80, height: 90 });
+        api.handleResizeComplete();
+      });
+      expect(mocks.commitSingleBounds).not.toHaveBeenCalled();
+      expect(mocks.setResizing).not.toHaveBeenCalled();
+      expect(api.previewBounds).toBeNull();
+    } finally {
+      resetHistoryEditorFlushLock();
+    }
+  });
+
+  it.each(
+    ['native', 'plugin', 'group'].flatMap((kind) =>
+      ['applied', 'locked'].map((boundary) => ({ kind, boundary })),
+    ),
+  )(
+    '$kind history $boundary 뒤 늦은 preview와 complete는 저장하지 않는다',
+    async ({ kind, boundary }) => {
+      mocks.elements = [{ fullId: 'plugin-a:one', pluginId: 'plugin-a' }];
+      const selection =
+        kind === 'plugin'
+          ? [pluginSelection('plugin-a:one')]
+          : [stableKeySelection(STABLE_A)];
+      await renderHarness(selection);
+      const bounds = { x: 10, y: 20, width: 80, height: 90 };
+      const groupResult = {
+        groupBounds: bounds,
+        elementBounds: [{ element: selection[0], bounds }],
+        handle: { id: 'se', dx: 1, dy: 1 },
+      };
+      await act(async () => {
+        api.handleResizeStart();
+        if (kind === 'group') api.handleGroupResize(groupResult);
+        else api.handleResize(bounds);
+        if (boundary === 'applied')
+          useCommittedApplyStore.getState().bump('historyUndo');
+        else acquireHistoryEditorFlushLock('resize-release');
+        if (kind === 'group') {
+          api.handleGroupResize(groupResult);
+          api.handleGroupResizeComplete();
+        } else {
+          api.handleResize(bounds);
+          api.handleResizeComplete();
+        }
+      });
+      expect(mocks.commitSingleBounds).not.toHaveBeenCalled();
+      expect(mocks.commitGroupBounds).not.toHaveBeenCalled();
+      expect(mocks.updateElement).not.toHaveBeenCalled();
+      if (boundary === 'locked') {
+        await act(async () => {
+          useCommittedApplyStore.getState().bump('historyUndo');
+        });
+        resetHistoryEditorFlushLock();
+      }
+      expect(api.previewBounds).toBeNull();
+      expect(api.previewGroupBounds).toBeNull();
+      expect(api.previewElementBounds).toBeNull();
+      if (kind === 'plugin') expect(mocks.end).toHaveBeenCalledOnce();
+    },
+  );
+
   const renderHarness = async (
     selectedElements: SelectedElement[],
     getOtherElements?: (excludeId: string) => ElementBounds[],
@@ -294,6 +366,7 @@ describe('useGridResize plugin gesture lifecycle', () => {
 
   afterEach(async () => {
     await act(async () => root.unmount());
+    resetHistoryEditorFlushLock();
     host.remove();
   });
 

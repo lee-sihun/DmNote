@@ -7,7 +7,7 @@ import type {
   EditorCommitRequest,
   EditorCommitResult,
   EditorCommittedV1,
-  EditorDocumentV1,
+  CanonicalEditorDocumentV1,
 } from '@src/types/editor';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 
@@ -165,7 +165,7 @@ const spriteFixture = (): CanonicalReactiveSpritePosition => ({
 
 const makeDocument = (
   sprite: CanonicalReactiveSpritePosition,
-): EditorDocumentV1 => ({
+): CanonicalEditorDocumentV1 => ({
   schemaVersion: 1,
   keys: {},
   keyPositions: {},
@@ -177,15 +177,27 @@ const makeDocument = (
 });
 
 const loadHarness = async () => {
-  const [handles, panel, overlay, spriteStore, coordinator, dragSession] =
-    await Promise.all([
-      import('./SpriteCanvasHandles'),
-      import('@components/main/Grid/PropertiesPanel/single/SingleSpritePanel'),
-      import('@src/renderer/editor/runtime/previewOverlay'),
-      import('@stores/data/useSpriteStore'),
-      import('@src/renderer/editor/runtime/editorStateCoordinator'),
-      import('@hooks/Grid/dragSession'),
-    ]);
+  const [
+    handles,
+    panel,
+    overlay,
+    spriteStore,
+    coordinator,
+    dragSession,
+    historyLock,
+    lifecycle,
+    committedApply,
+  ] = await Promise.all([
+    import('./SpriteCanvasHandles'),
+    import('@components/main/Grid/PropertiesPanel/single/SingleSpritePanel'),
+    import('@src/renderer/editor/runtime/previewOverlay'),
+    import('@stores/data/useSpriteStore'),
+    import('@src/renderer/editor/runtime/editorStateCoordinator'),
+    import('@hooks/Grid/dragSession'),
+    import('@src/renderer/editor/runtime/historyEditorFlushLock'),
+    import('@src/renderer/editor/runtime/lifecycleEditorFlush'),
+    import('@stores/data/useCommittedApplyStore'),
+  ]);
   return {
     SpriteCanvasHandles: handles.default,
     SingleSpritePanel: panel.SingleSpritePanel,
@@ -195,7 +207,11 @@ const loadHarness = async () => {
     getPreviewOverlayVersion: overlay.getPreviewOverlayVersion,
     useSpriteStore: spriteStore.useSpriteStore,
     editorCoordinator: coordinator.editorCoordinator,
+    applyEditorDocument: coordinator.applyEditorDocument,
     releaseDragSession: dragSession.releaseDragSession,
+    historyLock,
+    flushFocusedEditor: lifecycle.flushFocusedEditor,
+    useCommittedApplyStore: committedApply.useCommittedApplyStore,
   };
 };
 type Harness = Awaited<ReturnType<typeof loadHarness>>;
@@ -327,10 +343,115 @@ describe('자세 편집 세션 통합 (패널 + 캔버스 핸들)', () => {
     await act(async () => root.unmount());
     container.remove();
     harness.releaseDragSession();
+    harness.historyLock.resetHistoryEditorFlushLock();
     harness.editorCoordinator.stop();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
+
+  it.each([
+    ['base', 'pointerup'],
+    ['pose', 'pointerup'],
+    ['base', 'settlement'],
+    ['pose', 'settlement'],
+    ['base', 'historyTick'],
+    ['pose', 'historyTick'],
+    ['pose', 'canonicalHistory'],
+  ] as const)(
+    '%s 핸들은 history 경계 %s에서 드래그를 저장하지 않는다',
+    async (kind, boundary) => {
+      runtime.get.mockResolvedValue({
+        revision: 0,
+        document: makeDocument(spriteFixture()),
+      });
+      await harness.editorCoordinator.start();
+      render();
+      if (kind === 'pose') {
+        act(() => poseRows()[0].click());
+        await settle();
+      }
+      const original = canonicalSprite();
+      const target = kind === 'pose' ? poseFrame()! : pivotHandle();
+      const start = kind === 'pose' ? { x: 60, y: 60 } : pivotCenter();
+      pointer('pointerdown', target, start.x, start.y);
+      pointer('pointermove', window, start.x + 30, start.y + 20, {
+        ctrlKey: true,
+      });
+      await settle();
+      const historyTick = harness.useCommittedApplyStore.getState().historyTick;
+      if (boundary !== 'historyTick' && boundary !== 'canonicalHistory')
+        act(() => {
+          harness.historyLock.acquireHistoryEditorFlushLock(
+            'sprite-handle-history',
+          );
+        });
+      let flushing: Promise<boolean> | null = null;
+      if (boundary === 'pointerup')
+        pointer('pointerup', window, start.x + 30, start.y + 20);
+      else if (boundary === 'historyTick' || boundary === 'canonicalHistory')
+        act(() => {
+          if (boundary === 'historyTick')
+            harness.useCommittedApplyStore.getState().bump('historyUndo');
+          else {
+            harness.applyEditorDocument(
+              makeDocument({
+                ...original,
+                poses: original.poses.map((pose) => ({
+                  ...pose,
+                  transform: { ...pose.transform, x: 100 },
+                })),
+              }),
+            );
+            harness.useCommittedApplyStore.getState().bump('historyUndo');
+          }
+          window.dispatchEvent(
+            new PointerEvent('pointerup', {
+              pointerId: 1,
+              bubbles: true,
+              button: 0,
+              buttons: 0,
+              clientX: start.x + 30,
+              clientY: start.y + 20,
+            }),
+          );
+        });
+      else flushing = harness.flushFocusedEditor();
+      await settle();
+      const commits = runtime.commit.mock.calls.length;
+      runtime.resolveAll();
+      if (flushing)
+        await act(async () => {
+          expect(await flushing).toBe(true);
+        });
+      await settle();
+      expect(harness.useCommittedApplyStore.getState().historyTick).toBe(
+        historyTick +
+          (boundary === 'historyTick' || boundary === 'canonicalHistory'
+            ? 1
+            : 0),
+      );
+      expect(commits).toBe(0);
+      const expected =
+        boundary === 'canonicalHistory'
+          ? {
+              ...original,
+              poses: original.poses.map((pose) => ({
+                ...pose,
+                transform: { ...pose.transform, x: 100 },
+              })),
+            }
+          : original;
+      expect(canonicalSprite()).toEqual(expected);
+      expect(
+        harness.composePreviewPositions(
+          'spritePosition',
+          harness.useSpriteStore.getState().positions,
+        )['4key'][0],
+      ).toEqual(expected);
+      if (boundary === 'canonicalHistory')
+        expect(framePoints()[0][0]).toBeGreaterThan(90);
+    },
+  );
 
   it('기준점을 옮긴 뒤 자세를 열어 캔버스에서 끌면 자세가 새 자리에 남는다', async () => {
     runtime.get.mockResolvedValue({
@@ -760,8 +881,9 @@ describe('자세 편집 세션 통합 (패널 + 캔버스 핸들)', () => {
     const before = framePoints();
 
     act(() => toggle.click());
-    await settle();
-    expect(runtime.commit).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.waitFor(() => expect(runtime.commit).toHaveBeenCalledTimes(1));
+    });
     expect(
       runtime.commit.mock.calls[0][0].changes?.spritePositions?.['4key']?.[0]
         .poses[0].pivot,
@@ -780,8 +902,9 @@ describe('자세 편집 세션 통합 (패널 + 캔버스 핸들)', () => {
     const linkedToggle =
       container.querySelector<HTMLElement>('[role="switch"]')!;
     act(() => linkedToggle.click());
-    await settle();
-    expect(runtime.commit).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      await vi.waitFor(() => expect(runtime.commit).toHaveBeenCalledTimes(2));
+    });
     expect(
       runtime.commit.mock.calls[1][0].changes?.spritePositions?.['4key']?.[0]
         .poses[0].pivot,
@@ -958,8 +1081,9 @@ describe('자세 편집 세션 통합 (패널 + 캔버스 핸들)', () => {
       '[role="switch"][aria-label="propertiesPanel.spriteFollowBasePivot"]',
     )!;
     act(() => link.click());
-    await settle();
-    expect(runtime.commit).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.waitFor(() => expect(runtime.commit).toHaveBeenCalledTimes(1));
+    });
 
     // X=25%를 입력하고 blur 없이 바로 기준점 표식을 잡는다. 표식은 입력이 확정되기
     // 전이라 아직 옛 자리(x 50%)에 있고, 잡는 순간의 정산이 25%를 커밋한다

@@ -135,6 +135,8 @@ import {
   beginMixedGestureTransaction,
   cancelUncommittedMixedGestureTransaction,
 } from '@plugins/runtime/displayElement/gestureTransaction';
+import { createNativePositionDragReceipt } from '@src/renderer/editor/runtime/elementIntent';
+import { createPluginPositionDragReceipt } from '@plugins/runtime/displayElement/pluginElementActions';
 import {
   commitStableHandlerSlots,
   getStableHandlers,
@@ -293,18 +295,47 @@ const Grid = ({
     (state) => state.elements,
   );
   const selectedDragGestureIdRef = useRef<string | null>(null);
+  const selectedDragPositionReceiptRef = useRef<ReturnType<
+    typeof createPluginPositionDragReceipt
+  > | null>(null);
+
+  const selectedDragNativeReceiptRef = useRef<ReturnType<
+    typeof createNativePositionDragReceipt
+  > | null>(null);
+
+  const moveSelectedElementsDrag = (deltaX: number, deltaY: number) => {
+    const move = () => moveSelectedElements(deltaX, deltaY, undefined, false);
+    const receipt = selectedDragPositionReceiptRef.current;
+    const movePlugins = () => {
+      if (receipt) receipt.apply(move);
+      else move();
+    };
+    const nativeReceipt = selectedDragNativeReceiptRef.current;
+    if (nativeReceipt) nativeReceipt.apply(movePlugins);
+    else movePlugins();
+  };
 
   const beginSelectedPluginInstancesDrag = () => {
     const gestureId = crypto.randomUUID();
     selectedDragGestureIdRef.current = gestureId;
     freezeSelectionForGesture();
     const frozenSelection = useGridSelectionStore.getState().selectedElements;
+    const nativeReceipt = createNativePositionDragReceipt(
+      frozenSelection.flatMap(({ type, id }) =>
+        type === 'plugin' ? [] : [{ type, id }],
+      ),
+    );
+    selectedDragNativeReceiptRef.current = nativeReceipt;
     const selectedPluginElementIds = new Set(
       frozenSelection
         .filter((element) => element.type === 'plugin')
         .map((element) => element.id),
     );
     const tokens = new Map<string, string>();
+    const positionReceipt = createPluginPositionDragReceipt(
+      selectedPluginElementIds,
+    );
+    selectedDragPositionReceiptRef.current = positionReceipt;
     usePluginDisplayElementStore
       .getState()
       .elements.filter((element) =>
@@ -321,7 +352,14 @@ const Grid = ({
     if (tokens.size > 0) {
       beginMixedGestureTransaction(gestureId, [...tokens.keys()]);
     }
-    return () => {
+    return (commit = true) => {
+      if (!commit) {
+        nativeReceipt.rollback();
+        cancelUncommittedMixedGestureTransaction(gestureId, {
+          discardPendingSave: true,
+          beforeDiscard: positionReceipt.rollback,
+        });
+      }
       tokens.forEach((token, pluginId) => {
         endPluginInstancesEditSession(pluginId, token);
       });
@@ -330,6 +368,8 @@ const Grid = ({
       cancelUncommittedMixedGestureTransaction(gestureId);
       if (selectedDragGestureIdRef.current === gestureId) {
         selectedDragGestureIdRef.current = null;
+        selectedDragPositionReceiptRef.current = null;
+        selectedDragNativeReceiptRef.current = null;
       }
     };
   };
@@ -1157,8 +1197,7 @@ const Grid = ({
 
             setSelectedElements(newSelectedElements);
           },
-          onMultiDrag: (deltaX: number, deltaY: number) =>
-            moveSelectedElements(deltaX, deltaY, undefined, false),
+          onMultiDrag: moveSelectedElementsDrag,
           onMultiDragStart: beginSelectedPluginInstancesDrag,
           onMultiDragEnd: commitSelectedElementsDrag,
           onEraserClick: () => {
@@ -1245,8 +1284,7 @@ const Grid = ({
             index,
           });
         },
-        onMultiDrag: (deltaX: number, deltaY: number) =>
-          moveSelectedElements(deltaX, deltaY, undefined, false),
+        onMultiDrag: moveSelectedElementsDrag,
         onMultiDragStart: beginSelectedPluginInstancesDrag,
         onMultiDragEnd: commitSelectedElementsDrag,
         onEraserClick: () => {
@@ -1337,9 +1375,7 @@ const Grid = ({
           (el) => el.type === elementType && el.id === position.id,
         )}
         selectedElements={selectedElements}
-        onMultiDrag={(deltaX, deltaY) =>
-          moveSelectedElements(deltaX, deltaY, undefined, false)
-        }
+        onMultiDrag={moveSelectedElementsDrag}
         onMultiDragStart={beginSelectedPluginInstancesDrag}
         onMultiDragEnd={commitSelectedElementsDrag}
         activeTool={activeTool}
@@ -1675,9 +1711,7 @@ const Grid = ({
               );
               return true;
             }}
-            onMultiDrag={(deltaX, deltaY) =>
-              moveSelectedElements(deltaX, deltaY, undefined, false)
-            }
+            onMultiDrag={moveSelectedElementsDrag}
             onMultiDragStart={beginSelectedPluginInstancesDrag}
             onMultiDragEnd={commitSelectedElementsDrag}
           />

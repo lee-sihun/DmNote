@@ -27,7 +27,7 @@ export interface NumberInputProps {
   /** 지정 시 타이핑은 preview로 흐르고 onChange는 blur/Enter 확정에만 호출됨 */
   onPreview?: (value: number) => void;
   /** Escape 원복 시 호출 (게스처 취소 연동) */
-  onCancel?: () => void;
+  onCancel?: (reason?: 'history') => void;
   min?: number;
   max?: number;
   prefix?: React.ReactNode;
@@ -54,7 +54,7 @@ export interface OptionalNumberInputProps {
   /** 지정 시 타이핑은 preview로 흐르고 onChange는 blur/Enter 확정에만 호출됨 */
   onPreview?: (value?: number) => void;
   /** Escape 원복 시 호출 (게스처 취소 연동) */
-  onCancel?: () => void;
+  onCancel?: (reason?: 'history') => void;
   min?: number;
   max?: number;
   prefix?: React.ReactNode;
@@ -724,7 +724,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
       lastEmittedRef.current = null;
       onChange(final);
     },
-    onCancel: () => {
+    onCancel: (reason) => {
       cancelPendingCommit();
       syncText(
         committedMixedRef.current
@@ -734,7 +734,11 @@ export const NumberInput: React.FC<NumberInputProps> = ({
       hasUserInputRef.current = false;
       fieldError.clear();
       digitPop.clear();
-      restorePreview();
+      if (reason === 'history') {
+        emittedRef.current = false;
+        lastEmittedRef.current = null;
+        onCancel?.('history');
+      } else restorePreview();
     },
   });
 
@@ -1300,7 +1304,7 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
       lastEmittedRef.current = null;
       onChange(final);
     },
-    onCancel: () => {
+    onCancel: (reason) => {
       cancelPendingCommit();
       const committed = committedValueRef.current;
       syncText(
@@ -1311,7 +1315,11 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
       hasUserInputRef.current = false;
       fieldError.clear();
       digitPop.clear();
-      restorePreview();
+      if (reason === 'history') {
+        emittedRef.current = false;
+        lastEmittedRef.current = null;
+        onCancel?.('history');
+      } else restorePreview();
     },
   });
 

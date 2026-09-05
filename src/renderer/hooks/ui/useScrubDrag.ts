@@ -8,6 +8,11 @@ import {
 import type React from 'react';
 import { flushSync } from 'react-dom';
 import { beginDragCursor, endDragCursor } from '@utils/core/dragCursor';
+import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
+import {
+  isHistoryEditorFlushLocked,
+  subscribeHistoryEditorFlushStart,
+} from '@src/renderer/editor/runtime/historyEditorFlushLock';
 
 export interface ScrubDragOptions {
   enabled: boolean;
@@ -26,7 +31,7 @@ export interface ScrubDragOptions {
   /** 손을 뗄 때 1회. 값이 한 번도 안 바뀌었으면 호출되지 않는다 */
   onCommit: (value: number) => void;
   /** Escape·포인터 취소·캡처 유실·언마운트 */
-  onCancel: () => void;
+  onCancel: (reason?: 'history') => void;
   /** 이 요소의 편집 중인 입력이면 true. 다른 입력이 포커스 중이면 시작 전에 blur해
    *  그쪽 preview 게스처를 먼저 정산한다 - 두 필드가 한 게스처를 나눠 갖지 않게 */
   ownsFocus?: (active: Element, handle: HTMLElement) => boolean;
@@ -102,22 +107,43 @@ export const useScrubDrag = ({
 
   // ref와 setState만 닫아 두므로 정체가 고정이다. 언마운트 정리가 렌더마다 돌면 안 된다.
   // 반환은 호출부에 값 변화를 알렸는지 - 이동 없는 세션은 조용히 닫힌다
-  const finish = useCallback((mode: 'commit' | 'cancel'): boolean => {
-    const session = sessionRef.current;
-    if (!session) return false;
-    sessionRef.current = null;
-    setActive(false);
-    session.restoreDocument();
-    if (session.element.hasPointerCapture(session.pointerId)) {
-      session.element.releasePointerCapture(session.pointerId);
-    }
-    if (!session.moved) return false;
-    // 뒤따르는 click이 라벨 활성화로 이어지지 않게 표시
-    session.element.dataset.scrubbed = '1';
-    if (mode === 'commit') callbacksRef.current.onCommit(session.last);
-    else callbacksRef.current.onCancel();
-    return true;
-  }, []);
+  const finish = useCallback(
+    (mode: 'commit' | 'cancel' | 'history'): boolean => {
+      const session = sessionRef.current;
+      if (!session) return false;
+      if (isHistoryEditorFlushLocked()) mode = 'history';
+      sessionRef.current = null;
+      setActive(false);
+      session.restoreDocument();
+      if (session.element.hasPointerCapture(session.pointerId)) {
+        session.element.releasePointerCapture(session.pointerId);
+      }
+      if (!session.moved) return false;
+      // 뒤따르는 click이 라벨 활성화로 이어지지 않게 표시
+      session.element.dataset.scrubbed = '1';
+      if (mode === 'commit') callbacksRef.current.onCommit(session.last);
+      else if (mode === 'history') callbacksRef.current.onCancel('history');
+      else callbacksRef.current.onCancel();
+      return true;
+    },
+    [],
+  );
+
+  useEffect(
+    () =>
+      useCommittedApplyStore.subscribe((state, previous) => {
+        if (state.historyTick !== previous.historyTick) finish('history');
+      }),
+    [finish],
+  );
+
+  useEffect(
+    () =>
+      subscribeHistoryEditorFlushStart(() => {
+        finish('history');
+      }),
+    [finish],
+  );
 
   // Escape는 창 단위로 듣는다. 캡처 중에는 포커스가 다른 곳에 있어도 취소돼야 한다
   useEffect(() => {
@@ -155,7 +181,8 @@ export const useScrubDrag = ({
 
   const handlers: ScrubDragHandlers = {
     onPointerDown: (e) => {
-      if (!enabled || sessionRef.current) return;
+      if (!enabled || sessionRef.current || isHistoryEditorFlushLocked())
+        return;
       if (e.button !== 0) return;
       // 라벨 mousedown 기본 동작(포커스 이동·글자 선택)을 막는다.
       // 클릭 활성화는 따로 살아 있어 이동 없는 클릭은 여전히 입력에 포커스가 간다
