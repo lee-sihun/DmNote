@@ -1,29 +1,29 @@
-import { appApi, windowApi } from './modules/appApi';
-import { settingsApi } from './modules/settingsApi';
-import { keysApi } from './modules/keysApi';
+import { appApi, windowApi } from './modules/app/appApi';
+import { settingsApi } from './modules/app/settingsApi';
+import { keysApi } from './modules/editor/keysApi';
 import {
   statItemsApi,
   graphItemsApi,
   knobItemsApi,
   layerGroupsApi,
-} from './modules/itemsApi';
-import { overlayApi } from './modules/overlayApi';
-import { cssApi } from './modules/cssApi';
-import { noteTabApi } from './modules/noteTabApi';
+} from './modules/editor/itemsApi';
+import { overlayApi } from './modules/window/overlayApi';
+import { cssApi } from './modules/resources/cssApi';
+import { noteTabApi } from './modules/editor/noteTabApi';
 import {
   fontApi,
   imageApi,
   soundApi,
   counterAnimationApi,
-} from './modules/resourceApi';
-import { jsApi } from './modules/jsApi';
-import { presetsApi } from './modules/presetsApi';
-import { bridgeApi } from './modules/bridgeApi';
-import { i18nApi } from './modules/i18nApi';
-import { statsApi } from './modules/statsApi';
-import { pluginApi } from './modules/pluginApi';
-import { uiApi } from './modules/uiApi';
-import { editorApi } from './modules/editorApi';
+} from './modules/resources/resourceApi';
+import { jsApi } from './modules/plugin/jsApi';
+import { presetsApi } from './modules/resources/presetsApi';
+import { bridgeApi } from './modules/plugin/bridgeApi';
+import { i18nApi } from './modules/app/i18nApi';
+import { statsApi } from './modules/app/statsApi';
+import { pluginApi } from './modules/plugin/pluginApi';
+import { uiApi } from './modules/window/uiApi';
+import { editorApi } from './modules/editor/editorApi';
 
 import './modules/shared';
 

@@ -35,7 +35,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@utils/panelWindow/panelChildWindow', () => ({
   getPanelChildWindow: () => mocks.childWindow,
 }));
-vi.mock('@api/modules/panelWindowApi', () => ({
+vi.mock('@api/modules/window/panelWindowApi', () => ({
   panelWindowApi: {
     applyNativeChrome: () => mocks.applyNativeChrome(),
     startDragging: (x: number, y: number) => mocks.startDragging(x, y),

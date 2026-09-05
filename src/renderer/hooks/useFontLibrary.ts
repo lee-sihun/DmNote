@@ -7,8 +7,8 @@ import {
   normalizeFontFamilyName,
   validateWebFontFaceCss,
 } from '@src/types/settings/fonts';
-import { settingsApi } from '@api/modules/settingsApi';
-import { fontApi } from '@api/modules/resourceApi';
+import { settingsApi } from '@api/modules/app/settingsApi';
+import { fontApi } from '@api/modules/resources/resourceApi';
 import { canLoadFont } from '@utils/media/assetProbe';
 
 // 폰트 라이브러리 CRUD — 낙관적 스토어 갱신 + 설정 영속화

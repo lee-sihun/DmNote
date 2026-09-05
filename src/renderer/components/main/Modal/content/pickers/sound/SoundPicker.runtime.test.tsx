@@ -45,7 +45,7 @@ const apiMocks = vi.hoisted(() => ({
   setHidden: vi.fn(),
 }));
 
-vi.mock('@api/modules/resourceApi', () => ({
+vi.mock('@api/modules/resources/resourceApi', () => ({
   soundApi: {
     remove: (...args: unknown[]) => apiMocks.remove(...args),
     rename: (...args: unknown[]) => apiMocks.rename(...args),

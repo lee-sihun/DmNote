@@ -4,8 +4,8 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, it, vi } from 'vitest';
 
-import { summarizeDistribution } from './shadowToggleBenchmark';
-import { createPluginHandlerDispatcher } from '@utils/plugin/pluginHandlerDispatcher';
+import { summarizeDistribution } from './controls/shadowToggleBenchmark';
+import { createPluginHandlerDispatcher } from '@utils/plugin/interactions/pluginHandlerDispatcher';
 
 const benchmarkDescribe =
   process.env.DMN_PLUGIN_INPUT_BENCHMARK === '1' ? describe : describe.skip;

@@ -26,7 +26,7 @@ const KEY_ID_A = '00000000-0000-4000-8000-000000000511';
 const KEY_ID_B = '00000000-0000-4000-8000-000000000512';
 const KEY_ID_C = '00000000-0000-4000-8000-000000000513';
 
-vi.mock('@api/modules/previewApi', () => ({
+vi.mock('@api/modules/editor/previewApi', () => ({
   previewApi: {
     subscribe: vi.fn().mockResolvedValue(1),
     publish: vi.fn().mockResolvedValue(undefined),

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import OverlayScene from './OverlayScene';
 import type { NoteSettings } from '@src/types/settings/noteSettings';
 
-vi.mock('@api/modules/overlayApi', () => ({
+vi.mock('@api/modules/window/overlayApi', () => ({
   overlayApi: { transitionFade: vi.fn() },
 }));
 

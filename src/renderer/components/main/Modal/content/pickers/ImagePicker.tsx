@@ -11,7 +11,7 @@ import { canDecodeImage } from '@utils/media/assetProbe';
 import { useEditSessionCompletionGuard } from '@src/renderer/contexts/EditSessionScope';
 
 import type { CompletionBinding } from '@src/renderer/contexts/EditSessionScope';
-import { imageApi } from '@api/modules/resourceApi';
+import { imageApi } from '@api/modules/resources/resourceApi';
 import {
   DEFAULT_IMAGE_MODE,
   IDENTITY_IMAGE_TRANSFORM,

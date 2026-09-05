@@ -6,7 +6,7 @@
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { DisplayElementInstance } from '@utils/displayElementInstance';
-import { html } from '@utils/plugin/templateEngine';
+import { html } from '@utils/plugin/components/templateEngine';
 import { createPluginTranslator } from '@utils/plugin/pluginI18n';
 import { handlerRegistry } from '../handlers';
 import {

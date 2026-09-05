@@ -13,7 +13,7 @@ import {
 } from '@plugins/runtime/displayElement/gestureTransaction';
 import { rotatePluginInstancesEditSession } from '@plugins/runtime/displayElement/instancesCommitQueue';
 import { isPluginVisibleInMode } from '@utils/layerGroupUtils';
-import { resolveResizablePluginElementSize } from '@utils/plugin/pluginElementMeasurement';
+import { resolveResizablePluginElementSize } from '@utils/plugin/layout/pluginElementMeasurement';
 import { isNativeElementId } from '../../model/elementId';
 import {
   computeBatchGeometryPlan,

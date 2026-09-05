@@ -4,7 +4,7 @@ import Minimize from '@assets/svgs/minimize.svg';
 import Logo from '@assets/svgs/logo.svg';
 import { isMac } from '@utils/core/platform';
 import { useSingleFlightAction } from '@hooks/useSingleFlightAction';
-import { windowApi } from '@api/modules/appApi';
+import { windowApi } from '@api/modules/app/appApi';
 
 const TitleBar = (): React.ReactElement => {
   const isMacOS: boolean = isMac();

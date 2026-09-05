@@ -18,7 +18,7 @@ vi.mock('@stores/plugin/usePluginHealthStore', () => ({
   waitForPluginInjection: mocks.waitForPluginInjection,
 }));
 
-vi.mock('@api/modules/jsApi', () => ({
+vi.mock('@api/modules/plugin/jsApi', () => ({
   jsApi: {
     load: mocks.load,
     reload: mocks.reload,
@@ -27,7 +27,7 @@ vi.mock('@api/modules/jsApi', () => ({
   },
 }));
 
-vi.mock('@api/modules/pluginApi', () => ({
+vi.mock('@api/modules/plugin/pluginApi', () => ({
   pluginApi: {
     storage: {
       hasData: mocks.hasData,

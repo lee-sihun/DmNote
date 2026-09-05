@@ -53,7 +53,7 @@ vi.mock('@plugins/runtime/displayElement/pluginElementActions', () => ({
 vi.mock('@src/renderer/editor/runtime/intent/elementIntent', () => ({
   reportElementOpSkipped: mocks.reportSkipped,
 }));
-vi.mock('@api/modules/keysApi', () => ({
+vi.mock('@api/modules/editor/keysApi', () => ({
   keysApi: { updatePositions: mocks.updateKeyPositions },
 }));
 vi.mock(

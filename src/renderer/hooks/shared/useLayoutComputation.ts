@@ -6,7 +6,7 @@ import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
 import type { NoteSettings } from '@src/types/settings/noteSettings';
 // 레이아웃이 읽을 수 있는 플러그인 필드는 투영 타입으로 제한 —
 // 필드 추가 시 selectPluginLayoutElements·pluginLayoutElementsEqual 동반 수정 필요
-import type { PluginLayoutElement } from '@utils/plugin/pluginLayoutElements';
+import type { PluginLayoutElement } from '@utils/plugin/layout/pluginLayoutElements';
 
 interface LayoutInput {
   // canonical 슬롯 식별자 배열 (slotCanonical 결과, 원본 KeySlot 아님)

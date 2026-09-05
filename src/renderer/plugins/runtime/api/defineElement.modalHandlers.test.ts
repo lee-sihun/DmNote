@@ -4,8 +4,8 @@ import {
   createCheckbox,
   createDropdown,
   createInput,
-} from '@utils/plugin/pluginComponents';
-import { clearComponentHandlers } from '@utils/plugin/pluginUtils';
+} from '@utils/plugin/components/pluginComponents';
+import { clearComponentHandlers } from '@utils/plugin/components/pluginUtils';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { registerPluginInstancesEditSessionFlush } from '../displayElement/instancesCommitQueue';
 import { handlerRegistry } from '../handlers';

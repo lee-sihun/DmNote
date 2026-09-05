@@ -29,7 +29,7 @@ const {
   };
 });
 
-vi.mock('@api/modules/appApi', () => ({
+vi.mock('@api/modules/app/appApi', () => ({
   appApi: {
     autoUpdate: autoUpdateMock,
     restart: restartMock,

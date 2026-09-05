@@ -1,12 +1,12 @@
 import React, { Suspense, lazy } from 'react';
-import { Key } from '@components/shared/Key';
+import { Key } from '@components/shared/key/Key';
 import { isMac } from '@utils/core/platform';
 import KeyCounterLayer from '@components/overlay/counters/KeyCounterLayer';
 import StatItem from '@components/overlay/counters/StatItem';
 import StatCounterLayer from '@components/overlay/counters/StatCounterLayer';
 import OverlayGraphItem from '@components/overlay/counters/OverlayGraphItem';
 import OverlayKnobItem from '@components/overlay/counters/OverlayKnobItem';
-import { PluginElementsRenderer } from '@components/shared/PluginElementsRenderer';
+import { PluginElementsRenderer } from '@components/shared/plugin/PluginElementsRenderer';
 import { getKeyInfoByGlobalKey } from '@utils/input/KeyMaps';
 import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
 import type { NoteSettings } from '@src/types/settings/noteSettings';

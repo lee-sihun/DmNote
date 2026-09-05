@@ -12,7 +12,7 @@
  * - api/: defineElement, defineSettings 등 플러그인 API
  */
 
-import { pluginAuthorityApi } from '@api/modules/pluginAuthorityApi';
+import { pluginAuthorityApi } from '@api/modules/plugin/pluginAuthorityApi';
 import { internalApi } from '@api/internalApi';
 import { setPluginAuthorityGeneration } from '@plugins/runtime/pluginAuthorityGeneration';
 import { noteBackendPluginRevision } from '@plugins/runtime/pluginModelRevision';
@@ -22,7 +22,7 @@ import {
   usePluginDisplayElementStore,
 } from '@stores/plugin/usePluginDisplayElementStore';
 import { usePluginHealthStore } from '@stores/plugin/usePluginHealthStore';
-import { extractPluginId } from '@utils/plugin/pluginUtils';
+import { extractPluginId } from '@utils/plugin/components/pluginUtils';
 import {
   beginPluginWork,
   noteEnabledPluginCount,

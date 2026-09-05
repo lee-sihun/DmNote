@@ -19,7 +19,7 @@ const bendMotion = vi.hoisted(() => ({
   cancel: vi.fn(),
 }));
 
-vi.mock('@api/modules/keysApi', () => ({
+vi.mock('@api/modules/editor/keysApi', () => ({
   keysApi: { tabs: { swap: vi.fn(() => Promise.resolve({})) } },
 }));
 vi.mock('@hooks/useLenis', () => ({ scrollLenisBy: vi.fn() }));
@@ -27,7 +27,7 @@ vi.mock('@utils/animation/dragBendMotion', () => ({
   createDragBendMotion: () => bendMotion,
 }));
 
-import { keysApi } from '@api/modules/keysApi';
+import { keysApi } from '@api/modules/editor/keysApi';
 import { TabDragProvider } from './tabDrag';
 import { useTabDrag } from './tabDragContext';
 import { useKeyStore } from '@stores/data/useKeyStore';

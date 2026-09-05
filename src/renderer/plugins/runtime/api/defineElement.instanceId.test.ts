@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   instancesGet: vi.fn(),
 }));
 
-vi.mock('@api/modules/pluginInstancesApi', () => ({
+vi.mock('@api/modules/plugin/pluginInstancesApi', () => ({
   pluginInstancesApi: {
     commit: mocks.instancesCommit,
     reconcile: mocks.instancesReconcile,

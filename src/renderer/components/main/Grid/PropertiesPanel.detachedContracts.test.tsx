@@ -285,7 +285,7 @@ vi.mock('@src/renderer/editor/runtime/intent/elementIntent', () => ({
 vi.mock('@src/renderer/editor/runtime/geometry/mixedBatchGeometry', () => ({
   commitMixedBatchGeometry: commitMixedBatchGeometryMock,
 }));
-vi.mock('@api/modules/itemsApi', () => ({
+vi.mock('@api/modules/editor/itemsApi', () => ({
   graphItemsApi: { updatePositions: graphUpdatePositionsMock },
   knobItemsApi: { updatePositions: knobUpdatePositionsMock },
   layerGroupsApi: { update: vi.fn(() => Promise.resolve()) },
@@ -367,8 +367,12 @@ vi.mock('./PropertiesPanel/navigation/PanelHeaderActions', () => ({
 vi.mock('./PropertiesPanel/navigation/PanelToggleButton', () => ({
   default: () => <button>toggle</button>,
 }));
-vi.mock('@components/main/common/checkbox/Checkbox', () => ({ default: () => null }));
-vi.mock('@components/main/common/dropdown/Dropdown', () => ({ default: () => null }));
+vi.mock('@components/main/common/checkbox/Checkbox', () => ({
+  default: () => null,
+}));
+vi.mock('@components/main/common/dropdown/Dropdown', () => ({
+  default: () => null,
+}));
 
 import { useIsEditSessionScoped } from '@src/renderer/contexts/EditSessionScope';
 

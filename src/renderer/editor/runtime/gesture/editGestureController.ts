@@ -4,7 +4,7 @@
  * 프리뷰는 오버레이+채널로만 흐르고 canonical에 기록되지 않음
  */
 
-import { previewApi } from '@api/modules/previewApi';
+import { previewApi } from '@api/modules/editor/previewApi';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';

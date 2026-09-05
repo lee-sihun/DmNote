@@ -40,17 +40,22 @@ vi.mock('@components/main/Modal/PopupExit', () => ({
     children: React.ReactElement | null;
   }) => (open ? children : null),
 }));
-vi.mock('@components/main/Modal/content/pickers/color/ColorSwatch', async () => {
-  const ReactModule = await import('react');
-  return {
-    ColorSwatchButton: ReactModule.forwardRef<
-      HTMLButtonElement,
-      { onClick?: () => void }
-    >(function SwatchStub(props, ref) {
-      return <button ref={ref} data-testid="swatch" onClick={props.onClick} />;
-    }),
-  };
-});
+vi.mock(
+  '@components/main/Modal/content/pickers/color/ColorSwatch',
+  async () => {
+    const ReactModule = await import('react');
+    return {
+      ColorSwatchButton: ReactModule.forwardRef<
+        HTMLButtonElement,
+        { onClick?: () => void }
+      >(function SwatchStub(props, ref) {
+        return (
+          <button ref={ref} data-testid="swatch" onClick={props.onClick} />
+        );
+      }),
+    };
+  },
+);
 vi.mock('../controls/PropertyInputs', () => ({
   PropertyRow: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>

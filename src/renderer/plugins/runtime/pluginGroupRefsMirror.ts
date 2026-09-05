@@ -8,7 +8,7 @@
 import {
   pluginInstancesApi,
   type PluginGroupRefsByPlugin,
-} from '@api/modules/pluginInstancesApi';
+} from '@api/modules/plugin/pluginInstancesApi';
 import { registerStoredPluginGroupRefsProvider } from '@src/renderer/editor/runtime/intent/pluginGroupMembers';
 
 let refs: PluginGroupRefsByPlugin = {};

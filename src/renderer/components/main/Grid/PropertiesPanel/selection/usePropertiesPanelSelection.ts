@@ -23,7 +23,7 @@ import type { StatItemPosition } from '@src/types/key/statItems';
 import { getKeyInfoByGlobalKey } from '@utils/input/KeyMaps';
 import { slotCanonical, slotDisplayName } from '@utils/keySlot';
 import { isPluginVisibleInMode } from '@utils/layerGroupUtils';
-import { resolveResizablePluginElementSize } from '@utils/plugin/pluginElementMeasurement';
+import { resolveResizablePluginElementSize } from '@utils/plugin/layout/pluginElementMeasurement';
 
 export const usePropertiesPanelSelection = () => {
   const selectedElements = useGridSelectionStore(

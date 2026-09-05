@@ -93,8 +93,8 @@ const correctnessResult = spawnSync(
     'vitest',
     'run',
     'src/renderer/components/main/Grid/PropertiesPanel/controls/PropertyInputs.test.tsx',
-    'src/renderer/__tests__/activeStatePickerCapability.test.tsx',
-    'src/renderer/__tests__/singleActiveStateCapability.test.tsx',
+    'src/renderer/__tests__/panel/activeStatePickerCapability.test.tsx',
+    'src/renderer/__tests__/panel/singleActiveStateCapability.test.tsx',
   ],
   { cwd: root, stdio: 'inherit' },
 );

@@ -31,7 +31,7 @@ import type {
   CssLoadResult,
   CustomCssHistoryItem,
 } from '@src/types/plugin/api';
-import { cssApi } from '@api/modules/cssApi';
+import { cssApi } from '@api/modules/resources/cssApi';
 
 const CSS_HISTORY_ERROR_CODES: ReadonlySet<string> = new Set([
   'PATH_NOT_AUTHORIZED',

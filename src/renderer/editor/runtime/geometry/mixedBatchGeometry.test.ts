@@ -30,15 +30,15 @@ const mocks = vi.hoisted(() => ({
   commitBatchGeometryByIds: vi.fn(() => Promise.resolve(true)),
 }));
 
-vi.mock('@api/modules/gestureApi', () => ({
+vi.mock('@api/modules/editor/gestureApi', () => ({
   gestureApi: { commit: mocks.gestureCommit },
 }));
 
-vi.mock('@api/modules/editorApi', () => ({
+vi.mock('@api/modules/editor/editorApi', () => ({
   editorApi: { commit: mocks.editorCommit },
 }));
 
-vi.mock('@api/modules/pluginInstancesApi', () => ({
+vi.mock('@api/modules/plugin/pluginInstancesApi', () => ({
   pluginInstancesApi: {
     commit: vi.fn(() => Promise.resolve({ modelRevision: 1, changed: false })),
     reconcile: vi.fn(() =>

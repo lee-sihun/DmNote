@@ -117,7 +117,7 @@ vi.mock('@stores/useFontStore', () => ({
 vi.mock('@api/pluginDisplayElements', () => ({
   getUndoRedoInProgress: vi.fn(() => false),
 }));
-vi.mock('@api/modules/obsApi', () => ({
+vi.mock('@api/modules/window/obsApi', () => ({
   obsApi: {
     onResync: vi.fn((listener: () => void) => {
       mocks.resyncListener = listener;
@@ -134,7 +134,7 @@ vi.mock('@api/modules/shared', () => ({
     return vi.fn();
   }),
 }));
-vi.mock('@api/modules/appApi', () => ({
+vi.mock('@api/modules/app/appApi', () => ({
   acknowledgeLifecycleAfterEditorFlush: vi.fn(),
   cancelLifecycleEditorFlush: vi.fn(),
 }));
@@ -153,7 +153,7 @@ vi.mock(
     },
   }),
 );
-vi.mock('@api/modules/panelWindowApi', () => ({
+vi.mock('@api/modules/window/panelWindowApi', () => ({
   panelWindowApi: {
     onVisibility: vi.fn(() => vi.fn()),
     onCloseRequested: vi.fn(() => vi.fn()),
@@ -175,7 +175,7 @@ vi.mock('@stores/grid/useGridSelectionStore', () => ({
 vi.mock('@plugins/runtime/displayElement/instancesUndoSync', () => ({
   initPluginInstancesUndoSync: vi.fn(),
 }));
-vi.mock('@api/modules/historyApi', () => ({
+vi.mock('@api/modules/editor/historyApi', () => ({
   historyApi: { onStatus: vi.fn(() => vi.fn()) },
 }));
 vi.mock('@stores/data/useHistoryStatusStore', () => ({

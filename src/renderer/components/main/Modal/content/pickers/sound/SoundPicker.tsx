@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import type { SoundListItem } from '@src/types/plugin/api';
-import ListPopup, { type ListItem } from '@components/main/Modal/listPopup/ListPopup';
+import ListPopup, {
+  type ListItem,
+} from '@components/main/Modal/listPopup/ListPopup';
 import CommonListPickerPage from '../CommonListPickerPage';
 import {
   pickerRowClass,

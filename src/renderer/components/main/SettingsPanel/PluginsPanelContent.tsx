@@ -23,7 +23,7 @@ import { SettingToggleRow } from '@components/main/common/SettingRow';
 import ListPopup from '@components/main/Modal/listPopup/ListPopup';
 import { usePickerItemMenu } from '@hooks/usePickerItemMenu';
 import { usePluginHealthStore } from '@stores/plugin/usePluginHealthStore';
-import { getPluginDisplayName } from '@utils/plugin/pluginUtils';
+import { getPluginDisplayName } from '@utils/plugin/components/pluginUtils';
 import type { JsPlugin } from '@src/types/plugin/js';
 
 interface PluginsPanelContentProps {

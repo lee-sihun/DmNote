@@ -9,7 +9,7 @@
 // store 미러의 그룹 참조로 보충해 모집단을 백엔드와 일치시킨다
 
 import type { PluginGroupMemberLike } from '@utils/layerGroupUtils';
-import type { PluginGroupRefsByPlugin } from '@api/modules/pluginInstancesApi';
+import type { PluginGroupRefsByPlugin } from '@api/modules/plugin/pluginInstancesApi';
 
 const EMPTY_MEMBERS: readonly PluginGroupMemberLike[] = [];
 const EMPTY_PLUGIN_IDS: ReadonlySet<string> = new Set();

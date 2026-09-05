@@ -2,7 +2,7 @@ import {
   panelWindowApi,
   type PanelDragGeometry,
   type PanelDragOutcome,
-} from '@api/modules/panelWindowApi';
+} from '@api/modules/window/panelWindowApi';
 import {
   detachPropertiesPanel,
   dockPropertiesPanel,

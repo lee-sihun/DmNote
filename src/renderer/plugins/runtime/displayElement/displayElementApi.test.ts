@@ -46,7 +46,7 @@ vi.mock('@utils/displayElementInstance', () => ({
   },
 }));
 
-vi.mock('@utils/plugin/templateEngine', () => ({ html: vi.fn() }));
+vi.mock('@utils/plugin/components/templateEngine', () => ({ html: vi.fn() }));
 vi.mock('@utils/plugin/pluginI18n', () => ({
   createPluginTranslator: () => vi.fn(),
 }));

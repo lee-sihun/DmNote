@@ -106,7 +106,7 @@ vi.mock('@utils/input/keyEventBus', () => ({
     initialize: vi.fn(() => Promise.resolve()),
   },
 }));
-vi.mock('@api/modules/obsApi', () => ({
+vi.mock('@api/modules/window/obsApi', () => ({
   obsApi: {
     onResync: vi.fn(() => vi.fn()),
   },

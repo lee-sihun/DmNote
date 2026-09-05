@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react';
 import { useKeyStore } from '@stores/data/useKeyStore';
-import { obsApi } from '@api/modules/obsApi';
+import { obsApi } from '@api/modules/window/obsApi';
 import { scopeUserCss } from '@utils/css/scopeUserCss';
 import {
   hasLeadingImports,
   resolveUserCssImports,
 } from '@utils/css/resolveUserCssImports';
-import { fetchCustomCssImport } from '@api/modules/customCssImportApi';
+import { fetchCustomCssImport } from '@api/modules/resources/customCssImportApi';
 import type { TabCssOverrides } from '@src/types/plugin/css';
 import type { CustomCss } from '@src/types/plugin/css';
 

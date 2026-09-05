@@ -1,5 +1,5 @@
-import { gestureApi } from '@api/modules/gestureApi';
-import { editorApi } from '@api/modules/editorApi';
+import { gestureApi } from '@api/modules/editor/gestureApi';
+import { editorApi } from '@api/modules/editor/editorApi';
 import { editorCoordinator } from '@src/renderer/editor/runtime/coordinator/editorStateCoordinator';
 import { trackEditorWrite } from '@src/renderer/editor/runtime/lifecycle/editorWriteBarrier';
 import { ElementIntentAbort } from '@src/renderer/editor/runtime/intent/elementIntent';

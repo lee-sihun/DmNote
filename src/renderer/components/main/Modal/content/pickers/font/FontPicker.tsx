@@ -12,7 +12,9 @@ import {
   normalizeFontFamilyName,
   type CustomFont,
 } from '@src/types/settings/fonts';
-import ListPopup, { type ListItem } from '@components/main/Modal/listPopup/ListPopup';
+import ListPopup, {
+  type ListItem,
+} from '@components/main/Modal/listPopup/ListPopup';
 import { useRetainedValue } from '@hooks/ui/useRetainedValue';
 import CommonListPickerPage from '../CommonListPickerPage';
 import {

@@ -1,5 +1,5 @@
 import { useState, type MouseEvent } from 'react';
-import DraggableKey from '@components/shared/Key';
+import DraggableKey from '@components/shared/key/Key';
 import GraphItem from '../layers/GraphItem';
 import KnobItem from '../layers/KnobItem';
 import { commitElementPosition } from '@hooks/Grid/elementPositionCommit';

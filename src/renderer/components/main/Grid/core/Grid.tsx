@@ -4,7 +4,7 @@ import React, {
   useState,
   useSyncExternalStore,
 } from 'react';
-import { keysApi } from '@api/modules/keysApi';
+import { keysApi } from '@api/modules/editor/keysApi';
 
 declare global {
   interface Window {
@@ -31,7 +31,7 @@ import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import { PluginElementsRenderer } from '@components/shared/PluginElementsRenderer';
+import { PluginElementsRenderer } from '@components/shared/plugin/PluginElementsRenderer';
 import { useGridZoomPan } from '@hooks/Grid/viewport/useGridZoomPan';
 import {
   addCanvasElementAt,
@@ -68,8 +68,8 @@ import type {
   CounterAnimationBezier,
 } from '@src/types/key/keys';
 import { slotCanonical, slotDisplayName } from '@utils/keySlot';
-import { overlayApi } from '@api/modules/overlayApi';
-import { panelWindowApi } from '@api/modules/panelWindowApi';
+import { overlayApi } from '@api/modules/window/overlayApi';
+import { panelWindowApi } from '@api/modules/window/panelWindowApi';
 import {
   groupSelectedElements,
   ungroupSelectedElements,

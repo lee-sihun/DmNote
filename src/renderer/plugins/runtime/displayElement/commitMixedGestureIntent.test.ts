@@ -40,11 +40,11 @@ const mocks = vi.hoisted(() => ({
   elements: [] as Array<Record<string, unknown>>,
 }));
 
-vi.mock('@api/modules/gestureApi', () => ({
+vi.mock('@api/modules/editor/gestureApi', () => ({
   gestureApi: { commit: mocks.gestureCommit },
 }));
 
-vi.mock('@api/modules/editorApi', () => ({
+vi.mock('@api/modules/editor/editorApi', () => ({
   editorApi: { commit: mocks.editorCommit },
 }));
 

@@ -9,7 +9,7 @@ const { groupRefsGetMock, onChangedMock } = vi.hoisted(() => ({
   onChangedMock: vi.fn(),
 }));
 
-vi.mock('@api/modules/pluginInstancesApi', () => ({
+vi.mock('@api/modules/plugin/pluginInstancesApi', () => ({
   pluginInstancesApi: {
     groupRefsGet: groupRefsGetMock,
     onChanged: onChangedMock,

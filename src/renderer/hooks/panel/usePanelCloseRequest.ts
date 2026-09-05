@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-import { panelWindowApi } from '@api/modules/panelWindowApi';
+import { panelWindowApi } from '@api/modules/window/panelWindowApi';
 import {
   dockPropertiesPanel,
   isTransitionFailure,

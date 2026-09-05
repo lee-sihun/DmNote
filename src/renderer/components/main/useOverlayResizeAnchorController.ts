@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { overlayApi } from '@api/modules/overlayApi';
+import { overlayApi } from '@api/modules/window/overlayApi';
 import type { OverlayResizeAnchor } from '@src/types/settings/settings';
 
 interface UseOverlayResizeAnchorControllerOptions {

@@ -28,7 +28,7 @@ const runtime = vi.hoisted(() => {
   };
 });
 
-vi.mock('@api/modules/editorApi', () => ({
+vi.mock('@api/modules/editor/editorApi', () => ({
   editorApi: {
     get: runtime.get,
     commit: runtime.commit,
@@ -36,7 +36,7 @@ vi.mock('@api/modules/editorApi', () => ({
   },
 }));
 
-vi.mock('@api/modules/previewApi', () => ({
+vi.mock('@api/modules/editor/previewApi', () => ({
   previewApi: {
     cancel: runtime.cancel,
     publish: runtime.publish,

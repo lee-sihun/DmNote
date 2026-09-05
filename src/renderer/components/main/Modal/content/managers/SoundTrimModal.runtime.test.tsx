@@ -22,7 +22,7 @@ const soundTrimMocks = vi.hoisted(() => ({
 vi.mock('@contexts/useTranslation', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
-vi.mock('@api/modules/resourceApi', () => ({
+vi.mock('@api/modules/resources/resourceApi', () => ({
   soundApi: {},
 }));
 vi.mock('@utils/dom/dragCursor', () => ({

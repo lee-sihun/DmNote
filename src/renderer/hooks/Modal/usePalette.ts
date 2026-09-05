@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSettingsStore } from '@stores/useSettingsStore';
-import { settingsApi } from '@api/modules/settingsApi';
+import { settingsApi } from '@api/modules/app/settingsApi';
 
 export function usePalette() {
   const [palette, setPalette] = useState(false);

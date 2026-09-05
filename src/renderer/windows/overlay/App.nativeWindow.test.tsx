@@ -116,17 +116,17 @@ vi.mock('@stores/useSettingsStore', async () => {
   return { useSettingsStore };
 });
 // 트랙 예약 전환은 초기값 채택만 사용 - 페이드 커맨드가 실제 invoke로 새지 않게 차단
-vi.mock('@api/modules/overlayApi', () => ({
+vi.mock('@api/modules/window/overlayApi', () => ({
   overlayApi: {
     resize: mocks.resize,
     setVisible: mocks.setVisible,
     transitionFade: vi.fn(() => Promise.resolve(true)),
   },
 }));
-vi.mock('@api/modules/settingsApi', () => ({
+vi.mock('@api/modules/app/settingsApi', () => ({
   settingsApi: { update: mocks.settingsUpdate },
 }));
-vi.mock('@api/modules/appApi', () => ({
+vi.mock('@api/modules/app/appApi', () => ({
   appApi: { quit: mocks.quit },
   windowApi: { showMain: mocks.showMain },
 }));
@@ -154,7 +154,7 @@ vi.mock('@utils/input/keyEventBus', () => ({
     initialize: vi.fn(() => Promise.resolve()),
   },
 }));
-vi.mock('@api/modules/obsApi', () => ({
+vi.mock('@api/modules/window/obsApi', () => ({
   obsApi: { onResync: vi.fn(() => vi.fn()) },
 }));
 

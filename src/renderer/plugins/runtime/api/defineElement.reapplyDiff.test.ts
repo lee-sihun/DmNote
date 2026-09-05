@@ -34,7 +34,7 @@ const mocks = vi.hoisted(() => ({
   enqueueGate: null as Promise<void> | null,
 }));
 
-vi.mock('@api/modules/pluginInstancesApi', () => ({
+vi.mock('@api/modules/plugin/pluginInstancesApi', () => ({
   pluginInstancesApi: {
     commit: mocks.instancesCommit,
     reconcile: mocks.instancesReconcile,

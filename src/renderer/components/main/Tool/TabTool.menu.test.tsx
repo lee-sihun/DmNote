@@ -22,12 +22,14 @@ vi.mock('@contexts/useTranslation', () => ({
 vi.mock('@hooks/useIconMotion', () => ({
   useIconMotion: () => ({ motionProps: {} }),
 }));
-vi.mock('@api/modules/keysApi', () => ({
+vi.mock('@api/modules/editor/keysApi', () => ({
   keysApi: { tabs: { swap: vi.fn(() => Promise.resolve({})) } },
 }));
 vi.mock('@hooks/useLenis', () => ({ scrollLenisBy: vi.fn() }));
 vi.mock('./icons/TabGridIcon', () => ({ default: () => null }));
-vi.mock('../Modal/floatingPopup/FloatingPopup', () => ({ default: () => null }));
+vi.mock('../Modal/floatingPopup/FloatingPopup', () => ({
+  default: () => null,
+}));
 vi.mock('../Modal/content/settings/TabList', () => ({ default: () => null }));
 vi.mock('../Modal/tooltip/FloatingTooltip', () => ({
   default: ({ children }: { children: React.ReactNode }) => children,

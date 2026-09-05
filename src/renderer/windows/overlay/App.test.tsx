@@ -164,7 +164,7 @@ vi.mock('@utils/input/keyEventBus', () => ({
     initialize: mocks.keyInitialize,
   },
 }));
-vi.mock('@api/modules/obsApi', () => ({
+vi.mock('@api/modules/window/obsApi', () => ({
   obsApi: {
     onResync: mocks.resyncSubscribe,
   },

@@ -46,9 +46,9 @@ import { usePanelHostStore } from '@stores/grid/usePanelHostStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/lifecycle/historyEditorFlushLock';
 import { useOptimisticBooleanCommit } from '@hooks/useOptimisticBooleanCommit';
-import { keysApi } from '@api/modules/keysApi';
-import { settingsApi } from '@api/modules/settingsApi';
-import { appApi } from '@api/modules/appApi';
+import { keysApi } from '@api/modules/editor/keysApi';
+import { settingsApi } from '@api/modules/app/settingsApi';
+import { appApi } from '@api/modules/app/appApi';
 
 import { useUIStore } from '@stores/useUIStore';
 

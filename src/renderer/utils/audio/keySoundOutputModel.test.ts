@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type {
   KeySoundOutputDevices,
   KeySoundOutputState,
-} from '@api/modules/resourceApi';
+} from '@api/modules/resources/resourceApi';
 import {
   createKeySoundOutputViewModel,
   DEFAULT_ASIO_BUFFER,

@@ -69,7 +69,7 @@ vi.mock(
   }),
 );
 
-vi.mock('@api/modules/gestureApi', () => ({
+vi.mock('@api/modules/editor/gestureApi', () => ({
   gestureApi: { commit: mocks.commitApi },
 }));
 

@@ -191,13 +191,13 @@ vi.mock('@hooks/useOptimisticBooleanCommit', () => ({
     canonicalValue: boolean;
   }) => ({ value: canonicalValue, toggle: vi.fn() }),
 }));
-vi.mock('@api/modules/keysApi', () => ({
+vi.mock('@api/modules/editor/keysApi', () => ({
   keysApi: { resetCountersMode: vi.fn() },
 }));
-vi.mock('@api/modules/settingsApi', () => ({
+vi.mock('@api/modules/app/settingsApi', () => ({
   settingsApi: { update: vi.fn() },
 }));
-vi.mock('@api/modules/appApi', () => ({
+vi.mock('@api/modules/app/appApi', () => ({
   appApi: { openExternal: vi.fn() },
 }));
 vi.mock('@stores/useUIStore', () => ({

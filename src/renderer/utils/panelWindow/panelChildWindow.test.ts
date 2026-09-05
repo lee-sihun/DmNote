@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({
   armOpen: vi.fn(() => Promise.resolve()),
 }));
 
-vi.mock('@api/modules/panelWindowApi', () => ({
+vi.mock('@api/modules/window/panelWindowApi', () => ({
   panelWindowApi: { armOpen: () => mocks.armOpen() },
 }));
 

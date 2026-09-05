@@ -10,25 +10,25 @@ import {
   useSettingsStore,
   type SettingsStateSnapshot,
 } from '@stores/useSettingsStore';
-import { obsApi } from '@api/modules/obsApi';
-import { overlayApi } from '@api/modules/overlayApi';
+import { obsApi } from '@api/modules/window/obsApi';
+import { overlayApi } from '@api/modules/window/overlayApi';
 import { notifyLocaleChanged, subscribe } from '@api/modules/shared';
 import {
   acknowledgeLifecycleAfterEditorFlush,
   cancelLifecycleEditorFlush,
   windowApi,
-} from '@api/modules/appApi';
+} from '@api/modules/app/appApi';
 import { stableStringify } from '@utils/core/stableStringify';
 import { useTranslation } from '@contexts/useTranslation';
 import { editorCoordinator } from '@src/renderer/editor/runtime/coordinator/editorStateCoordinator';
-import { panelWindowApi } from '@api/modules/panelWindowApi';
+import { panelWindowApi } from '@api/modules/window/panelWindowApi';
 import {
   detachPropertiesPanel,
   notePanelWindowHidden,
 } from '@stores/grid/usePanelHostStore';
 import { initPluginInstancesUndoSync } from '@plugins/runtime/displayElement/instancesUndoSync';
 import { initPluginGroupRefsMirror } from '@plugins/runtime/pluginGroupRefsMirror';
-import { historyApi } from '@api/modules/historyApi';
+import { historyApi } from '@api/modules/editor/historyApi';
 import {
   useHistoryStatusStore,
   syncHistoryStatus,

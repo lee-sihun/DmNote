@@ -12,7 +12,9 @@ import {
   findMatchingPresetId,
   normalizeCounterAnimationLibrary,
 } from '@src/types/key/counterAnimation';
-import ListPopup, { type ListItem } from '@components/main/Modal/listPopup/ListPopup';
+import ListPopup, {
+  type ListItem,
+} from '@components/main/Modal/listPopup/ListPopup';
 import { usePickerItemMenu } from '@hooks/usePickerItemMenu';
 import CommonListPickerPage from './CommonListPickerPage';
 import {
@@ -26,7 +28,7 @@ import type { CounterAnimationKeyVisual } from '@utils/counter/counterAnimationP
 import { useEditSessionCompletionGuard } from '@src/renderer/contexts/EditSessionScope';
 
 import type { CompletionBinding } from '@src/renderer/contexts/EditSessionScope';
-import { counterAnimationApi } from '@api/modules/resourceApi';
+import { counterAnimationApi } from '@api/modules/resources/resourceApi';
 
 interface CounterAnimationPickerProps {
   open: boolean;

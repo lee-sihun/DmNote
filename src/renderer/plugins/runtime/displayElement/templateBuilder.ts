@@ -3,7 +3,7 @@
  * 플러그인에서 사용하는 템플릿 관련 유틸리티를 제공합니다.
  */
 
-import { html, styleMap, css } from '@utils/plugin/templateEngine';
+import { html, styleMap, css } from '@utils/plugin/components/templateEngine';
 import type {
   DisplayElementTemplate,
   DisplayElementTemplateFactoryValue,

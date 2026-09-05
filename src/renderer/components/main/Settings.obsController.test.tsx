@@ -205,10 +205,10 @@ vi.mock('@utils/core/platform', () => ({ isMac: () => false }));
 vi.mock('@hooks/app/useUpdateCheck', () => ({
   useUpdateCheck: () => ({ checkForUpdates: vi.fn(), isChecking: false }),
 }));
-vi.mock('@api/modules/settingsApi', () => ({
+vi.mock('@api/modules/app/settingsApi', () => ({
   settingsApi: { update: obsHarness.settingsUpdate },
 }));
-vi.mock('@api/modules/obsApi', () => ({
+vi.mock('@api/modules/window/obsApi', () => ({
   obsApi: {
     status: obsHarness.status,
     onStatus: obsHarness.onStatus,
@@ -217,19 +217,19 @@ vi.mock('@api/modules/obsApi', () => ({
     regenerateToken: obsHarness.regenerateToken,
   },
 }));
-vi.mock('@api/modules/overlayApi', () => ({
+vi.mock('@api/modules/window/overlayApi', () => ({
   overlayApi: { setLock: vi.fn(), setAnchor: obsHarness.overlaySetAnchor },
 }));
-vi.mock('@api/modules/cssApi', () => ({
+vi.mock('@api/modules/resources/cssApi', () => ({
   cssApi: { toggle: vi.fn() },
 }));
-vi.mock('@api/modules/jsApi', () => ({
+vi.mock('@api/modules/plugin/jsApi', () => ({
   jsApi: { toggle: vi.fn() },
 }));
-vi.mock('@api/modules/keysApi', () => ({
+vi.mock('@api/modules/editor/keysApi', () => ({
   keysApi: { resetCounters: vi.fn(), resetAll: vi.fn() },
 }));
-vi.mock('@api/modules/appApi', () => ({
+vi.mock('@api/modules/app/appApi', () => ({
   appApi: { restart: obsHarness.appRestart },
   windowApi: { openDevtoolsAll: vi.fn() },
 }));

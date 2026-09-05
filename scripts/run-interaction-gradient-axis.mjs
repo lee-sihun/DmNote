@@ -68,8 +68,8 @@ const correctness = spawnSync(
   [
     'vitest',
     'run',
-    'src/renderer/__tests__/gradientAxisHandle.test.tsx',
-    'src/renderer/__tests__/gradientEditStore.test.tsx',
+    'src/renderer/__tests__/rendering/gradientAxisHandle.test.tsx',
+    'src/renderer/__tests__/editor/gradientEditStore.test.tsx',
     'src/renderer/utils/animation/rafLatestScheduler.test.ts',
   ],
   { cwd: root, stdio: 'inherit' },

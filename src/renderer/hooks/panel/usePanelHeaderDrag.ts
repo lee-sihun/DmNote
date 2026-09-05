@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   panelWindowApi,
   type PanelDragGeometry,
-} from '@api/modules/panelWindowApi';
+} from '@api/modules/window/panelWindowApi';
 import { PANEL_HEADER_HEIGHT } from '@components/main/Grid/PropertiesPanel/navigation/panelChrome';
 import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/lifecycle/historyEditorFlushLock';
 import {

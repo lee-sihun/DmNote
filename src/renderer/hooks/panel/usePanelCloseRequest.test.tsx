@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
   flushResult: true,
 }));
 
-vi.mock('@api/modules/panelWindowApi', () => ({
+vi.mock('@api/modules/window/panelWindowApi', () => ({
   panelWindowApi: {
     ackClose: (requestId: string) => mocks.ackClose(requestId),
     dock: () => mocks.dock(),

@@ -17,7 +17,7 @@ const api = vi.hoisted(() => ({ delete: vi.fn() }));
 vi.mock('@contexts/useTranslation', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
-vi.mock('@api/modules/keysApi', () => ({
+vi.mock('@api/modules/editor/keysApi', () => ({
   keysApi: { customTabs: { delete: api.delete } },
 }));
 vi.mock('../Modal/content/editors/TabNameModal', () => ({

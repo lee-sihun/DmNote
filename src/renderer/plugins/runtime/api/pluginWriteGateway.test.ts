@@ -16,7 +16,7 @@ vi.mock(
     editorCoordinator: { commitIsolatedPluginPatch, runSerializedPluginCommit },
   }),
 );
-vi.mock('@api/modules/editorApi', () => ({ editorCommitRaw }));
+vi.mock('@api/modules/editor/editorApi', () => ({ editorCommitRaw }));
 
 import {
   pluginEditorCommit,

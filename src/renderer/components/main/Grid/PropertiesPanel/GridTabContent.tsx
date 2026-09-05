@@ -1,5 +1,5 @@
 import React from 'react';
-import { settingsApi } from '@api/modules/settingsApi';
+import { settingsApi } from '@api/modules/app/settingsApi';
 import { useTranslation } from '@contexts/useTranslation';
 import { useSettingsStore, type GridSettings } from '@stores/useSettingsStore';
 import {

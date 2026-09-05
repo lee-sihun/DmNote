@@ -1,4 +1,4 @@
-import { pluginInstancesApi } from '@api/modules/pluginInstancesApi';
+import { pluginInstancesApi } from '@api/modules/plugin/pluginInstancesApi';
 import { buildValidTabIdSet } from '@constants/keyModes';
 import { getPluginAuthorityGeneration } from '@plugins/runtime/pluginAuthorityGeneration';
 import { noteBackendPluginRevision } from '@plugins/runtime/pluginModelRevision';

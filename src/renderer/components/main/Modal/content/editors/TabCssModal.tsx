@@ -21,7 +21,7 @@ import { pathBaseName } from '@utils/media/pathDisplay';
 import { cssHistoryStatusLabel } from '@utils/cssHistoryStatus';
 import type { CustomCssHistoryItem } from '@src/types/plugin/api';
 import type { TabCss } from '@src/types/plugin/css';
-import { cssApi } from '@api/modules/cssApi';
+import { cssApi } from '@api/modules/resources/cssApi';
 
 interface TabCssModalProps {
   isOpen: boolean;

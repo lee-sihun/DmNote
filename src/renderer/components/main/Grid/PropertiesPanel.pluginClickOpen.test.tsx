@@ -151,7 +151,7 @@ vi.mock('@src/renderer/editor/runtime/intent/elementIntent', () => ({
 vi.mock('@src/renderer/editor/runtime/geometry/mixedBatchGeometry', () => ({
   commitMixedBatchGeometry: vi.fn(),
 }));
-vi.mock('@api/modules/itemsApi', () => ({
+vi.mock('@api/modules/editor/itemsApi', () => ({
   graphItemsApi: { updatePositions: vi.fn(() => Promise.resolve()) },
   knobItemsApi: { updatePositions: vi.fn(() => Promise.resolve()) },
   layerGroupsApi: { update: vi.fn(() => Promise.resolve()) },
@@ -205,10 +205,14 @@ vi.mock('./PropertiesPanel/navigation/PanelHeaderActions', () => ({
 vi.mock('./PropertiesPanel/navigation/PanelToggleButton', () => ({
   default: () => null,
 }));
-vi.mock('@components/main/common/checkbox/Checkbox', () => ({ default: () => null }));
-vi.mock('@components/main/common/dropdown/Dropdown', () => ({ default: () => null }));
+vi.mock('@components/main/common/checkbox/Checkbox', () => ({
+  default: () => null,
+}));
+vi.mock('@components/main/common/dropdown/Dropdown', () => ({
+  default: () => null,
+}));
 
-import { PluginElementsRenderer } from '@components/shared/PluginElementsRenderer';
+import { PluginElementsRenderer } from '@components/shared/plugin/PluginElementsRenderer';
 import PropertiesPanel from './PropertiesPanel';
 
 const SIMPLE_DEF_ID = 'simple-plugin:badge';

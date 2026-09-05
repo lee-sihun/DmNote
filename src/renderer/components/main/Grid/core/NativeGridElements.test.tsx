@@ -72,7 +72,7 @@ async function createElementRenderer(kind: string) {
   };
 }
 
-vi.mock('@components/shared/Key', () => createElementRenderer('key-like'));
+vi.mock('@components/shared/key/Key', () => createElementRenderer('key-like'));
 vi.mock('../layers/GraphItem', () => createElementRenderer('graph'));
 vi.mock('../layers/KnobItem', () => createElementRenderer('knob'));
 

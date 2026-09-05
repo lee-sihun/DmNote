@@ -11,7 +11,7 @@ import FloatingTooltip from '../Modal/tooltip/FloatingTooltip';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { useSingleFlightAction } from '@hooks/useSingleFlightAction';
 import { useIconMotion } from '@hooks/useIconMotion';
-import { appApi } from '@api/modules/appApi';
+import { appApi } from '@api/modules/app/appApi';
 import { useModalLayerActive } from '../Modal/popupLayer';
 
 interface ToolBarProps {

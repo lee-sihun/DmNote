@@ -4,7 +4,7 @@ import {
   useHistoryStatusStore,
   syncHistoryStatus,
 } from '@stores/data/useHistoryStatusStore';
-import { historyApi } from '@api/modules/historyApi';
+import { historyApi } from '@api/modules/editor/historyApi';
 import { rebindKeySlotById } from '@src/renderer/editor/runtime/operations/elementOps';
 import {
   reportElementOpError,
@@ -14,7 +14,7 @@ import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { setUndoRedoInProgress } from '@api/pluginDisplayElements';
 import type { KeySlot } from '@src/types/key/keys';
 import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
-import { keysApi } from '@api/modules/keysApi';
+import { keysApi } from '@api/modules/editor/keysApi';
 
 export function useKeyManager() {
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);

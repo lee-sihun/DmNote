@@ -1,5 +1,5 @@
-import { editorApi } from '@api/modules/editorApi';
-import { previewApi } from '@api/modules/previewApi';
+import { editorApi } from '@api/modules/editor/editorApi';
+import { previewApi } from '@api/modules/editor/previewApi';
 import { unstable_batchedUpdates } from 'react-dom';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';

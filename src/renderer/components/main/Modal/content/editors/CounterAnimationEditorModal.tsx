@@ -17,7 +17,7 @@ import {
 } from '@utils/cubicBezier';
 import type { CounterAnimationKeyVisual } from '@utils/counter/counterAnimationPreview';
 import { type ContinuousInputStrategy } from '@utils/animation/rafLatestScheduler';
-import { counterAnimationApi } from '@api/modules/resourceApi';
+import { counterAnimationApi } from '@api/modules/resources/resourceApi';
 import {
   clampCounterDuration as clampDuration,
   formatCounterBezierInput as formatBezierInput,

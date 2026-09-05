@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { obsApi } from '@api/modules/obsApi';
+import { obsApi } from '@api/modules/window/obsApi';
 import { MAX_EVENT_AGE_MS } from '@constants/inputTiming';
 import type { NoteKeyTiming } from '@hooks/overlay/useNoteSystem';
 import {

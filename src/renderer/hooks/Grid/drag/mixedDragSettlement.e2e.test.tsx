@@ -20,7 +20,7 @@ const runtime = vi.hoisted(() => ({
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: runtime.invoke }));
 
-vi.mock('@api/modules/previewApi', () => ({
+vi.mock('@api/modules/editor/previewApi', () => ({
   previewApi: {
     cancel: runtime.previewCancel,
     publish: runtime.previewPublish,
@@ -28,7 +28,7 @@ vi.mock('@api/modules/previewApi', () => ({
   },
 }));
 
-vi.mock('@api/modules/editorApi', () => ({
+vi.mock('@api/modules/editor/editorApi', () => ({
   editorApi: {
     get: async () => ({ revision: 0, document: makeDocument() }),
     commit: async () => {

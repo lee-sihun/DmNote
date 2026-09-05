@@ -1,5 +1,5 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
-import { soundApi } from '@api/modules/resourceApi';
+import { soundApi } from '@api/modules/resources/resourceApi';
 import type { SoundListItem } from '@src/types/plugin/api';
 
 interface SoundPickerLibraryRuntimeOptions {
