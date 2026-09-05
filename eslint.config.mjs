@@ -16,7 +16,6 @@ export default tseslint.config(
       "*.config.js",
       "*.config.mjs",
       "*.config.ts",
-      "scripts/**",
     ],
   },
 
@@ -80,6 +79,11 @@ export default tseslint.config(
     rules: {
       "@typescript-eslint/no-require-imports": "off",
     },
+  },
+
+  {
+    files: ["scripts/ci/**/*.ts"],
+    languageOptions: { globals: globals.node },
   },
 
   // Prettier must be last to override formatting rules

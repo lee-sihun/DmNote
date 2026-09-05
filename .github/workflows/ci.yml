@@ -1,0 +1,149 @@
+name: CI
+
+on:
+  pull_request:
+    types:
+      [
+        opened,
+        synchronize,
+        reopened,
+        ready_for_review,
+        converted_to_draft,
+        edited,
+      ]
+  workflow_dispatch:
+    inputs:
+      extended:
+        description: ASIO 미사용·배포 형식·coverage까지 검증
+        type: boolean
+        default: true
+  workflow_call:
+    inputs:
+      validation_ref:
+        description: 검증할 commit SHA
+        type: string
+        default: ''
+      extended:
+        description: 배포 형식과 추가 구성 검증
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ inputs.validation_ref || 'current' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: '0'
+  CARGO_PROFILE_DEV_DEBUG: '0'
+  CARGO_PROFILE_TEST_DEBUG: '0'
+
+jobs:
+  changes:
+    name: 변경 분류
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      mode: ${{ steps.plan.outputs.mode }}
+      sha: ${{ steps.plan.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.validation_ref || '' }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-node
+      - id: plan
+        env:
+          VALIDATION_REF: ${{ inputs.validation_ref }}
+        run: node --experimental-strip-types scripts/ci/runPolicy.ts plan
+
+  quality:
+    name: 빠른 검사
+    needs: changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.changes.outputs.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/quality
+
+  frontend:
+    name: 프론트 전체 검사
+    needs: [changes, quality]
+    if: needs.changes.outputs.mode == 'full'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.changes.outputs.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-node
+      - run: npm ci --no-audit --no-fund
+      - name: 전체 테스트
+        if: inputs.extended != true
+        run: npm test -- --reporter=default --reporter=junit --outputFile.junit=reports/vitest.xml
+      - name: 전체 테스트와 coverage
+        if: inputs.extended == true
+        run: npm run test:coverage -- --reporter=default --reporter=junit --outputFile.junit=reports/vitest.xml
+      - run: npm run build
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ !cancelled() }}
+        with:
+          name: frontend-results-${{ github.run_id }}-${{ github.job }}
+          path: |
+            reports/vitest.xml
+            coverage/
+          retention-days: 7
+
+  windows:
+    name: Windows 검증
+    needs: [changes, quality]
+    if: needs.changes.outputs.mode == 'full'
+    runs-on: windows-2025
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.changes.outputs.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/validate-windows
+        with:
+          extended: ${{ inputs.extended || false }}
+
+  macos:
+    name: macOS 검증
+    needs: [changes, quality]
+    if: needs.changes.outputs.mode == 'full'
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.changes.outputs.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/validate-macos
+        with:
+          extended: ${{ inputs.extended || false }}
+
+  gate:
+    name: ${{ github.event_name == 'pull_request' && inputs.validation_ref == '' && 'CI Gate' || 'Full Validation Gate' }}
+    if: always()
+    needs: [changes, quality, frontend, windows, macos]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.changes.outputs.sha || inputs.validation_ref || github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-node
+      - env:
+          CI_NEEDS: ${{ toJSON(needs) }}
+        run: node --experimental-strip-types scripts/ci/runPolicy.ts gate

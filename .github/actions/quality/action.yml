@@ -1,0 +1,22 @@
+name: 빠른 품질 검사
+description: 포맷·lint·타입·공유 계약·CI 정책 검사
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/setup-node
+    - shell: bash
+      run: npm ci --no-audit --no-fund
+    - shell: bash
+      run: npm run format:check && npm run format:ci:check
+    - shell: bash
+      run: npm run lint
+    - shell: bash
+      run: npm run type-check
+    - shell: bash
+      run: npm run test:ci
+    - shell: bash
+      run: npm run lint:workflows
+    - shell: bash
+      run: npm test -- ./tests/
+    - shell: bash
+      run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check

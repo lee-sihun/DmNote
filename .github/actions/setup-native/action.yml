@@ -1,0 +1,40 @@
+name: Rust 네이티브 준비
+description: 고정 Rust와 플랫폼별 도구 및 캐시 준비
+inputs:
+  workspace:
+    description: Rust checkout 경로
+    default: '.'
+  cache-key:
+    description: feature와 profile 구분
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: rustup show && rustc --version && cargo --version
+    - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      with:
+        workspaces: ${{ inputs.workspace }}/src-tauri -> target
+        prefix-key: ci-native-v1
+        key: ${{ inputs.cache-key }}-${{ runner.os == 'Windows' && hashFiles(format('{0}/src-tauri/vendor/asio-sdk/**', inputs.workspace)) || 'no-asio-sdk' }}
+        cache-on-failure: false
+    - if: runner.os == 'Windows'
+      shell: pwsh
+      env:
+        SOURCE_DIRECTORY: ${{ inputs.workspace }}
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $llvmBin = Join-Path $env:ProgramFiles 'LLVM\bin'
+        if (-not (Test-Path (Join-Path $llvmBin 'libclang.dll'))) {
+          throw 'libclang.dll을 찾을 수 없습니다'
+        }
+        $sourceRoot = Join-Path $env:GITHUB_WORKSPACE $env:SOURCE_DIRECTORY
+        $asioSdk = Join-Path $sourceRoot 'src-tauri\vendor\asio-sdk'
+        if (-not (Test-Path (Join-Path $asioSdk 'common\asio.h'))) {
+          throw '벤더링된 ASIO SDK를 찾을 수 없습니다'
+        }
+        "LIBCLANG_PATH=$llvmBin" >> $env:GITHUB_ENV
+        "CPAL_ASIO_DIR=$asioSdk" >> $env:GITHUB_ENV
+    - if: runner.os == 'macOS'
+      shell: bash
+      run: xcodebuild -version && xcrun swiftc --version && uname -m

@@ -1,0 +1,48 @@
+name: macos 검증
+description: 전체 Rust 테스트와 Tauri 앱 검증
+inputs:
+  workspace:
+    description: 검사할 소스 checkout 경로
+    default: '.'
+  extended:
+    description: 배포 형식과 추가 구성 검증
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/setup-node
+      with:
+        workspace: ${{ inputs.workspace }}
+    - uses: ./.github/actions/setup-native
+      with:
+        workspace: ${{ inputs.workspace }}
+        cache-key: macos-${{ inputs.extended == 'true' && 'universal-release' || 'arm64-debug' }}
+    - shell: bash
+      working-directory: ${{ inputs.workspace }}
+      run: npm ci --no-audit --no-fund
+    - working-directory: ${{ inputs.workspace }}/src-tauri
+      shell: bash
+      run: cargo clippy --all-targets --locked -- -D warnings
+    - working-directory: ${{ inputs.workspace }}/src-tauri
+      shell: bash
+      run: cargo test --all-targets --locked
+    - name: PR 앱 번들 검증
+      working-directory: ${{ inputs.workspace }}
+      shell: bash
+      if: inputs.extended != 'true'
+      run: |
+        npm run tauri:build:no-asio -- --debug --bundles app --no-sign --ci -- --locked
+        bash scripts/verify-macos-bundle.sh "src-tauri/target/debug/bundle/macos/DM NOTE.app"
+    - name: Universal 배포 형식 검증
+      working-directory: ${{ inputs.workspace }}
+      shell: bash
+      if: inputs.extended == 'true'
+      run: |
+        rustup target add aarch64-apple-darwin x86_64-apple-darwin
+        cargo test --manifest-path src-tauri/Cargo.toml --doc --locked
+        npm run tauri:build:mac:universal -- --bundles app --no-sign --ci -- --locked
+        bash scripts/verify-macos-bundle.sh "src-tauri/target/universal-apple-darwin/release/bundle/macos/DM NOTE.app"
+    - name: 생성 permissions 확인
+      working-directory: ${{ inputs.workspace }}
+      shell: bash
+      run: git diff --exit-code -- src-tauri/permissions/dmnote-allow-all.json

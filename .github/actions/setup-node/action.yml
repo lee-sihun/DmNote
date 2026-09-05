@@ -1,0 +1,16 @@
+name: Node 준비
+description: 고정 Node와 npm 다운로드 캐시 준비
+inputs:
+  workspace:
+    description: npm checkout 경로
+    default: '.'
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      with:
+        node-version-file: .node-version
+        cache: npm
+        cache-dependency-path: ${{ inputs.workspace }}/package-lock.json
+    - shell: bash
+      run: node --version && npm --version

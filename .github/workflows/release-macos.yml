@@ -29,17 +29,26 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      contents: write # 빌드 전에 원격 릴리스 태그 생성
+      contents: read
     outputs:
+      node_version: ${{ steps.toolchain.outputs.node }}
+      rust_version: ${{ steps.toolchain.outputs.rust }}
       version: ${{ steps.check.outputs.version }}
       release: ${{ steps.check.outputs.release }}
       should_build: ${{ steps.check.outputs.should_build }}
       release_sha: ${{ steps.check.outputs.release_sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      - id: toolchain
+        name: 빌드 도구 버전 확인
+        shell: bash
+        run: |
+          echo "node=$(cat .node-version)" >> "$GITHUB_OUTPUT"
+          echo "rust=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
 
       # 누락 시 맥 러너에서 빌드를 한참 돌린 뒤에야 실패하므로 여기서 먼저 검사 (값은 출력하지 않음)
       - name: 필수 시크릿 확인
@@ -128,12 +137,29 @@ jobs:
           echo "release_sha=$RELEASE_SHA" >> "$GITHUB_OUTPUT"
           echo "release=$RELEASE should_build=$SHOULD_BUILD release_sha=$RELEASE_SHA"
 
+  validate:
+    name: 배포 SHA 검증
+    needs: preflight
+    if: needs.preflight.outputs.should_build == 'true'
+    uses: ./.github/workflows/ci-release.yml
+    with:
+      validation_ref: ${{ needs.preflight.outputs.release_sha }}
+      platform: macos
+
+  tag:
+    name: 검증된 릴리즈 태그
+    needs: [preflight, validate]
+    if: needs.preflight.outputs.release == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
       - name: 릴리스 태그 확인 / 생성
-        if: steps.check.outputs.release == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.check.outputs.version }}
-          TARGET: ${{ steps.check.outputs.release_sha }}
+          TAG: ${{ needs.preflight.outputs.version }}
+          TARGET: ${{ needs.preflight.outputs.release_sha }}
         run: |
           set -euo pipefail
 
@@ -167,8 +193,8 @@ jobs:
 
   build-macos:
     name: 유니버설 빌드·서명·공증
-    needs: preflight
-    if: needs.preflight.outputs.should_build == 'true'
+    needs: [preflight, validate, tag]
+    if: ${{ !cancelled() && needs.preflight.outputs.should_build == 'true' && needs.validate.result == 'success' && (needs.tag.result == 'success' || needs.tag.result == 'skipped') }}
     # 실제 릴리즈만 직렬화. 일반 package.json 변경의 사전 검사는 대기시키지 않음
     concurrency:
       group: release-macos
@@ -183,7 +209,7 @@ jobs:
       BUNDLE_DIR: src-tauri/target/universal-apple-darwin/release/bundle
     steps:
       # 이 job은 서명 키 + contents:write를 보유 — npm/cargo 스크립트에 토큰을 남기지 않음
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.preflight.outputs.release_sha }}
           persist-credentials: false
@@ -197,18 +223,18 @@ jobs:
           xcrun --sdk macosx swiftc --version
           xcrun notarytool --version
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 22
+          node-version: ${{ needs.preflight.outputs.node_version }}
           cache: npm
 
       # @stable은 가변 브랜치라 SHA 핀 (서명 키를 쥔 job에서 서드파티 액션 탈취 방지). SHA 갱신 시 toolchain 입력 유지
       - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable, 2026-08-05
         with:
-          toolchain: stable
+          toolchain: ${{ needs.preflight.outputs.rust_version }}
           targets: aarch64-apple-darwin,x86_64-apple-darwin
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: src-tauri -> target
           cache-on-failure: true
@@ -284,7 +310,7 @@ jobs:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER_ID }}
           TAURI_BUNDLER_DMG_IGNORE_CI: "1"
-        run: npm run tauri:build:mac:universal
+        run: npm run tauri:build:mac:universal -- --ci -- --locked
 
       # spctl은 파이프에 물리면 종료 코드가 가려지므로 단독 실행
       - name: 앱 번들 검증
@@ -338,7 +364,7 @@ jobs:
 
       - name: 산출물 업로드 (드라이런)
         if: needs.preflight.outputs.release != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dmnote-macos-universal-${{ needs.preflight.outputs.version }}
           path: ${{ env.ASSET_PATH }}

@@ -6,11 +6,11 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint src/",
+    "lint": "eslint src/ scripts/ci/",
     "lint:fix": "eslint src/ --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx,css,json}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css,json}\"",
-    "type-check": "tsc --noEmit",
+    "type-check": "tsc --noEmit && tsc --project scripts/ci/tsconfig.json",
     "type-check:watch": "tsc --noEmit --watch",
     "tauri:dev": "tauri dev -f asio-backend",
     "tauri:dev:no-asio": "tauri dev",
@@ -77,7 +77,10 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "contributors:add": "all-contributors add",
-    "contributors:generate": "all-contributors generate"
+    "contributors:generate": "all-contributors generate",
+    "test:ci": "node --experimental-strip-types --test scripts/ci/*.test.ts",
+    "lint:workflows": "node --experimental-strip-types scripts/ci/actionlint.ts",
+    "format:ci:check": "prettier --check \"scripts/ci/**/*.{ts,json}\" \".github/actions/**/*.yml\" \".github/workflows/ci*.yml\" .github/dependabot.yml .github/rulesets/main.json"
   },
   "authors": [
     {
