@@ -1,4 +1,5 @@
 use super::*;
+use crate::state::{AppState, PANEL_LABEL};
 
 #[cfg(target_os = "windows")]
 pub async fn start_windows_drag(
@@ -80,7 +81,7 @@ pub async fn start_windows_drag(
     };
     let presented = owner_result.presented;
     if presented {
-        app.state::<super::super::AppState>().flush_panel_detached();
+        app.state::<AppState>().flush_panel_detached();
     }
     match owner_result.status {
         OwnerStartStatus::Waiting => {}
@@ -173,7 +174,7 @@ unsafe fn start_on_owner_thread(
     };
     use tauri::PhysicalPosition;
 
-    let Some(window) = app.get_webview_window(super::super::PANEL_LABEL) else {
+    let Some(window) = app.get_webview_window(PANEL_LABEL) else {
         return owner_start_failure(
             controller,
             &geometry.gesture_id,
@@ -395,7 +396,7 @@ unsafe fn start_on_owner_thread(
             );
         };
         {
-            let state = app.state::<super::super::AppState>();
+            let state = app.state::<AppState>();
             let Some(_creation_guard) = state.try_lock_panel_creation_for_drag() else {
                 return owner_start_failure(
                     controller,
@@ -471,7 +472,7 @@ unsafe fn start_on_owner_thread(
                     Ok(()) => {
                         visible_after_failure = false;
                         if let Some(snapshot) = present_snapshot.take() {
-                            app.state::<super::super::AppState>()
+                            app.state::<AppState>()
                                 .revert_panel_drag_presented(app, snapshot);
                         } else {
                             log::warn!(
