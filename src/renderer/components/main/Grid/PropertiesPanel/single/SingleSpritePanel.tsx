@@ -33,7 +33,10 @@ import {
   materializePoseNames,
   resolvePoseNames,
 } from '@utils/sprite/spritePoseNames';
-import { rebaseSpritePoseIntent } from '@utils/sprite/spritePoseIntent';
+import {
+  rebaseSpritePoseIntent,
+  resolveSpritePoseCommit,
+} from '@utils/sprite/spritePoseIntent';
 import { toSpriteWireShape } from '@utils/sprite/spriteWireShape';
 import { slotDisplayName } from '@utils/keySlot';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
@@ -129,6 +132,42 @@ const retainDraftReference = (
   poses.some((pose) => toRenderableImageRef(pose.imageOverride) !== null)
     ? reference
     : undefined;
+
+const committedPoseReferencePatch = (
+  current: ReactiveSpritePosition,
+  poses: SpritePose[],
+  reference: SpriteReferenceNaturalSize | null | undefined,
+  partial: boolean,
+): Partial<ReactiveSpritePosition> => {
+  // 부분 저장에서는 실제 이미지 편집이 함께 저장될 때만 보류 기준값을 사용
+  if (partial) {
+    const previousById = new Map(
+      current.poses.map((pose) => [pose.poseId, pose]),
+    );
+    const editedImage = poses.find((pose) => {
+      if (toRenderableImageRef(pose.imageOverride) === null) return false;
+      if (pose.imageOverrideMetrics?.source !== pose.imageOverride)
+        return false;
+      const previous = previousById.get(pose.poseId);
+      return (
+        previous?.imageOverride !== pose.imageOverride ||
+        stableStringify(previous?.imageOverrideMetrics) !==
+          stableStringify(pose.imageOverrideMetrics)
+      );
+    });
+    const metrics = editedImage?.imageOverrideMetrics;
+    return initialPoseReferencePatch(
+      current,
+      metrics
+        ? { source: null, width: metrics.width, height: metrics.height }
+        : undefined,
+    );
+  }
+  return initialPoseReferencePatch(
+    current,
+    retainDraftReference(poses, reference),
+  );
+};
 
 interface SingleSpritePanelProps {
   setPanelElement: (el: HTMLDivElement | null) => void;
@@ -577,44 +616,61 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
   const updatePoses = (
     rawPoses: SpritePose[],
     initialReference?: SpriteReferenceNaturalSize,
-    imagePoseId?: string,
+    targetPoseId?: string,
   ) => {
     // draft와 커밋이 같은 wire 정규형(트리거 정렬·dedup)을 공유해야
     // canonical 착지 비교가 일치해 draft가 제때 풀린다
     const nextPoses = toSpriteWireShape({ ...position, poses: rawPoses }).poses;
+    const basePoses = canonicalPosition.poses;
+    const candidate = resolveSpritePoseCommit(
+      basePoses,
+      nextPoses,
+      basePoses,
+      targetPoseId,
+    );
     const referenceNaturalSize = retainDraftReference(
       nextPoses,
-      pendingReference ?? initialReference,
+      (candidate?.partial
+        ? committedPoseReferencePatch(
+            canonicalPosition,
+            candidate.poses,
+            null,
+            true,
+          ).referenceNaturalSize
+        : null) ??
+        pendingReference ??
+        initialReference,
     );
     setPosesDraft({ id: position.id, poses: nextPoses, referenceNaturalSize });
-    const blocked =
-      nextPoses.some((pose) => pose.triggers.length === 0) ||
-      findDuplicateTriggerPose(nextPoses) !== null;
-    if (blocked) {
+    if (!candidate) {
       // 열린 preview 게스처에 무효 poses가 실려 커밋 경계로 승격되지 않게 닫는다
       editGestureController.cancel();
       return;
     }
-    const basePoses = canonicalPosition.poses;
     trackPoseWrite(
-      commitFields({ poses: nextPoses }, (current) => {
+      commitFields({ poses: candidate.poses }, (current) => {
         if (
-          imagePoseId &&
-          !current.poses.some((pose) => pose.poseId === imagePoseId)
+          initialReference &&
+          targetPoseId &&
+          !current.poses.some((pose) => pose.poseId === targetPoseId)
         ) {
           return null;
         }
-        const poses = rebaseSpritePoseIntent(
+        const commit = resolveSpritePoseCommit(
           basePoses,
           nextPoses,
           current.poses,
+          targetPoseId,
         );
+        if (!commit) return null;
         return {
-          ...initialPoseReferencePatch(
+          ...committedPoseReferencePatch(
             current,
-            retainDraftReference(poses, referenceNaturalSize),
+            commit.poses,
+            referenceNaturalSize,
+            commit.partial,
           ),
-          poses,
+          poses: commit.poses,
         };
       }),
     );
@@ -638,36 +694,46 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
         pose.poseId === targetPoseId ? { ...pose, ...patch } : pose,
       ),
     }).poses;
+    // position은 활성 프리뷰가 합성된 값일 수 있어 의도 비교 기준으로 쓰지 않는다
+    const basePosesAtIntent = canonicalPosition.poses;
+    const candidate = resolveSpritePoseCommit(
+      basePosesAtIntent,
+      nextPoses,
+      basePosesAtIntent,
+      targetPoseId,
+    );
     const referenceNaturalSize = retainDraftReference(
       nextPoses,
-      pendingReference,
+      (candidate?.partial
+        ? committedPoseReferencePatch(
+            canonicalPosition,
+            candidate.poses,
+            null,
+            true,
+          ).referenceNaturalSize
+        : null) ?? pendingReference,
     );
-    setPosesDraft({
-      id: position.id,
-      poses: nextPoses,
-      referenceNaturalSize,
-    });
-    const blocked =
-      nextPoses.some((pose) => pose.triggers.length === 0) ||
-      findDuplicateTriggerPose(nextPoses) !== null;
-    if (blocked) {
+    setPosesDraft({ id: position.id, poses: nextPoses, referenceNaturalSize });
+    if (!candidate) {
       editGestureController.cancel();
       return;
     }
-    // position은 활성 프리뷰가 합성된 값일 수 있어 의도 비교 기준으로 쓰지 않는다
-    const basePosesAtIntent = canonicalPosition.poses;
     trackPoseWrite(
-      commitFields({ poses: nextPoses }, (current) => {
-        const rebasedPoses = rebaseSpritePoseIntent(
+      commitFields({ poses: candidate.poses }, (current) => {
+        const commit = resolveSpritePoseCommit(
           basePosesAtIntent,
           nextPoses,
           current.poses,
+          targetPoseId,
         );
-        const referencePatch = initialPoseReferencePatch(
+        if (!commit) return null;
+        const referencePatch = committedPoseReferencePatch(
           current,
-          retainDraftReference(rebasedPoses, referenceNaturalSize),
+          commit.poses,
+          referenceNaturalSize,
+          commit.partial,
         );
-        if (!generatePatch) return { ...referencePatch, poses: rebasedPoses };
+        if (!generatePatch) return { ...referencePatch, poses: commit.poses };
         const currentPose = current.poses.find(
           (pose) => pose.poseId === targetPoseId,
         );
@@ -676,7 +742,7 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
         if (!latestPatch) return null;
         return {
           ...referencePatch,
-          poses: rebasedPoses.map((pose) =>
+          poses: commit.poses.map((pose) =>
             pose.poseId === targetPoseId ? { ...pose, ...latestPatch } : pose,
           ),
         };
@@ -771,8 +837,9 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
     }
   };
 
-  const handleTransformCancel = () => {
+  const handleTransformCancel = (reason?: 'history') => {
     editGestureController.cancel();
+    if (reason === 'history') return;
     // 로컬 스냅샷은 gesture 취소 대상이 아니므로 마지막 확정 자세로 직접 복원
     if (editingPose) {
       useSpriteEditPreviewStore.getState().publish({
@@ -924,6 +991,8 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
       materializePoseNames(displayPoses, poseNameLabel).filter(
         (_, index) => index !== poseIndex,
       ),
+      undefined,
+      displayPoses[poseIndex]?.poseId,
     );
 
   const clonePose = (sourcePoseId: string) => {

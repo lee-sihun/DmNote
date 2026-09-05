@@ -2005,6 +2005,132 @@ describe('SingleSpritePanel 자세 편집', () => {
     );
   });
 
+  it('미완성 형제의 이미지 기준값은 기존 자세 배율 저장에 섞이지 않는다', async () => {
+    const position = spritePosition({
+      poses: [
+        makeSpritePose({
+          triggers: [KEY_ID_A],
+          imageOverride: 'existing.png',
+          imageOverrideMetrics: {
+            source: 'existing.png',
+            width: 32,
+            height: 32,
+          },
+        }),
+      ],
+    });
+    seed(position);
+    render(position);
+    act(() => buttonByText('propertiesPanel.spriteAddPose').click());
+    mocks.imageLoad.mockResolvedValue({
+      success: true,
+      imagePath: 'draft.png',
+    });
+    await act(async () =>
+      posePopup()!
+        .querySelector<HTMLButtonElement>(
+          'button[aria-label="propertiesPanel.spriteImageSelect"]',
+        )!
+        .click(),
+    );
+    expect(mocks.patchPosition).not.toHaveBeenCalled();
+
+    act(() => poseEditButtons()[0].click());
+    await act(async () =>
+      useSpritePoseHandleStore.getState().session!.commit({
+        x: 0,
+        y: 0,
+        rotation: 0,
+        scale: 0.5,
+      }),
+    );
+    const generate = mocks.patchPosition.mock.calls[0][4] as (
+      current: CanonicalReactiveSpritePosition,
+    ) => Partial<CanonicalReactiveSpritePosition>;
+    const patch = generate(position);
+    expect(patch).not.toHaveProperty('referenceNaturalSize');
+    expect(patch.poses).toHaveLength(1);
+    expect(patch.poses![0]).toMatchObject({
+      imageOverride: 'existing.png',
+      transform: { scale: 0.5 },
+    });
+    expect(poseEditButtons()).toHaveLength(2);
+  });
+
+  it('빈 형제를 남겨도 정상 자세의 이미지와 기준 크기는 함께 저장한다', async () => {
+    const position = spritePosition({
+      poses: [makeSpritePose({ triggers: [KEY_ID_A] })],
+    });
+    seed(position);
+    render(position);
+    act(() => buttonByText('propertiesPanel.spriteAddPose').click());
+    act(() => poseEditButtons()[0].click());
+    mocks.imageLoad.mockResolvedValue({
+      success: true,
+      imagePath: 'saved.png',
+    });
+    await act(async () =>
+      posePopup()!
+        .querySelector<HTMLButtonElement>(
+          'button[aria-label="propertiesPanel.spriteImageSelect"]',
+        )!
+        .click(),
+    );
+
+    const generate = mocks.patchPosition.mock.calls[0][4] as (
+      current: CanonicalReactiveSpritePosition,
+    ) => Partial<CanonicalReactiveSpritePosition>;
+    const patch = generate(position);
+    expect(patch.referenceNaturalSize).toEqual({
+      source: null,
+      width: 64,
+      height: 32,
+    });
+    expect(patch.poses).toHaveLength(1);
+    expect(patch.poses![0].imageOverride).toBe('saved.png');
+    expect(poseEditButtons()).toHaveLength(2);
+  });
+
+  it('정상 자세 이미지의 부분 저장은 미완성 형제 대신 저장될 이미지에서 기준 크기를 정한다', async () => {
+    const position = spritePosition({
+      poses: [makeSpritePose({ triggers: [KEY_ID_A] })],
+    });
+    seed(position);
+    render(position);
+    act(() => buttonByText('propertiesPanel.spriteAddPose').click());
+    mocks.imageLoad.mockResolvedValue({
+      success: true,
+      imagePath: 'draft.png',
+    });
+    const pick = () =>
+      posePopup()!
+        .querySelector<HTMLButtonElement>(
+          'button[aria-label="propertiesPanel.spriteImageSelect"]',
+        )!
+        .click();
+    await act(async () => pick());
+    expect(mocks.patchPosition).not.toHaveBeenCalled();
+
+    act(() => poseEditButtons()[0].click());
+    mocks.imageLoad.mockResolvedValue({
+      success: true,
+      imagePath: 'saved.png',
+    });
+    mocks.probeImageSize.mockResolvedValue({ width: 32, height: 32 });
+    await act(async () => pick());
+    const generate = mocks.patchPosition.mock.calls[0][4] as (
+      current: CanonicalReactiveSpritePosition,
+    ) => Partial<CanonicalReactiveSpritePosition>;
+    const patch = generate(position);
+    expect(patch.referenceNaturalSize).toEqual({
+      source: null,
+      width: 32,
+      height: 32,
+    });
+    expect(patch.poses).toHaveLength(1);
+    expect(patch.poses![0].imageOverride).toBe('saved.png');
+  });
+
   it.each([
     { savedReference: null, keepKeyPose: false },
     {
