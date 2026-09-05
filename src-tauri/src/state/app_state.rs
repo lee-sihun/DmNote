@@ -10109,6 +10109,132 @@ mod tests {
             .is_some_and(|active| active.completion.is_lifecycle()));
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn sigterm_preserves_pending_state_and_allows_retry_after_canceled_flush() {
+        use std::{os::unix::process::ExitStatusExt, process::Command};
+
+        const CHILD_MODE: &str = "DMNOTE_SIGTERM_REGRESSION_MODE";
+        const CHILD_STORE: &str = "DMNOTE_SIGTERM_REGRESSION_STORE";
+        if let Ok(mode) = std::env::var(CHILD_MODE) {
+            let directory = std::env::var_os(CHILD_STORE).unwrap();
+            let state = Arc::new(
+                AppState::initialize(AppStore::initialize_for_test(Path::new(&directory)).unwrap())
+                    .unwrap(),
+            );
+            state.key_counter_enabled.store(true, Ordering::SeqCst);
+            let snapshot = state.store.snapshot();
+            let key_mode = snapshot.selected_key_type;
+            let key = snapshot.keys[&key_mode][0].canonical();
+            for expected in 1..=9 {
+                assert_eq!(
+                    state.increment_key_counter_and_emit(&NoopCounterEmitter, &key_mode, &key),
+                    Some(expected)
+                );
+            }
+            state.store.flush().unwrap();
+            state
+                .store
+                .update_deferred(|store| {
+                    store.overlay_bounds = Some(StoredOverlayBounds {
+                        x: 417.0,
+                        y: 19.0,
+                        width: 500.0,
+                        height: 400.0,
+                        native_position: None,
+                    });
+                })
+                .unwrap();
+
+            let (sender, receiver) = mpsc::channel();
+            if mode == "protected" {
+                let state = Arc::clone(&state);
+                let requests = AtomicUsize::new(0);
+                crate::state::unix_termination::install(move || {
+                    let request_number = requests.fetch_add(1, Ordering::SeqCst) + 1;
+                    let mut active = state.editor_flush_handshake.lock();
+                    let outcome = install_lifecycle_handshake(
+                        &mut active,
+                        EditorFlushHandshake {
+                            id: format!("sigterm-{request_number}"),
+                            completion: EditorFlushCompletion::Lifecycle(
+                                FrontendLifecycleAction::Quit,
+                            ),
+                            target_windows: HashSet::from(["main".to_string()]),
+                            pending_windows: HashSet::from(["main".to_string()]),
+                        },
+                    );
+                    let installed = matches!(outcome, LifecycleHandshakeInstall::Installed);
+                    sender
+                        .send((active.as_ref().unwrap().id.clone(), installed))
+                        .unwrap();
+                })
+                .unwrap();
+            }
+
+            assert_eq!(unsafe { libc::raise(libc::SIGTERM) }, 0);
+            assert_eq!(
+                receiver.recv_timeout(Duration::from_secs(3)).unwrap(),
+                ("sigterm-1".to_string(), true)
+            );
+            assert_eq!(unsafe { libc::raise(libc::SIGTERM) }, 0);
+            assert_eq!(
+                receiver.recv_timeout(Duration::from_secs(3)).unwrap(),
+                ("sigterm-1".to_string(), false)
+            );
+            assert!(take_cancelable_editor_flush_handshake(
+                &mut state.editor_flush_handshake.lock(),
+                "sigterm-1"
+            )
+            .is_some());
+            assert_eq!(unsafe { libc::raise(libc::SIGTERM) }, 0);
+            assert_eq!(
+                receiver.recv_timeout(Duration::from_secs(3)).unwrap(),
+                ("sigterm-3".to_string(), true)
+            );
+            state.shutdown();
+            return;
+        }
+
+        for mode in ["default", "protected"] {
+            let directory = tempfile::tempdir().unwrap();
+            let output = Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "state::app_state::tests::sigterm_preserves_pending_state_and_allows_retry_after_canceled_flush",
+                    "--nocapture",
+                ])
+                .env(CHILD_MODE, mode)
+                .env(CHILD_STORE, directory.path())
+                .output()
+                .unwrap();
+            if mode == "default" {
+                assert_eq!(output.status.signal(), Some(libc::SIGTERM));
+            } else {
+                assert!(
+                    output.status.success(),
+                    "SIGTERM child failed: {:?}\n{}\n{}",
+                    output.status,
+                    String::from_utf8_lossy(&output.stdout),
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+            let persisted: AppStoreData = serde_json::from_slice(
+                &std::fs::read(directory.path().join("store.json")).unwrap(),
+            )
+            .unwrap();
+            let key = persisted.keys[&persisted.selected_key_type][0].canonical();
+            let counter = persisted.key_counters[&persisted.selected_key_type][&key];
+            let x = persisted.overlay_bounds.as_ref().map(|bounds| bounds.x);
+            eprintln!(
+                "SIGTERM {mode}: status={}, counter={counter}, bounds_x={x:?}",
+                output.status
+            );
+            assert_eq!(counter, if mode == "protected" { 9 } else { 0 });
+            assert_eq!(x, (mode == "protected").then_some(417.0));
+        }
+    }
+
     #[test]
     fn closing_history_can_time_out_and_reopen_the_gate() {
         let (sender, _receiver) = tokio::sync::oneshot::channel();

@@ -20,6 +20,8 @@ pub(crate) mod native_element_id;
 pub(crate) mod panel_drag;
 pub(crate) mod plugin;
 pub mod store;
+#[cfg(unix)]
+pub(crate) mod unix_termination;
 #[cfg(target_os = "windows")]
 pub(crate) mod windows_window_corners;
 
