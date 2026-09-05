@@ -181,8 +181,11 @@ pub(super) fn percent_decode(input: &str) -> String {
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'%' && i + 2 < bytes.len() {
-            if let Ok(byte) = u8::from_str_radix(&input[i + 1..i + 3], 16) {
-                result.push(byte);
+            if let (Some(high), Some(low)) = (
+                (bytes[i + 1] as char).to_digit(16),
+                (bytes[i + 2] as char).to_digit(16),
+            ) {
+                result.push((high * 16 + low) as u8);
                 i += 3;
                 continue;
             }
