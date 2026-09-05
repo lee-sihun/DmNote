@@ -58,7 +58,7 @@ libc = "0.2"
 
 [target."cfg(windows)".dependencies]
 cpal = { version = "0.17.3", optional = true, default-features = false, features = ["asio"] }
-windows = { version = "0.61.3", features = [
+windows = { version = "0.62.2", features = [
 	"Win32_Foundation",
 	"Win32_Graphics_Dwm",
 	"Win32_Graphics_Gdi",
