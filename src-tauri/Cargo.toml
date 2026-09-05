@@ -30,7 +30,7 @@ tauri-runtime-wry = { version = "~2.11.4", features = ["devtools"] }
 tauri-plugin-single-instance = "2"
 once_cell = "1.19"
 open = "5.1"
-rfd = "0.14"
+rfd = "0.17"
 dirs-next = "2.0"
 uuid = { version = "1", features = ["v4"] }
 # 자동 업데이트 (Windows exe 교체 / macOS DMG 교체 공통)
