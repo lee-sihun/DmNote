@@ -111,7 +111,7 @@
     "autoprefixer": "^10.4.20",
     "babel-plugin-react-compiler": "^1.0.0",
     "cross-env": "^10.1.0",
-    "eslint": "^9.39.4",
+    "eslint": "^10.9.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.5.2",
