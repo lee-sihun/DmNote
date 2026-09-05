@@ -20,7 +20,7 @@ import type {
   PluginDefinitionInternal,
   PluginPanelElementView,
 } from '@src/types/plugin/api';
-import type { KeyInfo } from '@utils/core/KeyMaps';
+import type { KeyInfo } from '@utils/input/KeyMaps';
 import {
   PANEL_ROOT_CLASS,
   PANEL_HEADER_CLASS,
@@ -40,7 +40,7 @@ import {
   TABS,
   TabType,
 } from '../index';
-import Dropdown from '@components/main/common/Dropdown';
+import Dropdown from '@components/main/common/dropdown/Dropdown';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 import EditSessionBoundary from '../selection/EditSessionBoundary';
 import type { GeometryField } from '@src/renderer/editor/runtime/operations/elementOps';

@@ -7,11 +7,11 @@ import StatCounterLayer from '@components/overlay/counters/StatCounterLayer';
 import OverlayGraphItem from '@components/overlay/counters/OverlayGraphItem';
 import OverlayKnobItem from '@components/overlay/counters/OverlayKnobItem';
 import { PluginElementsRenderer } from '@components/shared/PluginElementsRenderer';
-import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
+import { getKeyInfoByGlobalKey } from '@utils/input/KeyMaps';
 import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
 import type { NoteSettings } from '@src/types/settings/noteSettings';
 import type { NoteBuffer } from '@stores/signals/noteBuffer';
-import { resolveZIndexFallback } from '@utils/core/zIndexFallback';
+import { resolveZIndexFallback } from '@utils/element/zIndexFallback';
 
 // Tracks 레이지 로딩
 const Tracks = lazy(async () => {

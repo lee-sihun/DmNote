@@ -94,10 +94,10 @@ vi.mock('@hooks/shared/useLayoutComputation', () => ({
     webglTracks: [],
   }),
 }));
-vi.mock('@utils/core/axisEventBus', () => ({
+vi.mock('@utils/input/axisEventBus', () => ({
   axisEventBus: { initialize: vi.fn() },
 }));
-vi.mock('@utils/core/keyEventBus', () => ({
+vi.mock('@utils/input/keyEventBus', () => ({
   keyEventBus: {
     subscribe: vi.fn((listener: (payload: unknown) => void) => {
       mocks.keyEventListener = listener;

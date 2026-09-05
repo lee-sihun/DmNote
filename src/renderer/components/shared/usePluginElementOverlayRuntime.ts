@@ -161,7 +161,7 @@ export const usePluginElementOverlayRuntime = ({
         // console.log(`[PluginElement] onHook registered for ${event}`);
         if (event === 'key') {
           // 백엔드 재구독 대신 키 이벤트 버스 사용
-          import('@utils/core/keyEventBus').then(({ keyEventBus }) => {
+          import('@utils/input/keyEventBus').then(({ keyEventBus }) => {
             const unsub = keyEventBus.subscribe((payload) => {
               // console.log(`[PluginElement] Key event received via hook`, payload);
               callback(payload);
@@ -170,7 +170,7 @@ export const usePluginElementOverlayRuntime = ({
           });
         } else if (event === 'rawKey') {
           // Raw key 이벤트 버스 사용 (구독 기반 - 구독자가 있을 때만 백엔드가 emit)
-          import('@utils/core/rawKeyEventBus').then(({ rawKeyEventBus }) => {
+          import('@utils/input/rawKeyEventBus').then(({ rawKeyEventBus }) => {
             rawKeyEventBus
               .subscribe((payload) => {
                 callback(payload);

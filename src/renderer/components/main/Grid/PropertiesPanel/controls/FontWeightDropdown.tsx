@@ -1,11 +1,11 @@
 import { useMemo } from 'react';
-import Dropdown from '@components/main/common/Dropdown';
+import Dropdown from '@components/main/common/dropdown/Dropdown';
 import { useFontStore } from '@stores/useFontStore';
 import {
   DEFAULT_FONT_FAMILY,
   normalizeFontFamilyName,
 } from '@src/types/settings/fonts';
-import { getCommonSupportedFontWeights } from '@utils/core/fontWeights';
+import { getCommonSupportedFontWeights } from '@utils/typography/fontWeights';
 
 interface FontWeightDropdownProps {
   fontFamilies: readonly (string | null | undefined)[];

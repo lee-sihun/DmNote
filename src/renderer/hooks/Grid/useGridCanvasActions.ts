@@ -35,7 +35,7 @@ import {
   DEFAULT_ELEMENT_ACTIVE_BG,
   DEFAULT_ELEMENT_FONT,
   DEFAULT_ELEMENT_RADIUS,
-} from '@utils/core/elementDefaults';
+} from '@utils/element/elementDefaults';
 import { getLooseStatTypeLabel } from '@utils/grid/statTypeLabel';
 
 // 공통: zIndex 목록 수집 - 결과가 persist되는 z 계산에 쓰이므로 canonical 기준

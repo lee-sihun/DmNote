@@ -1,11 +1,11 @@
 import React, { useEffect, useRef } from 'react';
 import { flushSync } from 'react-dom';
-import FloatingPopup from './FloatingPopup';
+import FloatingPopup from '../floatingPopup/FloatingPopup';
 import { useViewportSize } from '@hooks/ui/useViewportSize';
 import { getListScrollMetrics } from './listScrollMetrics';
 import { useLenis } from '@hooks/useLenis';
 import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
-import { CANVAS_POPUP_CHROME_CLASS } from './popupChrome';
+import { CANVAS_POPUP_CHROME_CLASS } from '../popupChrome';
 import {
   emptySiblingActive,
   getAdjacentFocusTarget,

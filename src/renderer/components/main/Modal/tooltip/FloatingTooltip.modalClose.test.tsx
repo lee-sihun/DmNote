@@ -3,7 +3,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import FloatingTooltip from './FloatingTooltip';
-import { registerPopupLayer } from './popupLayer';
+import { registerPopupLayer } from '../popupLayer';
 
 // floating-ui autoUpdate가 요구하는 jsdom에 없는 API
 class ResizeObserverStub {

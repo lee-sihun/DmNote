@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
-import ListPopup from '@components/main/Modal/ListPopup';
+import ListPopup from '@components/main/Modal/listPopup/ListPopup';
 import { usePointerSession } from './colorPickerPrimitives';
 import { CHECKER_PATTERN } from './ColorSwatch';
 import {

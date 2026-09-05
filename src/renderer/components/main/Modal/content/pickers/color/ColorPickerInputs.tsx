@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { NumberInput } from '@components/main/common/NumberInput';
+import { NumberInput } from '@components/main/common/numberInput/NumberInput';
 import { ColorSwatchSurface } from './ColorSwatch';
 
 export type GradientSide = 'top' | 'bottom';

@@ -4,7 +4,7 @@ const { subscribe } = vi.hoisted(() => ({
   subscribe: vi.fn(),
 }));
 
-vi.mock('@utils/core/rawKeyEventBus', () => ({
+vi.mock('@utils/input/rawKeyEventBus', () => ({
   rawKeyEventBus: { subscribe },
 }));
 

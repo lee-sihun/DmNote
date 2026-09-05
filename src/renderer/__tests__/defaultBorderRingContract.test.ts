@@ -6,7 +6,7 @@ import type { KeyPosition } from '@src/types/key/keys';
 import {
   DEFAULT_ELEMENT_BORDER_GRADIENT,
   DEFAULT_ELEMENT_BORDER_WIDTH,
-} from '@utils/core/elementDefaults';
+} from '@utils/element/elementDefaults';
 
 // 키·통계가 공유하는 스타일 계산이 기본 글래스 립을 렌더·패널과 같은 규칙으로 내는지 고정
 const basePosition = (overrides: Partial<KeyPosition> = {}): KeyPosition =>

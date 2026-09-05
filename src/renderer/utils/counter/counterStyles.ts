@@ -1,6 +1,6 @@
 import type React from 'react';
-import { DEFAULT_COUNTER_FONT_WEIGHT } from './elementDefaults';
-import { resolveEffectiveFontWeight } from './fontWeights';
+import { DEFAULT_COUNTER_FONT_WEIGHT } from '../element/elementDefaults';
+import { resolveEffectiveFontWeight } from '../typography/fontWeights';
 
 interface CounterTypographyOptions {
   fontSize?: number;

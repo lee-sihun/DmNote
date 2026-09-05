@@ -2,8 +2,8 @@ import React, { forwardRef, useMemo } from 'react';
 import {
   DEFAULT_ELEMENT_BG,
   DEFAULT_ELEMENT_RADIUS,
-} from '@utils/core/elementDefaults';
-import { resolveElementBorder } from '@utils/core/elementBorder';
+} from '@utils/element/elementDefaults';
+import { resolveElementBorder } from '@utils/element/elementBorder';
 import {
   gradientToCss,
   gradientRingStyle,

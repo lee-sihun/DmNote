@@ -1,6 +1,6 @@
 import React, { useCallback, useLayoutEffect, useRef } from 'react';
 import { useLenis } from '@hooks/useLenis';
-import Dropdown from '@components/main/common/Dropdown';
+import Dropdown from '@components/main/common/dropdown/Dropdown';
 import SearchField from '@components/main/common/SearchField';
 import ListAddRow from '@components/main/common/ListAddRow';
 

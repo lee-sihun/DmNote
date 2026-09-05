@@ -7,7 +7,7 @@ import {
 import KnobFace from '@components/shared/KnobFace';
 import { useGradientPreviewSession } from '@stores/grid/useGradientEditStore';
 import { useEditStatePreviewActive } from '@stores/grid/useEditStatePreviewStore';
-import { resolveImageSource } from '@utils/core/imageSource';
+import { resolveImageSource } from '@utils/media/imageSource';
 import {
   DEFAULT_ELEMENT_BG,
   DEFAULT_ELEMENT_ACTIVE_BG,
@@ -15,8 +15,8 @@ import {
   DEFAULT_ELEMENT_ACTIVE_FONT,
   DEFAULT_ELEMENT_SHADOW_SPEC,
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
-} from '@utils/core/elementDefaults';
-import { resolveElementBorder } from '@utils/core/elementBorder';
+} from '@utils/element/elementDefaults';
+import { resolveElementBorder } from '@utils/element/elementBorder';
 import {
   elementShadowToCss,
   resolveElementShadow,

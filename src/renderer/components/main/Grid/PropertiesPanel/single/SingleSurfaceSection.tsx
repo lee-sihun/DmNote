@@ -12,13 +12,13 @@ import {
   DEFAULT_ELEMENT_BORDER_WIDTH,
   DEFAULT_ELEMENT_RADIUS,
   DEFAULT_ELEMENT_SHADOW_SPEC,
-} from '@utils/core/elementDefaults';
+} from '@utils/element/elementDefaults';
 import {
   elementShadowLeafFromPartial,
   resolveElementShadowForPosition,
 } from '@src/types/key/shadows';
 import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
-import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
+import { ColorSwatchButton } from '@components/main/Modal/content/pickers/color/ColorSwatch';
 import ShadowControls from '../controls/ShadowControls';
 import {
   NumberInput,

@@ -18,7 +18,7 @@ import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayEle
 import { openPropertiesPanelForSelection } from '@stores/grid/usePanelHostStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useTranslation } from '@contexts/useTranslation';
-import { html, styleMap, css } from '@utils/core/templateEngine';
+import { html, styleMap, css } from '@utils/plugin/templateEngine';
 import { translatePluginMessage } from '@utils/plugin/pluginI18n';
 import {
   beginPluginInstancesEditSession,

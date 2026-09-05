@@ -1,4 +1,4 @@
-import { beginDragCursor, endDragCursor } from '@utils/core/dragCursor';
+import { beginDragCursor, endDragCursor } from '@utils/dom/dragCursor';
 import { useEffect, useRef, useState } from 'react';
 import {
   useGridViewStore,

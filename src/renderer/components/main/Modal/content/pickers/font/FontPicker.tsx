@@ -12,16 +12,16 @@ import {
   normalizeFontFamilyName,
   type CustomFont,
 } from '@src/types/settings/fonts';
-import ListPopup, { type ListItem } from '@components/main/Modal/ListPopup';
+import ListPopup, { type ListItem } from '@components/main/Modal/listPopup/ListPopup';
 import { useRetainedValue } from '@hooks/ui/useRetainedValue';
-import CommonListPickerPage from './CommonListPickerPage';
+import CommonListPickerPage from '../CommonListPickerPage';
 import {
   pickerRowClass,
   pickerMoreButtonClass,
   pickerMoreButtonVisibleClass,
   pickerMoreButtonHiddenClass,
-} from './pickerRowClass';
-import MoreVerticalIcon from './MoreVerticalIcon';
+} from '../pickerRowClass';
+import MoreVerticalIcon from '../MoreVerticalIcon';
 import { usePickerItemMenu } from '@hooks/usePickerItemMenu';
 import { useFontLibrary } from '@hooks/useFontLibrary';
 import WebFontEditorSheet from './WebFontEditorSheet';

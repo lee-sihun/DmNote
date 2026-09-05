@@ -8,9 +8,9 @@ import React, {
 } from 'react';
 import type { ColorInputProps } from '../types';
 import { I18nContext } from '@contexts/I18nContextDef';
-import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
+import ColorPicker from '@components/main/Modal/content/pickers/color/ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
-import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
+import { ColorSwatchButton } from '@components/main/Modal/content/pickers/color/ColorSwatch';
 import { useGradientColorState } from '@hooks/pickers/useGradientColorState';
 import { gradientToCss } from '@src/types/color';
 

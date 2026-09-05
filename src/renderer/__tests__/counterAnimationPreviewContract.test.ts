@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeCounterAnimationPreviewKeyStyles } from '@utils/core/counterAnimationPreview';
+import { computeCounterAnimationPreviewKeyStyles } from '@utils/counter/counterAnimationPreview';
 import type { GradientSpec } from '@src/types/color';
 
 const ring: GradientSpec = {

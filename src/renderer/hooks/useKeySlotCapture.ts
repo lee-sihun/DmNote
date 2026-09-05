@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
+import { getKeyInfoByGlobalKey } from '@utils/input/KeyMaps';
 import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/lifecycle/historyEditorFlushLock';
 
 interface UseKeySlotCaptureOptions {

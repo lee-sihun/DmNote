@@ -5,7 +5,7 @@ import { computeKeyElementStyles } from '@hooks/overlay/useKeyElementStyles';
 import {
   DEFAULT_ELEMENT_ACTIVE_SHADOW,
   DEFAULT_ELEMENT_SHADOW,
-} from '@utils/core/elementDefaults';
+} from '@utils/element/elementDefaults';
 import {
   elementShadowSpecSchema,
   elementShadowToCss,

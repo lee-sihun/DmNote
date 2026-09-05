@@ -14,21 +14,21 @@ import {
   FontStyleToggle,
   PropertySection,
 } from '../index';
-import Checkbox from '@components/main/common/Checkbox';
-import Dropdown from '@components/main/common/Dropdown';
-import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
-import FontPickerOpenButton from '@components/main/Modal/content/pickers/FontPickerOpenButton';
+import Checkbox from '@components/main/common/checkbox/Checkbox';
+import Dropdown from '@components/main/common/dropdown/Dropdown';
+import FontPicker from '@components/main/Modal/content/pickers/font/FontPicker';
+import FontPickerOpenButton from '@components/main/Modal/content/pickers/font/FontPickerOpenButton';
 import FontWeightDropdown from '../controls/FontWeightDropdown';
 import CounterAnimationPicker from '@components/main/Modal/content/pickers/CounterAnimationPicker';
-import type { CounterAnimationKeyVisual } from '@utils/core/counterAnimationPreview';
+import type { CounterAnimationKeyVisual } from '@utils/counter/counterAnimationPreview';
 import { usePanelNav } from '../navigation/PanelNavContext';
-import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
+import { ColorSwatchButton } from '@components/main/Modal/content/pickers/color/ColorSwatch';
 import {
   DEFAULT_COUNTER_FONT_SIZE,
   DEFAULT_COUNTER_FONT_WEIGHT,
-} from '@utils/core/elementDefaults';
+} from '@utils/element/elementDefaults';
 import { useFontStore } from '@stores/useFontStore';
-import { resolveSupportedFontWeight } from '@utils/core/fontWeights';
+import { resolveSupportedFontWeight } from '@utils/typography/fontWeights';
 import type {
   EditorCounterLayoutPropertyPatchV1,
   EditorCounterTypographyPropertyPatchV1,

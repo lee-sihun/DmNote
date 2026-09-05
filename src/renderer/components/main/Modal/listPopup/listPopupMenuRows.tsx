@@ -7,14 +7,14 @@ import React, {
   useLayoutEffect,
 } from 'react';
 import { createPortal, flushSync } from 'react-dom';
-import { FloatingPopupMotionContext } from './floatingPopupMotion';
-import { isTopmostPopupLayer, registerPopupLayer } from './popupLayer';
+import { FloatingPopupMotionContext } from '../floatingPopup/floatingPopupMotion';
+import { isTopmostPopupLayer, registerPopupLayer } from '../popupLayer';
 import { usePanelHost } from '@contexts/PanelHostContext';
 import { clampToViewport, POPUP_EDGE_PADDING } from '@utils/ui/popupGeometry';
 import { useViewportSize } from '@hooks/ui/useViewportSize';
 import { getListScrollMetrics } from './listScrollMetrics';
 import { useLenis } from '@hooks/useLenis';
-import { CANVAS_POPUP_CHROME_CLASS } from './popupChrome';
+import { CANVAS_POPUP_CHROME_CLASS } from '../popupChrome';
 
 export type ListMenuItem = {
   id: string;

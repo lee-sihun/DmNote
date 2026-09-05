@@ -7,9 +7,9 @@ import {
   PropertySection,
   TextInput,
 } from '../controls/PropertyInputs';
-import ColorPicker from '../../../Modal/content/pickers/ColorPicker';
+import ColorPicker from '../../../Modal/content/pickers/color/ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
-import Checkbox from '../../../common/Checkbox';
+import Checkbox from '../../../common/checkbox/Checkbox';
 import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
 import SoundSection from '../controls/SoundSection';
 import SingleGeometrySection from './SingleGeometrySection';

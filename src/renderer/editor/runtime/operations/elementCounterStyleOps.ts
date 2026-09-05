@@ -14,7 +14,7 @@ import type {
   EditorFontFamilyPropertyPatchV1,
   EditorFontStylePropertyPatchV1,
 } from '@src/types/editor';
-import { implicitCounterFontBold } from '@utils/core/fontWeights';
+import { implicitCounterFontBold } from '@utils/typography/fontWeights';
 import {
   patchElementPropertyByTargets,
   type PropertyCommitOptions,

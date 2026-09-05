@@ -31,7 +31,7 @@ const captured = vi.hoisted(() => ({
   },
 }));
 
-vi.mock('@components/main/Modal/FloatingPopup', () => ({
+vi.mock('@components/main/Modal/floatingPopup/FloatingPopup', () => ({
   default: (props: CapturedPopupProps & { children: React.ReactNode }) => {
     captured.popupProps = props;
     return props.open ? (

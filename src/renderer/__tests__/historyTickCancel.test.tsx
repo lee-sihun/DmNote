@@ -3,7 +3,7 @@ import React, { act, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGradientColorState } from '@hooks/pickers/useGradientColorState';
-import { AlphaSlider } from '@components/main/Modal/content/pickers/colorPickerPrimitives';
+import { AlphaSlider } from '@components/main/Modal/content/pickers/color/colorPickerPrimitives';
 import { useGradientEditStore } from '@stores/grid/useGradientEditStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';

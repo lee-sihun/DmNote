@@ -1,21 +1,21 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import type { SoundListItem } from '@src/types/plugin/api';
-import ListPopup, { type ListItem } from '@components/main/Modal/ListPopup';
-import CommonListPickerPage from './CommonListPickerPage';
+import ListPopup, { type ListItem } from '@components/main/Modal/listPopup/ListPopup';
+import CommonListPickerPage from '../CommonListPickerPage';
 import {
   pickerRowClass,
   pickerMoreButtonClass,
   pickerMoreButtonVisibleClass,
   pickerMoreButtonHiddenClass,
-} from './pickerRowClass';
-import MoreVerticalIcon from './MoreVerticalIcon';
+} from '../pickerRowClass';
+import MoreVerticalIcon from '../MoreVerticalIcon';
 import { usePickerItemMenu } from '@hooks/usePickerItemMenu';
-import SoundTrimModal from '../managers/SoundTrimModal';
+import SoundTrimModal from '../../managers/SoundTrimModal';
 import { useEditSessionCompletionGuard } from '@src/renderer/contexts/EditSessionScope';
 
 import type { CompletionBinding } from '@src/renderer/contexts/EditSessionScope';
-import { soundTrimEditProps } from '../managers/soundTrimEditProps';
+import { soundTrimEditProps } from '../../managers/soundTrimEditProps';
 import { useSoundPickerLibraryRuntime } from './useSoundPickerLibraryRuntime';
 
 interface SoundPickerProps {

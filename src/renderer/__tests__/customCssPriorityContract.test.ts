@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { computeKeyElementStyles } from '@hooks/overlay/useKeyElementStyles';
-import { getCounterTypographyStyle } from '@utils/core/counterStyles';
+import { getCounterTypographyStyle } from '@utils/counter/counterStyles';
 import type { GradientSpec } from '@src/types/color';
 
 const gradient: GradientSpec = {

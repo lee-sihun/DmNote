@@ -180,14 +180,14 @@ export const useOverlayKeyStateRuntime = ({
     };
 
     // HID 축 이벤트 버스 초기화 (input:axis 구독 → axisSignals 누적)
-    import('@utils/core/axisEventBus').then(({ axisEventBus }) => {
+    import('@utils/input/axisEventBus').then(({ axisEventBus }) => {
       axisEventBus.initialize();
     });
 
     let hydrationCancelled = false;
 
     // 키 이벤트 구독을 먼저 확립한 뒤 눌림 스냅샷 요청
-    const unsubscribe = import('@utils/core/keyEventBus').then(
+    const unsubscribe = import('@utils/input/keyEventBus').then(
       async ({ keyEventBus }) => {
         if (hydrationCancelled) return undefined;
         const unsubscribeKeyEvents = keyEventBus.subscribe(

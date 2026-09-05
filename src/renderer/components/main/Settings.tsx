@@ -8,7 +8,7 @@ import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
-import Dropdown from '@components/main/common/Dropdown';
+import Dropdown from '@components/main/common/dropdown/Dropdown';
 import ReloadButton from '@components/main/common/ReloadButton';
 import {
   SettingCard,

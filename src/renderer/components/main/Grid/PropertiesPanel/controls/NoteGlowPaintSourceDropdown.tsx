@@ -1,5 +1,5 @@
 import React from 'react';
-import Dropdown from '@components/main/common/Dropdown';
+import Dropdown from '@components/main/common/dropdown/Dropdown';
 
 interface NoteGlowPaintSourceDropdownProps {
   follow: boolean;

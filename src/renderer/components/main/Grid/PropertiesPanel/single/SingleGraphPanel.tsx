@@ -11,8 +11,8 @@ import { paintDescriptor } from '@src/types/color';
 import {
   DEFAULT_ELEMENT_BG,
   DEFAULT_ELEMENT_RADIUS,
-} from '@utils/core/elementDefaults';
-import { resolveElementBorder } from '@utils/core/elementBorder';
+} from '@utils/element/elementDefaults';
+import { resolveElementBorder } from '@utils/element/elementBorder';
 import { PANEL_ROOT_CLASS } from '../navigation/panelChrome';
 import {
   PropertyRow,
@@ -23,8 +23,8 @@ import {
   TABS,
   type TabType,
 } from '../index';
-import Checkbox from '@components/main/common/Checkbox';
-import Dropdown from '@components/main/common/Dropdown';
+import Checkbox from '@components/main/common/checkbox/Checkbox';
+import Dropdown from '@components/main/common/dropdown/Dropdown';
 import EditSessionBoundary from '../selection/EditSessionBoundary';
 import type { GeometryField } from '@src/renderer/editor/runtime/operations/elementOps';
 import type {

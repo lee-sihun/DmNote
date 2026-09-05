@@ -1,7 +1,7 @@
 import {
   evaluateArithmeticExpression,
   MAX_EXPRESSION_LENGTH,
-} from '@utils/core/arithmeticExpression';
+} from '@utils/number/arithmeticExpression';
 import {
   ARITHMETIC_INPUT_PATTERN,
   canParseNumericInput,

@@ -86,7 +86,7 @@ describe('사이드 패널 팝업 앵커 정렬', () => {
   });
 
   it('패널 외부 피커 3종이 공용 표시 호스트를 거쳐 같은 앵커 정렬을 쓴다', () => {
-    const files = ['ColorPicker.tsx', 'ImagePicker.tsx', 'ShadowPicker.tsx'];
+    const files = ['color/ColorPicker.tsx', 'ImagePicker.tsx', 'ShadowPicker.tsx'];
 
     for (const file of files) {
       const source = readFileSync(

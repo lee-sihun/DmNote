@@ -9,7 +9,7 @@ import {
   isStaleRepeat,
   parseLeadingNumber,
   resolveStepper,
-} from '@utils/core/numberStep';
+} from '@utils/number/numberStep';
 import {
   canParseNumericInput,
   isExpressionDraft,

@@ -9,7 +9,7 @@ import {
   TextInput,
   PropertySection,
 } from '../index';
-import Checkbox from '@components/main/common/Checkbox';
+import Checkbox from '@components/main/common/checkbox/Checkbox';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import {
@@ -19,11 +19,11 @@ import {
   DEFAULT_ELEMENT_ACTIVE_BORDER,
   DEFAULT_ELEMENT_BORDER_WIDTH,
   DEFAULT_ELEMENT_RADIUS,
-} from '@utils/core/elementDefaults';
+} from '@utils/element/elementDefaults';
 import {
   elementImageReplacesSurface,
   resolveElementBorder,
-} from '@utils/core/elementBorder';
+} from '@utils/element/elementBorder';
 import {
   EMPTY_BATCH_ELEMENT_BINDING,
   type BatchElementBinding,

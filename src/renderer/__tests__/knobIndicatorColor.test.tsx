@@ -13,7 +13,7 @@ import {
   DEFAULT_ELEMENT_BORDER,
   DEFAULT_ELEMENT_BORDER_GRADIENT,
   DEFAULT_ELEMENT_FONT,
-} from '@utils/core/elementDefaults';
+} from '@utils/element/elementDefaults';
 
 describe('노브 인디케이터 색', () => {
   let host: HTMLDivElement;

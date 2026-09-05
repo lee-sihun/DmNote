@@ -7,7 +7,7 @@ import {
   PropertyRow,
   NumberInput,
 } from './controls/PropertyInputs';
-import Checkbox from '@components/main/common/Checkbox';
+import Checkbox from '@components/main/common/checkbox/Checkbox';
 
 // ============================================================================
 // 그리드 탭 콘텐츠 컴포넌트

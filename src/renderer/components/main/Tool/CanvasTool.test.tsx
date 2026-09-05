@@ -18,13 +18,13 @@ vi.mock('./icons/PaletteIcon', () => ({ default: () => null }));
 vi.mock('./icons/IconMotion', () => ({
   default: ({ children }: { children: React.ReactNode }) => children,
 }));
-vi.mock('../Modal/FloatingTooltip', () => ({
+vi.mock('../Modal/tooltip/FloatingTooltip', () => ({
   default: ({ children }: { children: React.ReactNode }) => children,
 }));
-vi.mock('../Modal/TooltipGroup', () => ({
+vi.mock('../Modal/tooltip/TooltipGroup', () => ({
   TooltipGroup: ({ children }: { children: React.ReactNode }) => children,
 }));
-vi.mock('../Modal/ListPopup', () => ({
+vi.mock('../Modal/listPopup/ListPopup', () => ({
   default: ({
     open,
     items,

@@ -25,7 +25,7 @@ vi.mock('@contexts/useTranslation', () => ({
 vi.mock('@api/modules/resourceApi', () => ({
   soundApi: {},
 }));
-vi.mock('@utils/core/dragCursor', () => ({
+vi.mock('@utils/dom/dragCursor', () => ({
   beginDragCursor: soundTrimMocks.beginDragCursor,
   endDragCursor: soundTrimMocks.endDragCursor,
 }));

@@ -74,8 +74,8 @@ const implementationCommit = execFileSync(
     '-1',
     '--format=%H',
     '--',
-    'src/renderer/components/main/Modal/FloatingPopup.tsx',
-    'src/renderer/components/main/Modal/ListPopup.tsx',
+    'src/renderer/components/main/Modal/floatingPopup/FloatingPopup.tsx',
+    'src/renderer/components/main/Modal/listPopup/ListPopup.tsx',
   ],
   { cwd: root, encoding: 'utf8' },
 ).trim();
@@ -93,8 +93,8 @@ const correctnessResult = spawnSync(
   [
     'vitest',
     'run',
-    'src/renderer/components/main/Modal/FloatingPopup.test.tsx',
-    'src/renderer/components/main/Modal/ListPopup.test.tsx',
+    'src/renderer/components/main/Modal/floatingPopup/FloatingPopup.test.tsx',
+    'src/renderer/components/main/Modal/listPopup/ListPopup.test.tsx',
     'src/renderer/components/main/Modal/floatingPopupLayerOwnership.test.tsx',
   ],
   { cwd: root, stdio: 'inherit' },

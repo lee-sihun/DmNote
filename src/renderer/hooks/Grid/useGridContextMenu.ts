@@ -6,7 +6,7 @@
 
 import { useRef } from 'react';
 
-import type { ListItem, ListMenuItem } from '@components/main/Modal/ListPopup';
+import type { ListItem, ListMenuItem } from '@components/main/Modal/listPopup/ListPopup';
 import { usePanelHostStore } from '@stores/grid/usePanelHostStore';
 import { usePluginMenuStore } from '@stores/plugin/usePluginMenuStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';

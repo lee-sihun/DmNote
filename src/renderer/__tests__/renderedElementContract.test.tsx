@@ -24,7 +24,7 @@ import {
   DEFAULT_ELEMENT_FONT,
   DEFAULT_ELEMENT_BORDER_GRADIENT,
   DEFAULT_ELEMENT_SHADOW,
-} from '@utils/core/elementDefaults';
+} from '@utils/element/elementDefaults';
 import {
   elementShadowToCss,
   type ElementShadowSpec,

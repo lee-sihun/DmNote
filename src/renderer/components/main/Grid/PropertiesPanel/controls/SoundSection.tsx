@@ -1,7 +1,7 @@
 import { createPortal } from 'react-dom';
 import type { CompletionBinding } from '@src/renderer/contexts/EditSessionScope';
-import Checkbox from '@components/main/common/Checkbox';
-import SoundPicker from '@components/main/Modal/content/pickers/SoundPicker';
+import Checkbox from '@components/main/common/checkbox/Checkbox';
+import SoundPicker from '@components/main/Modal/content/pickers/sound/SoundPicker';
 import { NumberInput, PropertyRow, PropertySection } from './PropertyInputs';
 import { usePanelNav } from '../navigation/PanelNavContext';
 

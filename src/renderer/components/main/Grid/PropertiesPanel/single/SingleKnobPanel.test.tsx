@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
   patchAuthority: vi.fn(() => Promise.resolve(true)),
 }));
 
-vi.mock('@utils/core/axisEventBus', () => ({
+vi.mock('@utils/input/axisEventBus', () => ({
   axisEventBus: {
     initialize: vi.fn(),
     subscribe: (listener: (event: { axisId: string }) => void) => {

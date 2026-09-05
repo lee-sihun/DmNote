@@ -367,8 +367,8 @@ vi.mock('./PropertiesPanel/navigation/PanelHeaderActions', () => ({
 vi.mock('./PropertiesPanel/navigation/PanelToggleButton', () => ({
   default: () => <button>toggle</button>,
 }));
-vi.mock('@components/main/common/Checkbox', () => ({ default: () => null }));
-vi.mock('@components/main/common/Dropdown', () => ({ default: () => null }));
+vi.mock('@components/main/common/checkbox/Checkbox', () => ({ default: () => null }));
+vi.mock('@components/main/common/dropdown/Dropdown', () => ({ default: () => null }));
 
 import { useIsEditSessionScoped } from '@src/renderer/contexts/EditSessionScope';
 

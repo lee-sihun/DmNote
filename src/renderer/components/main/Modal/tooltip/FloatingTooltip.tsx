@@ -9,7 +9,7 @@ import {
   autoUpdate,
 } from '@floating-ui/react';
 import { TooltipGroupContext } from './TooltipGroupContext';
-import { useModalLayerActive } from './popupLayer';
+import { useModalLayerActive } from '../popupLayer';
 
 interface FloatingTooltipProps {
   content: React.ReactNode;

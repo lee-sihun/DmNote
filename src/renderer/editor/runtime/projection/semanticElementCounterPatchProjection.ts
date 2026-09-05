@@ -1,5 +1,5 @@
 import type { EditorOpV1 } from '@src/types/editor';
-import { implicitCounterFontBold } from '@utils/core/fontWeights';
+import { implicitCounterFontBold } from '@utils/typography/fontWeights';
 
 type PatchElementOp = Extract<EditorOpV1, { kind: 'patchElement' }>;
 type SemanticElementPosition = Record<string, unknown> & { id: string };

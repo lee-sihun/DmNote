@@ -3,7 +3,7 @@ import React, { act, useRef } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import FloatingPopup from '@components/main/Modal/FloatingPopup';
+import FloatingPopup from '@components/main/Modal/floatingPopup/FloatingPopup';
 
 // floating-ui autoUpdate가 요구 — 배치는 fixed 좌표라 관찰 결과가 필요 없음
 class ResizeObserverStub {

@@ -155,10 +155,10 @@ vi.mock('@hooks/shared/useLayoutComputation', () => ({
     webglTracks: [],
   }),
 }));
-vi.mock('@utils/core/axisEventBus', () => ({
+vi.mock('@utils/input/axisEventBus', () => ({
   axisEventBus: { initialize: mocks.axisInitialize },
 }));
-vi.mock('@utils/core/keyEventBus', () => ({
+vi.mock('@utils/input/keyEventBus', () => ({
   keyEventBus: {
     subscribe: mocks.keySubscribe,
     initialize: mocks.keyInitialize,

@@ -102,7 +102,7 @@ vi.mock('@stores/data/useKnobItemStore', () => ({
 vi.mock('@stores/data/useLayerGroupStore', () => ({
   useLayerGroupStore: { getState: () => ({ layerGroups: {} }) },
 }));
-vi.mock('@components/main/common/Dropdown', () => ({
+vi.mock('@components/main/common/dropdown/Dropdown', () => ({
   default: ({
     options,
     value,

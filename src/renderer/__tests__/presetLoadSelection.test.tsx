@@ -35,18 +35,18 @@ vi.mock('@api/modules/obsApi', () => ({
   },
 }));
 
-vi.mock('@components/main/Modal/ListPopup', () => ({
+vi.mock('@components/main/Modal/listPopup/ListPopup', () => ({
   default: (props: { onSelect: (id: string) => Promise<void> }) => {
     popup.onSelect = props.onSelect;
     return null;
   },
 }));
 
-vi.mock('@components/main/Modal/FloatingTooltip', () => ({
+vi.mock('@components/main/Modal/tooltip/FloatingTooltip', () => ({
   default: ({ children }: { children: React.ReactNode }) => children,
 }));
 
-vi.mock('@components/main/Modal/TooltipGroup', () => ({
+vi.mock('@components/main/Modal/tooltip/TooltipGroup', () => ({
   TooltipGroup: ({ children }: { children: React.ReactNode }) => children,
 }));
 

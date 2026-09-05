@@ -7,7 +7,7 @@ import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import GooeyThumb from '@components/main/Modal/content/pickers/GooeyThumb';
+import GooeyThumb from '@components/main/Modal/content/pickers/color/GooeyThumb';
 import { createGooeyPath } from '@utils/ui/gooeyPath';
 
 describe('젤리 노브 벡터 경로', () => {

@@ -19,7 +19,7 @@ vi.mock('@api/modules/resourceApi', () => ({
   fontApi: { load: (...args: unknown[]) => mocks.fontLoad(...args) },
 }));
 
-vi.mock('@utils/core/assetProbe', () => ({
+vi.mock('@utils/media/assetProbe', () => ({
   canLoadFont: (...args: unknown[]) => mocks.canLoadFont(...args),
 }));
 

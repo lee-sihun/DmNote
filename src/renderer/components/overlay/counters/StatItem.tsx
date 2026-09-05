@@ -9,7 +9,7 @@ import {
   computeKeyElementStyles,
   type KeyElementPosition,
 } from '@hooks/overlay/useKeyElementStyles';
-import { warmupImageSource } from '@utils/core/imageWarmup';
+import { warmupImageSource } from '@utils/media/imageWarmup';
 import InsideCounterLayout from './InsideCounterLayout';
 import { OverlayKeyElementFace } from '@components/shared/KeyElementFace';
 

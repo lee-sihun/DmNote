@@ -16,11 +16,11 @@ import {
   DEFAULT_ELEMENT_BG,
   DEFAULT_ELEMENT_BORDER,
   DEFAULT_ELEMENT_FONT,
-} from '@utils/core/elementDefaults';
+} from '@utils/element/elementDefaults';
 import {
   elementImageReplacesSurface,
   resolveElementBorder,
-} from '@utils/core/elementBorder';
+} from '@utils/element/elementBorder';
 import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
 
 export type SingleStyleColorTarget =

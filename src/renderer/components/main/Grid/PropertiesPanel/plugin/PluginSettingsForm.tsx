@@ -1,6 +1,6 @@
 import React from 'react';
-import Checkbox from '@components/main/common/Checkbox';
-import Dropdown from '@components/main/common/Dropdown';
+import Checkbox from '@components/main/common/checkbox/Checkbox';
+import Dropdown from '@components/main/common/dropdown/Dropdown';
 import {
   normalizeSettingsSections,
   type SettingsNormalizationErrorKind,

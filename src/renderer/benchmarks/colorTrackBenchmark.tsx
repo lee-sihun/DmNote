@@ -1,6 +1,6 @@
 import React, { Profiler, useState } from 'react';
 
-import { SaturationArea } from '@components/main/Modal/content/pickers/colorPickerPrimitives';
+import { SaturationArea } from '@components/main/Modal/content/pickers/color/colorPickerPrimitives';
 import { hsvToColorObject } from '@utils/color/colorUtils';
 
 interface ColorTrackBenchmarkSurfaceProps {

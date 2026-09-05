@@ -12,7 +12,7 @@ import {
   applyImageTransformLeaf,
   type ImageTransform,
 } from '@src/types/key/imageLayer';
-import { implicitElementFontBold } from '@utils/core/fontWeights';
+import { implicitElementFontBold } from '@utils/typography/fontWeights';
 
 const POSITION_FIELD_BY_TYPE: Record<NativeElementType, string> = {
   key: 'keyPositions',

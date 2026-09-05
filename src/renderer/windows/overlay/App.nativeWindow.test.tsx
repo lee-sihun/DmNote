@@ -145,10 +145,10 @@ vi.mock('@hooks/overlay/useOverlayHitRegions', () => ({
   },
 }));
 vi.mock('@components/shared/OverlayScene', () => ({ default: () => null }));
-vi.mock('@utils/core/axisEventBus', () => ({
+vi.mock('@utils/input/axisEventBus', () => ({
   axisEventBus: { initialize: vi.fn() },
 }));
-vi.mock('@utils/core/keyEventBus', () => ({
+vi.mock('@utils/input/keyEventBus', () => ({
   keyEventBus: {
     subscribe: vi.fn(() => vi.fn()),
     initialize: vi.fn(() => Promise.resolve()),

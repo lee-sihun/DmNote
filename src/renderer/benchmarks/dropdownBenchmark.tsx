@@ -1,6 +1,6 @@
 import React, { Profiler, useState } from 'react';
 
-import Dropdown from '@components/main/common/Dropdown';
+import Dropdown from '@components/main/common/dropdown/Dropdown';
 import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
 
 interface DropdownBenchmarkSurfaceProps {

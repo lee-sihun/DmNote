@@ -5,9 +5,9 @@ import {
   type ElementShadowValuePatch,
 } from '@src/types/key/shadows';
 import PickerSurface from '@components/main/Grid/PropertiesPanel/controls/PickerSurface';
-import ColorPicker from './ColorPicker';
+import ColorPicker from './color/ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
-import { ColorSwatchButton } from './ColorSwatch';
+import { ColorSwatchButton } from './color/ColorSwatch';
 import TabSwitch from '@components/main/common/TabSwitch';
 import {
   NumberInput,

@@ -1,6 +1,6 @@
 import React, { Profiler, useRef, useState } from 'react';
 
-import FloatingPopup from '@components/main/Modal/FloatingPopup';
+import FloatingPopup from '@components/main/Modal/floatingPopup/FloatingPopup';
 import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
 
 interface FloatingPopupBenchmarkSurfaceProps {

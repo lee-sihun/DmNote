@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { getStatValueSignal } from '@stores/signals/statsSignals';
 import type { StatItemType } from '@src/types/key/statItems';
 import GraphPanel from '@components/shared/GraphPanel';
-import { resolveImageSource } from '@utils/core/imageSource';
+import { resolveImageSource } from '@utils/media/imageSource';
 
 const GRAPH_UPDATE_MS = 100;
 const GRAPH_TICK_MS = 50;

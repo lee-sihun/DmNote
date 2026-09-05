@@ -2,7 +2,7 @@ export { PropertyRow, PropertySection } from './PropertyLayout';
 export {
   NumberInput,
   OptionalNumberInput,
-} from '@components/main/common/NumberInput';
+} from '@components/main/common/numberInput/NumberInput';
 export { TextInput } from './TextInput';
 export { ColorInput } from './ColorInput';
 export { FontStyleToggle } from './FontStyleToggle';

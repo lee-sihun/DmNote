@@ -11,7 +11,7 @@ import { getEditSessionTarget } from '@src/renderer/editor/runtime/intent/editSe
 import { useIsEditSessionScoped } from '@src/renderer/contexts/EditSessionScope';
 import { useGradientEditStore } from '@stores/grid/useGradientEditStore';
 import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
-import { beginDragCursor, endDragCursor } from '@utils/core/dragCursor';
+import { beginDragCursor, endDragCursor } from '@utils/dom/dragCursor';
 
 // 디자인 조절점 — 내부 폭 148px 기준 비율 ≈1.42:1
 const SATURATION_HEIGHT = 104;

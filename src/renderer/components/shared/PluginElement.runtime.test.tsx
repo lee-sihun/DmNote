@@ -50,13 +50,13 @@ vi.mock('@api/modules/obsApi', () => ({
   },
 }));
 
-vi.mock('@utils/core/keyEventBus', () => ({
+vi.mock('@utils/input/keyEventBus', () => ({
   keyEventBus: {
     subscribe: mocks.keySubscribe,
   },
 }));
 
-vi.mock('@utils/core/rawKeyEventBus', () => ({
+vi.mock('@utils/input/rawKeyEventBus', () => ({
   rawKeyEventBus: {
     subscribe: mocks.rawKeySubscribe,
   },

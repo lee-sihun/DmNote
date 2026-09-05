@@ -9,7 +9,7 @@ const captured = vi.hoisted(() => ({
   soundPicker: null as Record<string, unknown> | null,
 }));
 
-vi.mock('@components/main/common/Checkbox', () => ({
+vi.mock('@components/main/common/checkbox/Checkbox', () => ({
   default: ({
     checked,
     onChange,
@@ -23,7 +23,7 @@ vi.mock('@components/main/common/Checkbox', () => ({
   ),
 }));
 
-vi.mock('@components/main/Modal/content/pickers/SoundPicker', () => ({
+vi.mock('@components/main/Modal/content/pickers/sound/SoundPicker', () => ({
   default: (props: Record<string, unknown>) => {
     captured.soundPicker = props;
     return <div data-testid="sound-picker" />;

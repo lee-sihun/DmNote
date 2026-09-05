@@ -4,7 +4,7 @@ import type {
   ElementShadowValuePatch,
 } from '@src/types/key/shadows';
 import ShadowPicker from '@components/main/Modal/content/pickers/ShadowPicker';
-import Checkbox from '@components/main/common/Checkbox';
+import Checkbox from '@components/main/common/checkbox/Checkbox';
 import { useOptimisticBooleanCommit } from '@hooks/useOptimisticBooleanCommit';
 import PopupExit from '@components/main/Modal/PopupExit';
 import { PropertyRow, PropertySection } from './PropertyInputs';

@@ -12,7 +12,7 @@ import {
   toEffectiveMinLengthPx,
   toMinLengthMs,
   type NoteLengthPolicy,
-} from '@utils/core/noteLengthPolicy';
+} from '@utils/noteLengthPolicy';
 
 interface Note {
   id: string;

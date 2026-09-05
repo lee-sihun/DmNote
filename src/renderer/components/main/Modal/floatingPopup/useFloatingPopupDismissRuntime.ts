@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import type React from 'react';
 
-import { isInsideHigherPopupLayer } from './popupLayer';
+import { isInsideHigherPopupLayer } from '../popupLayer';
 import { isElementNode } from '@utils/dom/isElementNode';
 import {
   getPopupDragSessionState,

@@ -9,7 +9,7 @@ import CounterAnimationEditorModal from './CounterAnimationEditorModal';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-vi.mock('@components/main/common/Dropdown', () => ({
+vi.mock('@components/main/common/dropdown/Dropdown', () => ({
   default: () => null,
 }));
 vi.mock(

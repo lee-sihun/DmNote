@@ -1,7 +1,7 @@
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import Modal from '../Modal/Modal';
+import Modal from '../../Modal/Modal';
 import Dropdown from './Dropdown';
 
 class ResizeObserverStub {

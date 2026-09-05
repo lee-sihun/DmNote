@@ -10,7 +10,7 @@ import {
   TABS,
   type TabType,
 } from '../index';
-import Checkbox from '@components/main/common/Checkbox';
+import Checkbox from '@components/main/common/checkbox/Checkbox';
 import EditSessionBoundary from '../selection/EditSessionBoundary';
 import {
   captureBatchElementBinding,

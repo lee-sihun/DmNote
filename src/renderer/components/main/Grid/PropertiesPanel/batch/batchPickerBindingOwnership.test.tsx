@@ -197,7 +197,7 @@ vi.mock('@src/renderer/editor/runtime/intent/elementIntent', () => ({
 vi.mock('@contexts/useTranslation', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
-vi.mock('@components/main/Modal/content/pickers/SoundPicker', () => ({
+vi.mock('@components/main/Modal/content/pickers/sound/SoundPicker', () => ({
   default: (props: (typeof captured)['sound']) => {
     captured.sound = props;
     return null;
@@ -218,19 +218,19 @@ vi.mock('@components/main/Modal/content/pickers/ImagePicker', () => ({
     return null;
   },
 }));
-vi.mock('@components/main/Modal/content/pickers/ColorPicker', () => ({
+vi.mock('@components/main/Modal/content/pickers/color/ColorPicker', () => ({
   default: (props: NonNullable<(typeof captured)['color']>) => {
     captured.color = props;
     return null;
   },
 }));
-vi.mock('@components/main/common/Checkbox', () => ({
+vi.mock('@components/main/common/checkbox/Checkbox', () => ({
   default: (props: { checked: boolean; onChange: () => void }) => {
     captured.checkboxes.push(props);
     return <button data-testid="mock-checkbox" onClick={props.onChange} />;
   },
 }));
-vi.mock('@components/main/common/Dropdown', () => ({
+vi.mock('@components/main/common/dropdown/Dropdown', () => ({
   default: (props: { value: string; onChange: (value: string) => void }) => {
     captured.dropdowns.push(props);
     return null;
@@ -271,7 +271,7 @@ vi.mock(
     };
   },
 );
-vi.mock('@components/main/Modal/content/pickers/FontPicker', () => ({
+vi.mock('@components/main/Modal/content/pickers/font/FontPicker', () => ({
   default: (props: (typeof captured)['font']) => {
     captured.font = props;
     return null;

@@ -20,7 +20,7 @@ import type { BatchGeometryTarget } from '@src/renderer/editor/runtime/operation
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
 import type { StatItemPosition } from '@src/types/key/statItems';
-import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
+import { getKeyInfoByGlobalKey } from '@utils/input/KeyMaps';
 import { slotCanonical, slotDisplayName } from '@utils/keySlot';
 import { isPluginVisibleInMode } from '@utils/layerGroupUtils';
 import { resolveResizablePluginElementSize } from '@utils/plugin/pluginElementMeasurement';

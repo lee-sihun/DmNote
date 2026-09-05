@@ -32,7 +32,7 @@ vi.mock('@api/modules/resourceApi', () => ({
 vi.mock('@contexts/useTranslation', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
-vi.mock('./CommonListPickerPage', () => ({ default: () => null }));
+vi.mock('../CommonListPickerPage', () => ({ default: () => null }));
 // 메뉴 열림 상태를 테스트가 조종할 수 있게 한다
 vi.mock('@hooks/usePickerItemMenu', () => ({
   usePickerItemMenu: () => {
@@ -48,14 +48,14 @@ vi.mock('@hooks/usePickerItemMenu', () => ({
     };
   },
 }));
-vi.mock('@components/main/Modal/ListPopup', () => ({
+vi.mock('@components/main/Modal/listPopup/ListPopup', () => ({
   default: ({ onSelect }: { onSelect: (id: string) => void }) => {
     mocks.selectMenuItem = onSelect;
     return null;
   },
 }));
 // 트림 모달의 저장 콜백을 밖으로 꺼낸다
-vi.mock('../managers/SoundTrimModal', () => ({
+vi.mock('../../managers/SoundTrimModal', () => ({
   default: ({ onSaved }: { onSaved: (soundPath: string) => void }) => {
     mocks.saveTrim = onSaved;
     return null;

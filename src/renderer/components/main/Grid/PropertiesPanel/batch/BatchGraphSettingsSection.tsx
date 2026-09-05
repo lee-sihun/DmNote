@@ -3,8 +3,8 @@ import type {
   GraphItemType,
 } from '@src/types/key/graphItems';
 import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
-import Checkbox from '@components/main/common/Checkbox';
-import Dropdown from '@components/main/common/Dropdown';
+import Checkbox from '@components/main/common/checkbox/Checkbox';
+import Dropdown from '@components/main/common/dropdown/Dropdown';
 import { ColorInput, NumberInput, PropertyRow } from '../index';
 import { previewBatchGraphColor } from '../selection/previewPatchForwarders';
 import {

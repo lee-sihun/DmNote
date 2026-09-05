@@ -14,7 +14,7 @@ import { ColorInputBenchmarkSurface } from './colorInputBenchmark';
 
 const benchmarkState = vi.hoisted(() => ({ itemCount: 1 }));
 
-vi.mock('@components/main/Modal/content/pickers/ColorPicker', () => ({
+vi.mock('@components/main/Modal/content/pickers/color/ColorPicker', () => ({
   default: () => (
     <div data-benchmark-color-picker="true">
       {Array.from({ length: benchmarkState.itemCount }, (_, index) => (

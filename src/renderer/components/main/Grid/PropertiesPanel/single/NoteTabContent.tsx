@@ -7,9 +7,9 @@ import {
   NumberInput,
   OptionalNumberInput,
 } from '../controls/PropertyInputs';
-import Checkbox from '@components/main/common/Checkbox';
-import Dropdown from '@components/main/common/Dropdown';
-import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
+import Checkbox from '@components/main/common/checkbox/Checkbox';
+import Dropdown from '@components/main/common/dropdown/Dropdown';
+import ColorPicker from '@components/main/Modal/content/pickers/color/ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
 import {
   parseAlphaPercent,
@@ -19,7 +19,7 @@ import { gradientToCss } from '@src/types/color';
 import { toNoteHexColor } from '../selection/notePaintColorUtils';
 import { NOTE_SETTINGS_CONSTRAINTS } from '@src/types/settings/noteSettingsConstraints';
 import { useSettingsStore } from '@stores/useSettingsStore';
-import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
+import { ColorSwatchButton } from '@components/main/Modal/content/pickers/color/ColorSwatch';
 import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 import NoteGlowPaintSourceDropdown from '../controls/NoteGlowPaintSourceDropdown';

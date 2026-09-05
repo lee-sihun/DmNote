@@ -1,6 +1,6 @@
 import { usePressAction } from '@hooks/usePressAction';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import Checkbox from '@components/main/common/Checkbox';
+import Checkbox from '@components/main/common/checkbox/Checkbox';
 import TabSwitch from '@components/main/common/TabSwitch';
 import {
   PropertyRow,
@@ -18,7 +18,7 @@ import {
   toDisplayDelayMs,
   toEffectiveMinLengthPx,
   toMinLengthMs,
-} from '@utils/core/noteLengthPolicy';
+} from '@utils/noteLengthPolicy';
 
 type ConstraintKey = keyof typeof NOTE_SETTINGS_CONSTRAINTS;
 

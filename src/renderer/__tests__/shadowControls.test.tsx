@@ -5,12 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ShadowControls from '@components/main/Grid/PropertiesPanel/controls/ShadowControls';
 import type { ElementShadowSpec } from '@src/types/key/shadows';
 
-vi.mock('@components/main/Modal/FloatingPopup', () => ({
+vi.mock('@components/main/Modal/floatingPopup/FloatingPopup', () => ({
   default: ({ open, children }: { open: boolean; children: React.ReactNode }) =>
     open ? <div data-testid="floating-popup">{children}</div> : null,
 }));
 
-vi.mock('@components/main/Modal/content/pickers/ColorPicker', () => ({
+vi.mock('@components/main/Modal/content/pickers/color/ColorPicker', () => ({
   default: ({
     open,
     color,

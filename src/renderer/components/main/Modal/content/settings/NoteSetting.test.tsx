@@ -15,7 +15,7 @@ vi.mock('@contexts/useTranslation', () => ({
 vi.mock('@hooks/usePressAction', () => ({
   usePressAction: (action?: () => void) => ({ onClick: action }),
 }));
-vi.mock('@components/main/common/Checkbox', () => ({
+vi.mock('@components/main/common/checkbox/Checkbox', () => ({
   default: ({
     checked,
     onChange,

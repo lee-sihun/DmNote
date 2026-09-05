@@ -22,7 +22,7 @@ import { projectElementShadowPatch } from '@src/types/key/shadows';
 import {
   DEFAULT_ELEMENT_SHADOW_SPEC,
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
-} from '@utils/core/elementDefaults';
+} from '@utils/element/elementDefaults';
 
 type PreviewTargetType = 'key' | 'stat' | 'graph' | 'knob';
 

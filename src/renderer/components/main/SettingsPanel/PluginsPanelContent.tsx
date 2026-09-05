@@ -20,7 +20,7 @@ import {
   PANEL_STATUS_BADGE_CLASS,
 } from '@components/main/SettingsPanel/panelChrome';
 import { SettingToggleRow } from '@components/main/common/SettingRow';
-import ListPopup from '@components/main/Modal/ListPopup';
+import ListPopup from '@components/main/Modal/listPopup/ListPopup';
 import { usePickerItemMenu } from '@hooks/usePickerItemMenu';
 import { usePluginHealthStore } from '@stores/plugin/usePluginHealthStore';
 import { getPluginDisplayName } from '@utils/plugin/pluginUtils';

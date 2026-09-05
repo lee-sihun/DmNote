@@ -22,9 +22,9 @@ import {
 } from '@components/main/SettingsPanel/panelChrome';
 import { SettingToggleRow } from '@components/main/common/SettingRow';
 import { SETTINGS_LABEL_CLASS, SETTINGS_ROW_CLASS } from '@utils/cardRecipes';
-import ListPopup from '@components/main/Modal/ListPopup';
+import ListPopup from '@components/main/Modal/listPopup/ListPopup';
 import { usePickerItemMenu } from '@hooks/usePickerItemMenu';
-import { pathBaseName } from '@utils/core/pathDisplay';
+import { pathBaseName } from '@utils/media/pathDisplay';
 import { cssHistoryStatusLabel } from '@utils/cssHistoryStatus';
 import type {
   CssHistoryErrorCode,

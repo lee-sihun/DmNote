@@ -6,7 +6,7 @@ import { useSignals } from '@preact/signals-react/runtime';
 import type { KeyCounterSettings } from '@src/types/key/keys';
 import { useCounterSettings } from '@hooks/overlay/useCounterSettings';
 import { useFailedImageSrcs } from '@hooks/overlay/useFailedImageSrcs';
-import { warmupImageSource } from '@utils/core/imageWarmup';
+import { warmupImageSource } from '@utils/media/imageWarmup';
 import {
   computeKeyElementStyles,
   type KeyElementPosition,

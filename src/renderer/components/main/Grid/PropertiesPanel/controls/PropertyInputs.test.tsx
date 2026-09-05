@@ -12,7 +12,7 @@ vi.mock('@contexts/useTranslation', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock('@components/main/Modal/content/pickers/ColorPicker', () => ({
+vi.mock('@components/main/Modal/content/pickers/color/ColorPicker', () => ({
   default: (props: {
     footerSlot?: React.ReactNode;
     hexMixed?: boolean;
@@ -31,7 +31,7 @@ vi.mock('@components/main/Modal/content/pickers/ColorPicker', () => ({
   },
 }));
 
-vi.mock('@components/main/Modal/content/pickers/ColorSwatch', () => ({
+vi.mock('@components/main/Modal/content/pickers/color/ColorSwatch', () => ({
   ColorSwatchButton: React.forwardRef<
     HTMLButtonElement,
     React.ButtonHTMLAttributes<HTMLButtonElement> & { open?: boolean }
@@ -73,7 +73,7 @@ import {
 } from './PropertyInputs';
 import { createFontStyleToggleHandlers } from '../selection/fontStyleToggleHandlers';
 import { TABS } from '../types';
-import { MAX_EXPRESSION_LENGTH } from '@utils/core/arithmeticExpression';
+import { MAX_EXPRESSION_LENGTH } from '@utils/number/arithmeticExpression';
 import { finalizeEditorDraftForLifecycle } from '@src/renderer/editor/runtime/lifecycle/lifecycleEditorDraft';
 import {
   FORM_LABEL_CLASS,

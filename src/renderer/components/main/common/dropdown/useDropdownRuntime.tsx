@@ -13,14 +13,14 @@ import {
   isTopmostPopupLayer,
   registerPopupLayer,
   subscribeModalLayerActivity,
-} from '../Modal/popupLayer';
+} from '../../Modal/popupLayer';
 import { useOptimisticValueCommit } from '@hooks/useOptimisticValueCommit';
 import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
 import { clampToViewport } from '@utils/ui/popupGeometry';
 import { usePanelHost } from '@contexts/PanelHostContext';
 import { isNodeLike } from '@utils/dom/isElementNode';
 import { getLastInputModality } from '@utils/focus/pointerFocusGuard';
-import { CANVAS_POPUP_CHROME_CLASS } from '../Modal/popupChrome';
+import { CANVAS_POPUP_CHROME_CLASS } from '../../Modal/popupChrome';
 
 export interface DropdownOption {
   label: string;

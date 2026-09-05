@@ -57,7 +57,7 @@ vi.mock('@contexts/useTranslation', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock('./CommonListPickerPage', () => ({
+vi.mock('../CommonListPickerPage', () => ({
   default: (props: PickerPageCapture) => {
     mocks.page = props;
     return (
@@ -89,7 +89,7 @@ vi.mock('@hooks/usePickerItemMenu', () => ({
   },
 }));
 
-vi.mock('@components/main/Modal/ListPopup', () => ({
+vi.mock('@components/main/Modal/listPopup/ListPopup', () => ({
   default: ({
     items,
     onSelect,
@@ -103,7 +103,7 @@ vi.mock('@components/main/Modal/ListPopup', () => ({
   },
 }));
 
-vi.mock('../managers/SoundTrimModal', () => ({
+vi.mock('../../managers/SoundTrimModal', () => ({
   default: (props: TrimModalCapture) => {
     mocks.trim = props;
     return null;

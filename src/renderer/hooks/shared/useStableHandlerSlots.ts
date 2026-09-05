@@ -5,7 +5,7 @@ import {
   type HandlerImplementation,
   type PendingHandlerSlotMap,
   type StableHandlerSlotMap,
-} from '@utils/core/stableHandlerSlots';
+} from '@utils/ui/stableHandlerSlots';
 
 export const useStableHandlerSlots = () => {
   const [slots] = useState<StableHandlerSlotMap>(() => new Map());

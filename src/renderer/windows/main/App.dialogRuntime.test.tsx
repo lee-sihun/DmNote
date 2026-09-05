@@ -116,7 +116,7 @@ vi.mock('@stores/useSettingsStore', () => ({
     shortcuts: {},
   }),
 }));
-vi.mock('@components/main/Modal/FloatingPopup', () => ({
+vi.mock('@components/main/Modal/floatingPopup/FloatingPopup', () => ({
   default: () => null,
 }));
 vi.mock('@hooks/ui/usePopupPresence', () => ({
@@ -132,10 +132,10 @@ vi.mock('@hooks/ui/useRetainedValue', () => ({
 vi.mock('@components/main/Modal/PopupExit', () => ({
   default: ({ children }: { children: React.ReactNode }) => children,
 }));
-vi.mock('@components/main/Modal/content/pickers/Palette', () => ({
+vi.mock('@components/main/Modal/content/pickers/color/Palette', () => ({
   default: () => null,
 }));
-vi.mock('@components/main/Modal/content/pickers/ColorPicker', () => ({
+vi.mock('@components/main/Modal/content/pickers/color/ColorPicker', () => ({
   default: (props: ColorPickerProps) => {
     mocks.colorPickerProps.push(props);
     return null;

@@ -3,11 +3,11 @@ import React, { act, useRef } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@utils/core/counterGlyphMetrics', () => ({
+vi.mock('@utils/counter/counterGlyphMetrics', () => ({
   measureCounterGlyphBox: vi.fn(),
 }));
 
-import { measureCounterGlyphBox } from '@utils/core/counterGlyphMetrics';
+import { measureCounterGlyphBox } from '@utils/counter/counterGlyphMetrics';
 import { useCounterGlyphPaint } from './useCounterGlyphPaint';
 import { useCounterAxisAnchor } from './useCounterAxisAnchor';
 import {

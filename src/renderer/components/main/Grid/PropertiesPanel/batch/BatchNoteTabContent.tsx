@@ -6,11 +6,11 @@ import {
   OptionalNumberInput,
   PropertySection,
 } from '../index';
-import Checkbox from '@components/main/common/Checkbox';
-import Dropdown from '@components/main/common/Dropdown';
+import Checkbox from '@components/main/common/checkbox/Checkbox';
+import Dropdown from '@components/main/common/dropdown/Dropdown';
 import { NOTE_SETTINGS_CONSTRAINTS } from '@src/types/settings/noteSettingsConstraints';
 import { useSettingsStore } from '@stores/useSettingsStore';
-import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
+import { ColorSwatchButton } from '@components/main/Modal/content/pickers/color/ColorSwatch';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 import { createNoteLiteralHandlers } from '../selection/noteLiteralHandlers';
 import NoteGlowPaintSourceDropdown from '../controls/NoteGlowPaintSourceDropdown';

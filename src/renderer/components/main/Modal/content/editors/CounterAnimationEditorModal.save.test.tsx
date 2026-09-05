@@ -54,7 +54,7 @@ vi.mock('@components/main/Modal/FullSurfaceModalLayout', () => ({
     return <>{children}</>;
   },
 }));
-vi.mock('@components/main/common/Dropdown', () => ({ default: () => null }));
+vi.mock('@components/main/common/dropdown/Dropdown', () => ({ default: () => null }));
 vi.mock(
   '@components/main/Grid/PropertiesPanel/controls/PropertyInputs',
   () => ({

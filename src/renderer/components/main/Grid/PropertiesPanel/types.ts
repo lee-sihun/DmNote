@@ -51,7 +51,7 @@ export interface PropertyRowProps {
 export type {
   NumberInputProps,
   OptionalNumberInputProps,
-} from '@components/main/common/NumberInput';
+} from '@components/main/common/numberInput/NumberInput';
 
 export interface ColorInputProps {
   value: string;

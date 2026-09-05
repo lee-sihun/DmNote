@@ -1,6 +1,6 @@
 import { createPortal } from 'react-dom';
 import { useRef, useState, type MouseEvent, type RefObject } from 'react';
-import ListPopup, { type ListItem } from '../main/Modal/ListPopup';
+import ListPopup, { type ListItem } from '../main/Modal/listPopup/ListPopup';
 import { usePopupPresence } from '@hooks/ui/usePopupPresence';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';

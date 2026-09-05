@@ -7,9 +7,9 @@ import BroomIcon from '@assets/svgs/broom.svg';
 import LayerStackIcon from './icons/LayerStackIcon';
 import PaletteIcon from './icons/PaletteIcon';
 import IconMotion from './icons/IconMotion';
-import FloatingTooltip from '../Modal/FloatingTooltip';
-import { TooltipGroup } from '../Modal/TooltipGroup';
-import ListPopup from '../Modal/ListPopup';
+import FloatingTooltip from '../Modal/tooltip/FloatingTooltip';
+import { TooltipGroup } from '../Modal/tooltip/TooltipGroup';
+import ListPopup from '../Modal/listPopup/ListPopup';
 import { useIconMotion } from '@hooks/useIconMotion';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 

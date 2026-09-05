@@ -17,7 +17,7 @@ const captured = vi.hoisted(() => ({
   colorPickerProps: null as CapturedColorPickerProps | null,
 }));
 
-vi.mock('@components/main/Modal/content/pickers/ColorPicker', () => ({
+vi.mock('@components/main/Modal/content/pickers/color/ColorPicker', () => ({
   default: (props: CapturedColorPickerProps) => {
     captured.colorPickerProps = props;
     // 퇴장 유예 동안 DOM은 남지만 open은 즉시 false - 닫힘 판정은 open이 소유
@@ -25,7 +25,7 @@ vi.mock('@components/main/Modal/content/pickers/ColorPicker', () => ({
   },
 }));
 
-vi.mock('@components/main/Modal/FloatingPopup', () => ({
+vi.mock('@components/main/Modal/floatingPopup/FloatingPopup', () => ({
   default: ({ open, children }: { open: boolean; children: React.ReactNode }) =>
     open ? <div data-testid="floating-popup">{children}</div> : null,
 }));

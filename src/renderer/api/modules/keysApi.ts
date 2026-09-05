@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { subscribe } from './shared';
-import { rawKeyEventBus } from '@utils/core/rawKeyEventBus';
+import { rawKeyEventBus } from '@utils/input/rawKeyEventBus';
 import { enqueueEditorCompatibilityWrite } from '@src/renderer/editor/runtime/lifecycle/editorCompatibilityQueue';
 import { editorCoordinator } from '@src/renderer/editor/runtime/coordinator/editorStateCoordinator';
 import { runExclusiveLegacyMutation } from '@src/renderer/editor/runtime/lifecycle/legacyEditorMutation';

@@ -20,7 +20,7 @@ const captured = vi.hoisted(() => ({
   colorPickerProps: null as CapturedColorPickerProps | null,
 }));
 
-vi.mock('@components/main/Modal/content/pickers/ColorPicker', () => ({
+vi.mock('@components/main/Modal/content/pickers/color/ColorPicker', () => ({
   default: (props: CapturedColorPickerProps) => {
     captured.colorPickerProps = props;
     // 퇴장 유예 동안 DOM은 남지만 open은 즉시 false - 닫힘 판정은 open이 소유

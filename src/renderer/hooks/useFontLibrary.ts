@@ -9,7 +9,7 @@ import {
 } from '@src/types/settings/fonts';
 import { settingsApi } from '@api/modules/settingsApi';
 import { fontApi } from '@api/modules/resourceApi';
-import { canLoadFont } from '@utils/core/assetProbe';
+import { canLoadFont } from '@utils/media/assetProbe';
 
 // 폰트 라이브러리 CRUD — 낙관적 스토어 갱신 + 설정 영속화
 // CSS 반영은 settings:changed 라운드트립(useAppBootstrap의 syncFontCSS)이 담당

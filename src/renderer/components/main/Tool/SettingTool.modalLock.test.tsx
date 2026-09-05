@@ -12,13 +12,13 @@ vi.mock('@assets/svgs/folder.svg', () => ({ default: () => null }));
 vi.mock('@assets/svgs/setting.svg', () => ({ default: () => null }));
 vi.mock('@assets/svgs/chevron-down.svg', () => ({ default: () => null }));
 vi.mock('@assets/svgs/turn_arrow.svg', () => ({ default: () => null }));
-vi.mock('../Modal/FloatingTooltip', () => ({
+vi.mock('../Modal/tooltip/FloatingTooltip', () => ({
   default: ({ children }: { children: React.ReactNode }) => children,
 }));
-vi.mock('../Modal/TooltipGroup', () => ({
+vi.mock('../Modal/tooltip/TooltipGroup', () => ({
   TooltipGroup: ({ children }: { children: React.ReactNode }) => children,
 }));
-vi.mock('../Modal/ListPopup', () => ({
+vi.mock('../Modal/listPopup/ListPopup', () => ({
   default: ({ open }: { open: boolean }) => (
     <div data-testid="preset-popup" data-open={String(open)} />
   ),

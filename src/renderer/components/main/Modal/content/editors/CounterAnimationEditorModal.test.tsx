@@ -23,7 +23,7 @@ const dragCursor = vi.hoisted(() => ({
   end: vi.fn(),
 }));
 
-vi.mock('@utils/core/dragCursor', () => ({
+vi.mock('@utils/dom/dragCursor', () => ({
   beginDragCursor: dragCursor.begin,
   endDragCursor: dragCursor.end,
 }));
@@ -31,7 +31,7 @@ vi.mock('@utils/core/dragCursor', () => ({
 vi.mock('@components/main/Modal/FullSurfaceModalLayout', () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
-vi.mock('@components/main/common/Dropdown', () => ({
+vi.mock('@components/main/common/dropdown/Dropdown', () => ({
   default: () => null,
 }));
 vi.mock(

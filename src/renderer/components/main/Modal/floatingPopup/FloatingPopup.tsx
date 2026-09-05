@@ -34,7 +34,7 @@ import {
   isTopmostPopupLayer,
   registerPopupLayer,
   subscribeModalLayerActivity,
-} from './popupLayer';
+} from '../popupLayer';
 import { clampToViewport, POPUP_EDGE_PADDING } from '@utils/ui/popupGeometry';
 import {
   useFloatingPopupAutoDismissRuntime,

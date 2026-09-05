@@ -6,7 +6,7 @@ import type {
   EditorOpV1,
 } from '@src/types/editor';
 import { mirrorBodyPaintToGlow } from '@src/types/key/notePaint';
-import { implicitElementFontBold } from '@utils/core/fontWeights';
+import { implicitElementFontBold } from '@utils/typography/fontWeights';
 import {
   projectSemanticElementCounterPatch,
   type SemanticElementCounterPatch,

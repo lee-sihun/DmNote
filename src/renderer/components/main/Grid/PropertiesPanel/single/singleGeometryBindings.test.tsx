@@ -210,19 +210,19 @@ vi.mock('../controls/PropertyInputs', async (importOriginal) => {
     Tabs: () => null,
   };
 });
-vi.mock('@components/main/common/Dropdown', () => ({
+vi.mock('@components/main/common/dropdown/Dropdown', () => ({
   default: (props: { value: string; onChange: (value: string) => void }) => {
     captured.dropdowns.push(props);
     return null;
   },
 }));
-vi.mock('@components/main/common/Checkbox', () => ({
+vi.mock('@components/main/common/checkbox/Checkbox', () => ({
   default: (props: { checked: boolean; onChange: () => void }) => {
     captured.checkboxes.push(props);
     return null;
   },
 }));
-vi.mock('@components/main/Modal/content/pickers/ColorPicker', () => ({
+vi.mock('@components/main/Modal/content/pickers/color/ColorPicker', () => ({
   default: (props: NonNullable<(typeof captured)['color']>) => {
     captured.color = props;
     return null;
@@ -234,7 +234,7 @@ vi.mock('@components/main/Modal/content/pickers/ImagePicker', () => ({
     return null;
   },
 }));
-vi.mock('@components/main/Modal/content/pickers/SoundPicker', () => ({
+vi.mock('@components/main/Modal/content/pickers/sound/SoundPicker', () => ({
   default: (props: NonNullable<(typeof captured)['sound']>) => {
     captured.sound = props;
     return null;
@@ -249,13 +249,13 @@ vi.mock(
     },
   }),
 );
-vi.mock('@components/main/Modal/content/pickers/FontPicker', () => ({
+vi.mock('@components/main/Modal/content/pickers/font/FontPicker', () => ({
   default: (props: NonNullable<(typeof captured)['font']>) => {
     captured.font = props;
     return null;
   },
 }));
-vi.mock('@components/main/Modal/content/pickers/ColorSwatch', () => ({
+vi.mock('@components/main/Modal/content/pickers/color/ColorSwatch', () => ({
   ColorSwatchButton: (props: { onClick: () => void; image?: string }) => {
     captured.swatches.push(props);
     return null;
@@ -305,7 +305,7 @@ vi.mock('@hooks/pickers/useGradientColorState', () => ({
     };
   },
 }));
-vi.mock('@utils/core/axisEventBus', () => ({
+vi.mock('@utils/input/axisEventBus', () => ({
   axisEventBus: { subscribe: () => vi.fn() },
 }));
 
@@ -323,7 +323,7 @@ import type { ImageFit } from '@src/types/key/keys';
 import {
   DEFAULT_ELEMENT_ACTIVE_BORDER_GRADIENT,
   DEFAULT_ELEMENT_BORDER_GRADIENT,
-} from '@utils/core/elementDefaults';
+} from '@utils/element/elementDefaults';
 
 type CompatProps<T extends React.ElementType> = React.ComponentProps<T> &
   Record<string, unknown>;

@@ -8,12 +8,12 @@ import type { EditStateAnchor } from '@stores/grid/useEditStatePreviewStore';
 import type { ImageFit } from '@src/types/key/keys';
 import type { KnobItemPosition } from '@src/types/key/knobs';
 import { gradientToCss } from '@src/types/color';
-import { axisEventBus } from '@utils/core/axisEventBus';
+import { axisEventBus } from '@utils/input/axisEventBus';
 import {
   DEFAULT_ELEMENT_BORDER_WIDTH,
   DEFAULT_ELEMENT_SHADOW_SPEC,
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
-} from '@utils/core/elementDefaults';
+} from '@utils/element/elementDefaults';
 import {
   elementShadowLeafFromPartial,
   resolveElementShadowForPosition,
@@ -27,10 +27,10 @@ import {
   TABS,
   type TabType,
 } from '../index';
-import Checkbox from '@components/main/common/Checkbox';
-import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
+import Checkbox from '@components/main/common/checkbox/Checkbox';
+import ColorPicker from '@components/main/Modal/content/pickers/color/ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
-import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
+import { ColorSwatchButton } from '@components/main/Modal/content/pickers/color/ColorSwatch';
 import ShadowControls from '../controls/ShadowControls';
 import EditSessionBoundary from '../selection/EditSessionBoundary';
 import type { GeometryField } from '@src/renderer/editor/runtime/operations/elementOps';

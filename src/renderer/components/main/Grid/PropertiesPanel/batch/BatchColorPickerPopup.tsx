@@ -1,5 +1,5 @@
 import React from 'react';
-import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
+import ColorPicker from '@components/main/Modal/content/pickers/color/ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
 import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
 import type {

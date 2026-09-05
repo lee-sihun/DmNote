@@ -26,7 +26,7 @@ const popup = vi.hoisted(() => ({
   onClose: null as null | (() => void),
 }));
 
-vi.mock('@components/main/Modal/ListPopup', () => ({
+vi.mock('@components/main/Modal/listPopup/ListPopup', () => ({
   default: (props: {
     open: boolean;
     items: Array<{ id: string; label: string }>;

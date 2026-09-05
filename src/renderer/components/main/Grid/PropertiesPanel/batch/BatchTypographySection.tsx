@@ -1,6 +1,6 @@
 import { createPortal } from 'react-dom';
-import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
-import FontPickerOpenButton from '@components/main/Modal/content/pickers/FontPickerOpenButton';
+import FontPicker from '@components/main/Modal/content/pickers/font/FontPicker';
+import FontPickerOpenButton from '@components/main/Modal/content/pickers/font/FontPickerOpenButton';
 import { useFontStore } from '@stores/useFontStore';
 import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
 import { paintDescriptor, resolveStatePair } from '@src/types/color';
@@ -16,8 +16,8 @@ import {
   DEFAULT_ELEMENT_BASE_FONT_WEIGHT,
   DEFAULT_ELEMENT_FONT,
   DEFAULT_ELEMENT_FONT_BOLD,
-} from '@utils/core/elementDefaults';
-import { resolveSupportedFontWeight } from '@utils/core/fontWeights';
+} from '@utils/element/elementDefaults';
+import { resolveSupportedFontWeight } from '@utils/typography/fontWeights';
 import { aggregateMixedValue } from '@utils/core/mixedValue';
 import {
   ColorInput,
