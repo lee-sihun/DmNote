@@ -22,7 +22,7 @@ export const drainEditorWrites = async (): Promise<boolean> => {
 };
 
 export const beginEditorWriteBarrier = () => {
-  const writes = new Set<Promise<boolean>>();
+  const writes = new Set(pendingWrites);
   activeBarriers.add(writes);
 
   return async (): Promise<boolean> => {

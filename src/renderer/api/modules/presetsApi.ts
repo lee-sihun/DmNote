@@ -1,3 +1,4 @@
+import { invokeEditorWrite } from './invokeEditorWrite';
 import { invoke } from '@tauri-apps/api/core';
 import { subscribe } from './shared';
 import { runExclusiveLegacyMutation } from '@src/renderer/editor/runtime/legacyEditorMutation';
@@ -8,12 +9,12 @@ import type {
 } from '@src/types/plugin/api';
 
 export const presetsApi = {
-  save: () => invoke<PresetOperationResult>('preset_save'),
+  save: () => invokeEditorWrite<PresetOperationResult>('preset_save'),
   load: () =>
     runExclusiveLegacyMutation(() =>
       invoke<PresetOperationResult>('preset_load'),
     ),
-  saveTab: () => invoke<PresetOperationResult>('preset_save_tab'),
+  saveTab: () => invokeEditorWrite<PresetOperationResult>('preset_save_tab'),
   loadTab: () =>
     runExclusiveLegacyMutation(() =>
       invoke<PresetOperationResult>('preset_load_tab'),

@@ -1,3 +1,4 @@
+import { invokeEditorWrite } from './invokeEditorWrite';
 import { invoke } from '@tauri-apps/api/core';
 
 export const pluginApi = {
@@ -6,11 +7,12 @@ export const pluginApi = {
       invoke<T | null>('plugin_storage_get', { key }),
 
     set: (key: string, value: unknown) =>
-      invoke<void>('plugin_storage_set', { key, value }),
+      invokeEditorWrite<void>('plugin_storage_set', { key, value }),
 
-    remove: (key: string) => invoke<void>('plugin_storage_remove', { key }),
+    remove: (key: string) =>
+      invokeEditorWrite<void>('plugin_storage_remove', { key }),
 
-    clear: () => invoke<void>('plugin_storage_clear'),
+    clear: () => invokeEditorWrite<void>('plugin_storage_clear'),
 
     keys: () => invoke<string[]>('plugin_storage_keys'),
 
@@ -18,7 +20,7 @@ export const pluginApi = {
       invoke<boolean>('plugin_storage_has_data', { prefix }),
 
     clearByPrefix: (prefix: string) =>
-      invoke<number>('plugin_storage_clear_by_prefix', { prefix }),
+      invokeEditorWrite<number>('plugin_storage_clear_by_prefix', { prefix }),
   },
   registerCleanup: () => {
     console.warn(
