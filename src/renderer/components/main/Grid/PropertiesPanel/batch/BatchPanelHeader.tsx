@@ -1,6 +1,6 @@
 import React from 'react';
-import PanelRenameControl from '../PanelRenameControl';
-import { PANEL_HEADER_CLASS } from '../panelChrome';
+import PanelRenameControl from '../navigation/PanelRenameControl';
+import { PANEL_HEADER_CLASS } from '../navigation/panelChrome';
 
 interface BatchPanelHeaderProps {
   totalCount: number;

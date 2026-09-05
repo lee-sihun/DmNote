@@ -22,7 +22,7 @@ export type EditorCoordinatorLoader = () => Promise<{
 }>;
 
 const loadEditorCoordinator: EditorCoordinatorLoader = () =>
-  import('@src/renderer/editor/runtime/editorStateCoordinator');
+  import('@src/renderer/editor/runtime/coordinator/editorStateCoordinator');
 
 export async function runAfterEditorFlush<T>(
   action: string,
@@ -42,7 +42,7 @@ export async function runAfterEditorFlush<T>(
 export const acknowledgeLifecycleAfterEditorFlush = (handshakeId: string) =>
   runAfterEditorFlush('app lifecycle', async () => {
     const editorBarrier = await import(
-      '@src/renderer/editor/runtime/editorWriteBarrier'
+      '@src/renderer/editor/runtime/lifecycle/editorWriteBarrier'
     );
     if (!(await editorBarrier.drainEditorWrites())) {
       throw new Error('pending window writes failed to drain');

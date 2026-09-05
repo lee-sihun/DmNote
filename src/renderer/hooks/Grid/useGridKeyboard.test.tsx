@@ -37,14 +37,17 @@ vi.mock('@utils/grid/groupActions', () => ({
   ungroupSelectedElements: ungroupSelectedElementsMock,
 }));
 
-vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
-  editorCoordinator: {
-    commitPatch: commitPatchMock,
-    getState: () => ({ lastAck: null }),
-  },
-}));
+vi.mock(
+  '@src/renderer/editor/runtime/coordinator/editorStateCoordinator',
+  () => ({
+    editorCoordinator: {
+      commitPatch: commitPatchMock,
+      getState: () => ({ lastAck: null }),
+    },
+  }),
+);
 
-vi.mock('@src/renderer/editor/runtime/editorSemanticOps', () => ({
+vi.mock('@src/renderer/editor/runtime/operations/editorSemanticOps', () => ({
   // 게스처 버스트 검증 대상은 gestureId 운반 - 동기 recorder로 기록.
   // generate 클로저도 보관해 정산 의도가 어느 요소를 실었는지 검증 가능
   commitGeneratedSemanticOps: vi.fn(
@@ -60,7 +63,7 @@ vi.mock('@src/renderer/editor/runtime/editorSemanticOps', () => ({
   ),
 }));
 
-vi.mock('@src/renderer/editor/runtime/mixedElementIntent', () => ({
+vi.mock('@src/renderer/editor/runtime/intent/mixedElementIntent', () => ({
   runMixedGestureElementIntent: vi.fn((options: { gestureId: string }) => {
     commitPatchMock({ schemaVersion: 1 }, { gestureId: options.gestureId });
     return Promise.resolve({ committed: true, satisfied: true });

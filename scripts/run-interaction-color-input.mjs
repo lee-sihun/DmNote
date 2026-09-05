@@ -74,7 +74,7 @@ const implementationCommit = execFileSync(
     '-1',
     '--format=%H',
     '--',
-    'src/renderer/components/main/Grid/PropertiesPanel/PropertyInputs.tsx',
+    'src/renderer/components/main/Grid/PropertiesPanel/controls/PropertyInputs.tsx',
   ],
   { cwd: root, encoding: 'utf8' },
 ).trim();
@@ -92,7 +92,7 @@ const correctnessResult = spawnSync(
   [
     'vitest',
     'run',
-    'src/renderer/components/main/Grid/PropertiesPanel/PropertyInputs.test.tsx',
+    'src/renderer/components/main/Grid/PropertiesPanel/controls/PropertyInputs.test.tsx',
     'src/renderer/__tests__/activeStatePickerCapability.test.tsx',
     'src/renderer/__tests__/singleActiveStateCapability.test.tsx',
   ],

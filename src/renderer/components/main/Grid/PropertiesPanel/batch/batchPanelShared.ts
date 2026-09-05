@@ -10,9 +10,9 @@ import {
   patchShadowByTargets,
   patchSoundPathByIds,
   patchStylePropertyByTargets,
-} from '@src/renderer/editor/runtime/elementOps';
-import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
-import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
+} from '@src/renderer/editor/runtime/operations/elementOps';
+import { reportElementOpError } from '@src/renderer/editor/runtime/intent/elementIntent';
+import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import type {
   EditorPaintPropertyPatchV1,
@@ -23,7 +23,7 @@ import type {
 import {
   previewBatchPaint,
   previewBatchStyleProperty,
-} from '../previewPatchForwarders';
+} from '../selection/previewPatchForwarders';
 
 const NATIVE_IMAGE_TYPES = ['key', 'stat', 'graph', 'knob'] as const;
 

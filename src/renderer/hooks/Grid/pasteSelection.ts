@@ -4,11 +4,11 @@ import {
   combineReceipts,
   reportElementOpSkipped,
   type ElementIntentReceipt,
-} from '@src/renderer/editor/runtime/elementIntent';
+} from '@src/renderer/editor/runtime/intent/elementIntent';
 import {
   applyPluginAdditionEagerly,
   runMixedGestureElementIntent,
-} from '@src/renderer/editor/runtime/mixedElementIntent';
+} from '@src/renderer/editor/runtime/intent/mixedElementIntent';
 import type {
   CanonicalGraphItemPosition,
   CanonicalKeyPosition,

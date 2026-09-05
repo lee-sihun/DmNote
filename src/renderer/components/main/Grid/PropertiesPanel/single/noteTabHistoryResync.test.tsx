@@ -51,7 +51,7 @@ vi.mock('@components/main/Modal/content/pickers/ColorSwatch', async () => {
     }),
   };
 });
-vi.mock('../PropertyInputs', () => ({
+vi.mock('../controls/PropertyInputs', () => ({
   PropertyRow: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
   ),

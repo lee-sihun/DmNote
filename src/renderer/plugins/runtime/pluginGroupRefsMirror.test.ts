@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { currentPluginGroupMembers } from '@src/renderer/editor/runtime/pluginGroupMembers';
+import { currentPluginGroupMembers } from '@src/renderer/editor/runtime/intent/pluginGroupMembers';
 
 import { initPluginGroupRefsMirror } from './pluginGroupRefsMirror';
 

@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 
 import { isMac } from '@utils/core/platform';
 import { usePanelChildWindow } from '@hooks/panel/usePanelChildWindow';
-import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
+import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/lifecycle/historyEditorFlushLock';
 import { isModalLayerActive } from '@components/main/Modal/popupLayer';
 
 interface UseHistoryShortcutsParams {

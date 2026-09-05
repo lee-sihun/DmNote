@@ -10,9 +10,12 @@ const {
   editorCommitRaw: vi.fn(),
 }));
 
-vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
-  editorCoordinator: { commitIsolatedPluginPatch, runSerializedPluginCommit },
-}));
+vi.mock(
+  '@src/renderer/editor/runtime/coordinator/editorStateCoordinator',
+  () => ({
+    editorCoordinator: { commitIsolatedPluginPatch, runSerializedPluginCommit },
+  }),
+);
 vi.mock('@api/modules/editorApi', () => ({ editorCommitRaw }));
 
 import {

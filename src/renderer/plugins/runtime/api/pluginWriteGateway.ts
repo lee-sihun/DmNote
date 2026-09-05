@@ -6,7 +6,7 @@
  */
 
 import { editorCommitRaw } from '@api/modules/editorApi';
-import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
+import { editorCoordinator } from '@src/renderer/editor/runtime/coordinator/editorStateCoordinator';
 import { EDITOR_SCHEMA_VERSION } from '@src/types/editor';
 import type {
   EditorCommitResult,

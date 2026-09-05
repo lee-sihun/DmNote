@@ -21,7 +21,7 @@ import {
   elementImageReplacesSurface,
   resolveElementBorder,
 } from '@utils/core/elementBorder';
-import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
+import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
 
 export type SingleStyleColorTarget =
   | 'backgroundColor'

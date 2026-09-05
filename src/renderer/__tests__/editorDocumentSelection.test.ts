@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { applyEditorDocument } from '@src/renderer/editor/runtime/editorStateCoordinator';
+import { applyEditorDocument } from '@src/renderer/editor/runtime/coordinator/editorStateCoordinator';
 import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';

@@ -9,7 +9,7 @@ import Dropdown from '@components/main/common/Dropdown';
 import {
   TextInput,
   NumberInput,
-} from '@components/main/Grid/PropertiesPanel/PropertyInputs';
+} from '@components/main/Grid/PropertiesPanel/controls/PropertyInputs';
 import {
   COUNTER_BEZIER_PRESETS,
   clampCounterBezier,

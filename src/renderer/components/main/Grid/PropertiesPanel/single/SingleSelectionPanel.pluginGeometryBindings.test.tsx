@@ -21,8 +21,10 @@ const captured = vi.hoisted(() => ({
   >(),
 }));
 
-vi.mock('../PropertyInputs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../PropertyInputs')>();
+vi.mock('../controls/PropertyInputs', async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import('../controls/PropertyInputs')
+  >();
   return {
     ...actual,
     PropertyRow: ({ children }: { children: React.ReactNode }) => children,

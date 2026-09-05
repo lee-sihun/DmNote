@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import PickerSurface from '@components/main/Grid/PropertiesPanel/PickerSurface';
+import PickerSurface from '@components/main/Grid/PropertiesPanel/controls/PickerSurface';
 import TabSwitch from '@components/main/common/TabSwitch';
 import ListAddRow from '@components/main/common/ListAddRow';
 import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';

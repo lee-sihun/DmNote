@@ -9,7 +9,7 @@ import {
   assertEditorOpsV1,
   assertSafeEditorRevision,
 } from '@src/types/editor';
-import { EditorReadOnlyError } from '@src/renderer/editor/runtime/editorCoordinator';
+import { EditorReadOnlyError } from '@src/renderer/editor/runtime/coordinator/editorCoordinator';
 
 import type {
   EditorCommitRequest,

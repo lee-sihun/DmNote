@@ -4,8 +4,8 @@ import GraphItem from '../layers/GraphItem';
 import KnobItem from '../layers/KnobItem';
 import { commitElementPosition } from '@hooks/Grid/elementPositionCommit';
 import { useStableHandlerSlots } from '@hooks/shared/useStableHandlerSlots';
-import { deleteElementById } from '@src/renderer/editor/runtime/elementOps';
-import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
+import { deleteElementById } from '@src/renderer/editor/runtime/operations/elementOps';
+import { reportElementOpError } from '@src/renderer/editor/runtime/intent/elementIntent';
 import type { NativeElementType } from '@src/renderer/editor/model/elementIdMap';
 import type {
   CanonicalGraphItemPosition,

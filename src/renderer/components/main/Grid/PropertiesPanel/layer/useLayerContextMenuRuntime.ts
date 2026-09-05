@@ -8,7 +8,7 @@ import type { LayerGroups, LayerGroupDef } from '@src/types/layerGroups';
 import type { ListItem } from '@components/main/Modal/ListPopup';
 import type { DisplayItem, LayerItem } from '../types';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
-import { deleteFrozenSelection } from '@src/renderer/editor/runtime/deleteFrozenSelection';
+import { deleteFrozenSelection } from '@src/renderer/editor/runtime/intent/deleteFrozenSelection';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import {
   createLayerActionMutations,

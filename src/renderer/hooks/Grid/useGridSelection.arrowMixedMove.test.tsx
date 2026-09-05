@@ -39,14 +39,17 @@ const mocks = vi.hoisted(() => ({
   sendBridgeMessage: vi.fn(),
 }));
 
-vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
-  editorCoordinator: {
-    commitPatch: mocks.commitPatch,
-    getState: () => ({ lastAck: mocks.lastAck }),
-  },
-}));
+vi.mock(
+  '@src/renderer/editor/runtime/coordinator/editorStateCoordinator',
+  () => ({
+    editorCoordinator: {
+      commitPatch: mocks.commitPatch,
+      getState: () => ({ lastAck: mocks.lastAck }),
+    },
+  }),
+);
 
-vi.mock('@src/renderer/editor/runtime/mixedElementIntent', () => ({
+vi.mock('@src/renderer/editor/runtime/intent/mixedElementIntent', () => ({
   applyPluginRemovalEagerly: (
     _fullIds: readonly string[],
     mutate: () => void,

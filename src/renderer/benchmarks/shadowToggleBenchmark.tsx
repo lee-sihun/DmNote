@@ -2,7 +2,7 @@
 import React, { Profiler, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
-import ShadowControls from '@components/main/Grid/PropertiesPanel/ShadowControls';
+import ShadowControls from '@components/main/Grid/PropertiesPanel/controls/ShadowControls';
 import { updateKeyStyle } from '@src/renderer/editor/model/keys';
 import type { KeyPosition, KeyPositions } from '@src/types/key/keys';
 import {

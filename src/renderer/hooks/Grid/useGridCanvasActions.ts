@@ -13,9 +13,9 @@ import {
   placeDuplicatedKey,
   placeDuplicatedKnob,
   placeDuplicatedStat,
-} from '@src/renderer/editor/runtime/elementOps';
-import type { FrozenKeyDuplicate } from '@src/renderer/editor/runtime/elementOps';
-import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
+} from '@src/renderer/editor/runtime/operations/elementOps';
+import type { FrozenKeyDuplicate } from '@src/renderer/editor/runtime/operations/elementOps';
+import { reportElementOpError } from '@src/renderer/editor/runtime/intent/elementIntent';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';

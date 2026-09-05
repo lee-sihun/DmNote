@@ -24,7 +24,7 @@ vi.mock('@utils/core/axisEventBus', () => ({
   },
 }));
 
-vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
+vi.mock('@src/renderer/editor/runtime/operations/elementOps', () => ({
   patchKnobAxisIdById: mocks.patchAxis,
   patchElementPropertyViaAuthority: mocks.patchAuthority,
 }));

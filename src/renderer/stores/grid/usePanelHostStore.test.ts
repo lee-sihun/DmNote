@@ -14,7 +14,7 @@ vi.mock('@api/modules/panelWindowApi', () => ({
     dock: () => mocks.dock(),
   },
 }));
-vi.mock('@src/renderer/editor/runtime/lifecycleEditorFlush', () => ({
+vi.mock('@src/renderer/editor/runtime/lifecycle/lifecycleEditorFlush', () => ({
   flushFocusedEditor: () => mocks.flushFocusedEditor(),
 }));
 vi.mock('@utils/panelWindow/panelChildWindow', () => ({

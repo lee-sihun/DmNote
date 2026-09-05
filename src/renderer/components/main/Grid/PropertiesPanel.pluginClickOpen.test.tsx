@@ -102,7 +102,7 @@ vi.mock('@plugins/runtime/displayElement/pluginElementActions', () => ({
   patchUseInlineStylesViaAuthority: vi.fn(() => Promise.resolve(true)),
   updatePluginElement: vi.fn(),
 }));
-vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
+vi.mock('@src/renderer/editor/runtime/operations/elementOps', () => ({
   renameLayerGroupById: vi.fn(),
   commitElementGeometryById: vi.fn(),
   commitBatchGeometryByIds: vi.fn(),
@@ -144,11 +144,11 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchUseInlineStylesById: vi.fn(),
   patchUseInlineStylesByTargets: vi.fn(),
 }));
-vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
+vi.mock('@src/renderer/editor/runtime/intent/elementIntent', () => ({
   reportElementOpSkipped: vi.fn(),
   reportElementOpError: vi.fn(),
 }));
-vi.mock('@src/renderer/editor/runtime/mixedBatchGeometry', () => ({
+vi.mock('@src/renderer/editor/runtime/geometry/mixedBatchGeometry', () => ({
   commitMixedBatchGeometry: vi.fn(),
 }));
 vi.mock('@api/modules/itemsApi', () => ({
@@ -157,7 +157,7 @@ vi.mock('@api/modules/itemsApi', () => ({
   layerGroupsApi: { update: vi.fn(() => Promise.resolve()) },
   statItemsApi: { updatePositions: vi.fn(() => Promise.resolve()) },
 }));
-vi.mock('@src/renderer/editor/runtime/editGestureController', () => ({
+vi.mock('@src/renderer/editor/runtime/gesture/editGestureController', () => ({
   editGestureController: {
     activeGestureId: vi.fn(() => null),
     preview: vi.fn(),
@@ -196,13 +196,13 @@ vi.mock('./PropertiesPanel/index', () => {
     }),
   };
 });
-vi.mock('./PropertiesPanel/PanelNavContext', () => ({
+vi.mock('./PropertiesPanel/navigation/PanelNavContext', () => ({
   PanelNavProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
-vi.mock('./PropertiesPanel/PanelHeaderActions', () => ({
+vi.mock('./PropertiesPanel/navigation/PanelHeaderActions', () => ({
   default: () => null,
 }));
-vi.mock('./PropertiesPanel/PanelToggleButton', () => ({
+vi.mock('./PropertiesPanel/navigation/PanelToggleButton', () => ({
   default: () => null,
 }));
 vi.mock('@components/main/common/Checkbox', () => ({ default: () => null }));

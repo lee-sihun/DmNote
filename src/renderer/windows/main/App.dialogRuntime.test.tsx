@@ -178,9 +178,12 @@ vi.mock('@stores/grid/useGridSelectionStore', () => ({
     getState: () => ({ clearSelection: vi.fn() }),
   },
 }));
-vi.mock('@src/renderer/editor/runtime/historyEditorFlushLock', () => ({
-  isHistoryEditorFlushLocked: () => false,
-}));
+vi.mock(
+  '@src/renderer/editor/runtime/lifecycle/historyEditorFlushLock',
+  () => ({
+    isHistoryEditorFlushLocked: () => false,
+  }),
+);
 vi.mock('@hooks/useOptimisticBooleanCommit', () => ({
   useOptimisticBooleanCommit: ({
     canonicalValue,

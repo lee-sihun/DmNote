@@ -2,8 +2,8 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import type { KeyCounterSettings } from '@src/types/key/keys';
 import { createCounterAnimationPresetIntent } from '@src/types/key/counterAnimation';
-import { patchCounterAnimationPresetByTargets } from '@src/renderer/editor/runtime/elementOps';
-import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
+import { patchCounterAnimationPresetByTargets } from '@src/renderer/editor/runtime/operations/elementOps';
+import { reportElementOpError } from '@src/renderer/editor/runtime/intent/elementIntent';
 import {
   EMPTY_BATCH_ELEMENT_BINDING,
   type BatchElementBinding,
@@ -18,10 +18,10 @@ import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
 import FontPickerOpenButton from '@components/main/Modal/content/pickers/FontPickerOpenButton';
-import FontWeightDropdown from '../FontWeightDropdown';
+import FontWeightDropdown from '../controls/FontWeightDropdown';
 import CounterAnimationPicker from '@components/main/Modal/content/pickers/CounterAnimationPicker';
 import type { CounterAnimationKeyVisual } from '@utils/core/counterAnimationPreview';
-import { usePanelNav } from '../PanelNavContext';
+import { usePanelNav } from '../navigation/PanelNavContext';
 import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
 import {
   DEFAULT_COUNTER_FONT_SIZE,

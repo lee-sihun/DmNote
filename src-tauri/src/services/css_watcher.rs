@@ -21,7 +21,7 @@ use crate::state::{store::AdmittedHistoryOverlapMutation, AppState, AppStore};
 use crate::{
     custom_css::{custom_css_settings_diff, validate_css_path, ValidatedCssFile},
     models::{AppStoreData, CustomCss, TabCss, TabCssOverrides},
-    state::local_asset_path::path_identity_key,
+    state::assets::local_asset_path::path_identity_key,
 };
 
 /// CSS 워칭 타입

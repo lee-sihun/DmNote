@@ -13,7 +13,7 @@ import {
   selectPropertyPanelPluginElements,
   usePluginDisplayElementStore,
 } from '@stores/plugin/usePluginDisplayElementStore';
-import { setMixedElementGroups } from '@src/renderer/editor/runtime/mixedElementGroups';
+import { setMixedElementGroups } from '@src/renderer/editor/runtime/intent/mixedElementGroups';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
 import { buildNextLayerGroupName } from '@utils/layerGroupUtils';

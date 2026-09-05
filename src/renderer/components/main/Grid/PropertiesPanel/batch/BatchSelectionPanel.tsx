@@ -3,7 +3,7 @@ import type { KeyPosition, NoteColor } from '@src/types/key/keys';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import { useEditStatePreviewPublisher } from '@stores/grid/useEditStatePreviewStore';
-import { PANEL_ROOT_CLASS } from '../panelChrome';
+import { PANEL_ROOT_CLASS } from '../navigation/panelChrome';
 import {
   normalizeCounterSettings,
   createDefaultCounterSettings,
@@ -16,13 +16,13 @@ import {
   TABS,
   TabType,
 } from '../index';
-import EditSessionBoundary from '../EditSessionBoundary';
-import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
+import EditSessionBoundary from '../selection/EditSessionBoundary';
+import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
 import {
   captureBatchElementBinding,
   useBatchElementBinding,
 } from '@hooks/pickers/useBatchElementBinding';
-import { usePanelNav } from '../PanelNavContext';
+import { usePanelNav } from '../navigation/PanelNavContext';
 import { BATCH_COUNTER_ANIMATION_PAGE_KEY } from './BatchCounterTabContent';
 import type { EditorCounterFillPropertyPatchV1 } from '@src/types/editor';
 import { hexWithAlphaPercent } from '@utils/color/colorUtils';

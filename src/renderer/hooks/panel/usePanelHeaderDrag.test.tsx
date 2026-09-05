@@ -18,9 +18,12 @@ vi.mock('@api/modules/panelWindowApi', () => ({
   },
 }));
 
-vi.mock('@src/renderer/editor/runtime/historyEditorFlushLock', () => ({
-  isHistoryEditorFlushLocked: () => false,
-}));
+vi.mock(
+  '@src/renderer/editor/runtime/lifecycle/historyEditorFlushLock',
+  () => ({
+    isHistoryEditorFlushLocked: () => false,
+  }),
+);
 
 vi.mock('@stores/grid/usePanelHostStore', () => ({
   detachPropertiesPanel,

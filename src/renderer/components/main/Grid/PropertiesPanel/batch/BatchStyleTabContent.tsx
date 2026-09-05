@@ -29,7 +29,7 @@ import {
   type BatchElementBinding,
 } from '@hooks/pickers/useBatchElementBinding';
 import BatchGeometrySection from './BatchGeometrySection';
-import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
+import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 import type {
   EditorPaintPropertyPatchV1,

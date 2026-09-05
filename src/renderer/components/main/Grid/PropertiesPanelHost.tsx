@@ -8,8 +8,8 @@ import { usePanelHeaderDrag } from '@hooks/panel/usePanelHeaderDrag';
 import { usePointerFocusGuard } from '@hooks/ui/usePointerFocusGuard';
 import { restoreLenisScroll } from '@hooks/useLenis';
 import { panelWindowApi } from '@api/modules/panelWindowApi';
-import { flushFocusedEditor } from '@src/renderer/editor/runtime/lifecycleEditorFlush';
-import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
+import { flushFocusedEditor } from '@src/renderer/editor/runtime/lifecycle/lifecycleEditorFlush';
+import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/lifecycle/historyEditorFlushLock';
 import {
   detachPropertiesPanel,
   dockPropertiesPanel,

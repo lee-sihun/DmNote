@@ -28,7 +28,7 @@ const mocks = vi.hoisted(() => ({
   commitPatch: vi.fn(() => Promise.resolve()),
 }));
 
-vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
+vi.mock('@src/renderer/editor/runtime/operations/elementOps', () => ({
   patchElementHiddenById: mocks.patchHidden,
   patchElementLayerNameById: mocks.patchLayerName,
   setLayerGroupHidden: mocks.setGroupHidden,
@@ -36,10 +36,10 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   setElementGroupsByTargets: mocks.setElementGroups,
   renameLayerGroupById: mocks.renameLayerGroup,
 }));
-vi.mock('@src/renderer/editor/runtime/deleteFrozenSelection', () => ({
+vi.mock('@src/renderer/editor/runtime/intent/deleteFrozenSelection', () => ({
   deleteFrozenSelection: vi.fn(),
 }));
-vi.mock('@src/renderer/editor/runtime/mixedElementGroups', () => ({
+vi.mock('@src/renderer/editor/runtime/intent/mixedElementGroups', () => ({
   setMixedElementGroups: mocks.setMixedElementGroups,
   setMixedLayerGroupHidden: mocks.setMixedGroupHidden,
 }));
@@ -50,15 +50,18 @@ vi.mock('@plugins/runtime/displayElement/pluginElementActions', () => ({
   renameLayerGroupViaAuthority: mocks.renameLayerGroupViaAuthority,
   setPluginElementsHidden: mocks.setPluginHidden,
 }));
-vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
+vi.mock('@src/renderer/editor/runtime/intent/elementIntent', () => ({
   reportElementOpSkipped: mocks.reportSkipped,
 }));
 vi.mock('@api/modules/keysApi', () => ({
   keysApi: { updatePositions: mocks.updateKeyPositions },
 }));
-vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
-  editorCoordinator: { commitPatch: mocks.commitPatch },
-}));
+vi.mock(
+  '@src/renderer/editor/runtime/coordinator/editorStateCoordinator',
+  () => ({
+    editorCoordinator: { commitPatch: mocks.commitPatch },
+  }),
+);
 
 import { useLayerActions } from './useLayerActions';
 

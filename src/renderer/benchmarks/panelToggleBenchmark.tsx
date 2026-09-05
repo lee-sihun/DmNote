@@ -1,6 +1,6 @@
 import React, { Profiler, useState } from 'react';
 
-import PanelToggleButton from '@components/main/Grid/PropertiesPanel/PanelToggleButton';
+import PanelToggleButton from '@components/main/Grid/PropertiesPanel/navigation/PanelToggleButton';
 import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
 
 interface PanelToggleBenchmarkSurfaceProps {

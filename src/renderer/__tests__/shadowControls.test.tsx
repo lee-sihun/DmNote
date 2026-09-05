@@ -2,7 +2,7 @@
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import ShadowControls from '@components/main/Grid/PropertiesPanel/ShadowControls';
+import ShadowControls from '@components/main/Grid/PropertiesPanel/controls/ShadowControls';
 import type { ElementShadowSpec } from '@src/types/key/shadows';
 
 vi.mock('@components/main/Modal/FloatingPopup', () => ({

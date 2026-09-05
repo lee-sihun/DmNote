@@ -15,11 +15,11 @@ import { useTranslation } from '@contexts/useTranslation';
 import {
   commitStableLayerZOrder,
   orderStableZTargetsForBatch,
-} from '@src/renderer/editor/runtime/layerZOrderIntent';
+} from '@src/renderer/editor/runtime/intent/layerZOrderIntent';
 import {
   reportElementOpError,
   reportElementOpSkipped,
-} from '@src/renderer/editor/runtime/elementIntent';
+} from '@src/renderer/editor/runtime/intent/elementIntent';
 import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import TabCssModal from '../../Modal/content/editors/TabCssModal';
@@ -79,7 +79,7 @@ import {
   composePreviewPositions,
   getPreviewOverlayVersion,
   subscribePreviewOverlay,
-} from '@src/renderer/editor/runtime/previewOverlay';
+} from '@src/renderer/editor/runtime/gesture/previewOverlay';
 import {
   buildMixedSelectionMenuItems,
   gridAddTypeForMenuItem,

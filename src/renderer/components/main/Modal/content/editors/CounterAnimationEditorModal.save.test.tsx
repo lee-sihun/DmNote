@@ -55,10 +55,13 @@ vi.mock('@components/main/Modal/FullSurfaceModalLayout', () => ({
   },
 }));
 vi.mock('@components/main/common/Dropdown', () => ({ default: () => null }));
-vi.mock('@components/main/Grid/PropertiesPanel/PropertyInputs', () => ({
-  TextInput: () => null,
-  NumberInput: () => null,
-}));
+vi.mock(
+  '@components/main/Grid/PropertiesPanel/controls/PropertyInputs',
+  () => ({
+    TextInput: () => null,
+    NumberInput: () => null,
+  }),
+);
 vi.mock('@components/overlay/counters/CountDisplay', () => ({
   default: () => null,
 }));

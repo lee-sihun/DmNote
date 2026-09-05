@@ -21,7 +21,10 @@ import type {
   PluginPanelElementView,
 } from '@src/types/plugin/api';
 import type { KeyInfo } from '@utils/core/KeyMaps';
-import { PANEL_ROOT_CLASS, PANEL_HEADER_CLASS } from '../panelChrome';
+import {
+  PANEL_ROOT_CLASS,
+  PANEL_HEADER_CLASS,
+} from '../navigation/panelChrome';
 import {
   hasRenderableSettings,
   type SettingsNormalizationErrorKind,
@@ -39,8 +42,8 @@ import {
 } from '../index';
 import Dropdown from '@components/main/common/Dropdown';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
-import EditSessionBoundary from '../EditSessionBoundary';
-import type { GeometryField } from '@src/renderer/editor/runtime/elementOps';
+import EditSessionBoundary from '../selection/EditSessionBoundary';
+import type { GeometryField } from '@src/renderer/editor/runtime/operations/elementOps';
 import type {
   EditorPaintPropertyPatchV1,
   EditorShadowPropertyPatchV1,

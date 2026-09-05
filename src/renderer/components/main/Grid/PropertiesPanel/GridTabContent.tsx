@@ -2,7 +2,11 @@ import React from 'react';
 import { settingsApi } from '@api/modules/settingsApi';
 import { useTranslation } from '@contexts/useTranslation';
 import { useSettingsStore, type GridSettings } from '@stores/useSettingsStore';
-import { PropertySection, PropertyRow, NumberInput } from './PropertyInputs';
+import {
+  PropertySection,
+  PropertyRow,
+  NumberInput,
+} from './controls/PropertyInputs';
 import Checkbox from '@components/main/common/Checkbox';
 
 // ============================================================================

@@ -28,7 +28,7 @@ import {
   coerceStrictStops,
   toNoteStopColor,
   toNoteHexColor,
-} from '../notePaintColorUtils';
+} from '../selection/notePaintColorUtils';
 
 export type BatchNoteSurface = 'note' | 'glow' | 'border';
 

@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => ({
   rotate: vi.fn(),
 }));
 
-vi.mock('@src/renderer/editor/runtime/mixedElementIntent', () => ({
+vi.mock('@src/renderer/editor/runtime/intent/mixedElementIntent', () => ({
   runMixedGestureElementIntent: mocks.runMixed,
 }));
 vi.mock('@plugins/runtime/displayElement/gestureTransaction', () => ({

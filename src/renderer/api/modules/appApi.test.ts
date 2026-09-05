@@ -7,10 +7,13 @@ const { invoke, coordinatorFlush, drainEditorWrites } = vi.hoisted(() => ({
 }));
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke }));
-vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
-  editorCoordinator: { flush: coordinatorFlush },
-}));
-vi.mock('@src/renderer/editor/runtime/editorWriteBarrier', () => ({
+vi.mock(
+  '@src/renderer/editor/runtime/coordinator/editorStateCoordinator',
+  () => ({
+    editorCoordinator: { flush: coordinatorFlush },
+  }),
+);
+vi.mock('@src/renderer/editor/runtime/lifecycle/editorWriteBarrier', () => ({
   drainEditorWrites,
 }));
 

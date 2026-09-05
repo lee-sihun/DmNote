@@ -160,13 +160,15 @@ const captured = vi.hoisted(() => ({
     pageHost: null as HTMLElement | null,
   },
 }));
-vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
+vi.mock('@src/renderer/editor/runtime/intent/elementIntent', () => ({
   reportElementOpError: vi.fn(),
   reportElementOpSkipped: vi.fn(),
 }));
 
-vi.mock('../PropertyInputs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../PropertyInputs')>();
+vi.mock('../controls/PropertyInputs', async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import('../controls/PropertyInputs')
+  >();
   return {
     ...actual,
     PropertyRow: ({ children }: { children: React.ReactNode }) => children,
@@ -262,16 +264,16 @@ vi.mock('@components/main/Modal/content/pickers/ColorSwatch', () => ({
 vi.mock('@components/main/Modal/PopupExit', () => ({
   default: ({ children }: { children?: React.ReactNode }) => children,
 }));
-vi.mock('../ShadowControls', () => ({
+vi.mock('../controls/ShadowControls', () => ({
   default: (props: (typeof captured.shadows)[number]) => {
     captured.shadows.push(props);
     return null;
   },
 }));
-vi.mock('../EditSessionBoundary', () => ({
+vi.mock('../selection/EditSessionBoundary', () => ({
   default: ({ children }: { children: React.ReactNode }) => children,
 }));
-vi.mock('../PanelNavContext', () => ({
+vi.mock('../navigation/PanelNavContext', () => ({
   usePanelNav: () => ({
     ...captured.nav,
     openPage: vi.fn(),

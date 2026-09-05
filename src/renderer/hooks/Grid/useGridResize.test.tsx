@@ -57,7 +57,7 @@ vi.mock('@utils/plugin/bridgeMessages', () => ({
   sendBridgeMessageBestEffort: mocks.sendBridge,
 }));
 
-vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
+vi.mock('@src/renderer/editor/runtime/operations/elementOps', () => ({
   commitElementBoundsById: mocks.commitGroupBounds,
   commitSingleElementBoundsById: mocks.commitSingleBounds,
 }));
@@ -144,12 +144,15 @@ vi.mock('@stores/data/useKnobItemStore', () => ({
   },
 }));
 
-vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
-  editorCoordinator: {
-    commitPatch: mocks.commitPatch,
-    getState: () => ({ lastAck: null }),
-  },
-}));
+vi.mock(
+  '@src/renderer/editor/runtime/coordinator/editorStateCoordinator',
+  () => ({
+    editorCoordinator: {
+      commitPatch: mocks.commitPatch,
+      getState: () => ({ lastAck: null }),
+    },
+  }),
+);
 
 type ResizeApi = ReturnType<typeof useGridResize>;
 

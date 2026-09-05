@@ -5,7 +5,7 @@
  * 제스처 경계 flush는 다음 mutation 전 상태를 고정한다
  */
 
-import { trackEditorWrite } from '@src/renderer/editor/runtime/editorWriteBarrier';
+import { trackEditorWrite } from '@src/renderer/editor/runtime/lifecycle/editorWriteBarrier';
 
 const queues = new Map<string, Promise<unknown>>();
 

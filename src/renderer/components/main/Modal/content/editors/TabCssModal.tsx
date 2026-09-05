@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import Modal from '../../Modal';
 import { useModalPresence } from '@hooks/ui/usePopupPresence';
 import Checkbox from '@components/main/common/Checkbox';
-import { PropertySection } from '@components/main/Grid/PropertiesPanel/PropertyInputs';
+import { PropertySection } from '@components/main/Grid/PropertiesPanel/controls/PropertyInputs';
 import {
   FILL_DISABLED_CLASS,
   FILL_QUIET_CLASS,

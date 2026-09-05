@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { subscribe } from './shared';
-import { runExclusiveLegacyMutation } from '@src/renderer/editor/runtime/legacyEditorMutation';
+import { runExclusiveLegacyMutation } from '@src/renderer/editor/runtime/lifecycle/legacyEditorMutation';
 
 import type {
   PresetOperationResult,

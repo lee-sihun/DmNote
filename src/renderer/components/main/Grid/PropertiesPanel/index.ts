@@ -13,8 +13,8 @@ export {
   Tabs,
   CloseIcon,
   ModeToggleIcon,
-} from './PropertyInputs';
-export { createFontStyleToggleHandlers } from './fontStyleToggleHandlers';
+} from './controls/PropertyInputs';
+export { createFontStyleToggleHandlers } from './selection/fontStyleToggleHandlers';
 
 // 탭 콘텐츠 컴포넌트 (단일 선택)
 export { default as StyleTabContent } from './single/StyleTabContent';
@@ -42,8 +42,8 @@ export {
   BatchKnobOnlyPanel,
   BatchPluginOnlyPanel,
 } from './batch/BatchSelectionPanel';
-export { default as PluginSettingsPanelView } from './PluginSettingsPanelView';
+export { default as PluginSettingsPanelView } from './plugin/PluginSettingsPanelView';
 
 // 커스텀 hook
 export { useBatchHandlers } from './batch/useBatchHandlers';
-export { usePanelScroll } from './usePanelScroll';
+export { usePanelScroll } from './navigation/usePanelScroll';

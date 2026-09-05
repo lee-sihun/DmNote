@@ -46,12 +46,15 @@ vi.mock('@api/modules/panelWindowApi', () => ({
     setDragCursor: (active: boolean) => mocks.setDragCursor(active),
   },
 }));
-vi.mock('@src/renderer/editor/runtime/lifecycleEditorFlush', () => ({
+vi.mock('@src/renderer/editor/runtime/lifecycle/lifecycleEditorFlush', () => ({
   flushFocusedEditor: () => Promise.resolve(mocks.flushResult),
 }));
-vi.mock('@src/renderer/editor/runtime/historyEditorFlushLock', () => ({
-  isHistoryEditorFlushLocked: () => false,
-}));
+vi.mock(
+  '@src/renderer/editor/runtime/lifecycle/historyEditorFlushLock',
+  () => ({
+    isHistoryEditorFlushLocked: () => false,
+  }),
+);
 vi.mock('@utils/core/platform', () => ({
   isMac: () => false,
   isWindows: () => false,

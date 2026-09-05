@@ -3,7 +3,7 @@ import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import PickerSurface from '@components/main/Grid/PropertiesPanel/PickerSurface';
+import PickerSurface from '@components/main/Grid/PropertiesPanel/controls/PickerSurface';
 import { PanelHostContext } from '@contexts/PanelHostContext';
 import { getTriggerAnchoredPopupPosition } from '@hooks/ui/usePanelAnchoredPopupPosition';
 

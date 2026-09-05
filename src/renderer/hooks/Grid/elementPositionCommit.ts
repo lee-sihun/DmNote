@@ -1,9 +1,9 @@
-import { commitElementGeometryById } from '@src/renderer/editor/runtime/elementOps';
+import { commitElementGeometryById } from '@src/renderer/editor/runtime/operations/elementOps';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import {
   reportElementOpError,
   reportElementOpSkipped,
-} from '@src/renderer/editor/runtime/elementIntent';
+} from '@src/renderer/editor/runtime/intent/elementIntent';
 
 import type { NativeElementType } from '@src/renderer/editor/model/elementIdMap';
 

@@ -20,7 +20,7 @@ import {
 } from '@api/modules/appApi';
 import { stableStringify } from '@utils/core/stableStringify';
 import { useTranslation } from '@contexts/useTranslation';
-import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
+import { editorCoordinator } from '@src/renderer/editor/runtime/coordinator/editorStateCoordinator';
 import { panelWindowApi } from '@api/modules/panelWindowApi';
 import {
   detachPropertiesPanel,
@@ -33,15 +33,15 @@ import {
   useHistoryStatusStore,
   syncHistoryStatus,
 } from '@stores/data/useHistoryStatusStore';
-import { flushFocusedEditor } from '@src/renderer/editor/runtime/lifecycleEditorFlush';
+import { flushFocusedEditor } from '@src/renderer/editor/runtime/lifecycle/lifecycleEditorFlush';
 import {
   acquireHistoryEditorFlushLock,
   releaseHistoryEditorFlushLock,
   resetHistoryEditorFlushLock,
-} from '@src/renderer/editor/runtime/historyEditorFlushLock';
+} from '@src/renderer/editor/runtime/lifecycle/historyEditorFlushLock';
 import type { CanonicalBootstrapPayload } from '@src/types/app';
 import type { CustomTab, KeyCounters } from '@src/types/key/keys';
-import type { EditorCoordinatorState } from '@src/renderer/editor/runtime/editorCoordinator';
+import type { EditorCoordinatorState } from '@src/renderer/editor/runtime/coordinator/editorCoordinator';
 import type { TabNoteOverrides } from '@src/types/settings/noteSettings';
 import type {
   SettingsDiff,

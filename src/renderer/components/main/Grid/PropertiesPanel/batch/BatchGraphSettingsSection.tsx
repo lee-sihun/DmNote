@@ -2,11 +2,11 @@ import type {
   GraphItemPosition,
   GraphItemType,
 } from '@src/types/key/graphItems';
-import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
+import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import { ColorInput, NumberInput, PropertyRow } from '../index';
-import { previewBatchGraphColor } from '../previewPatchForwarders';
+import { previewBatchGraphColor } from '../selection/previewPatchForwarders';
 import {
   snapBatchGraphSpeed,
   type BatchGraphSettingsModel,

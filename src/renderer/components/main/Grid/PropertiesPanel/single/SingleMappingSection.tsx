@@ -11,7 +11,7 @@ import {
 } from '@utils/keySlot';
 import { useKeySlotCapture } from '@hooks/useKeySlotCapture';
 import KeySlotPicker from '@components/main/common/KeySlotPicker';
-import { PropertyRow, PropertySection } from '../PropertyInputs';
+import { PropertyRow, PropertySection } from '../controls/PropertyInputs';
 
 interface SingleMappingSectionProps {
   keyIndex: number;

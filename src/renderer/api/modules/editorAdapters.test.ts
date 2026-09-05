@@ -5,9 +5,12 @@ const { commitPatch } = vi.hoisted(() => ({
   commitPatch: vi.fn(),
 }));
 
-vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
-  editorCoordinator: { commitPatch },
-}));
+vi.mock(
+  '@src/renderer/editor/runtime/coordinator/editorStateCoordinator',
+  () => ({
+    editorCoordinator: { commitPatch },
+  }),
+);
 
 import { keysApi, updatePositionsWithGesture } from './keysApi';
 import {

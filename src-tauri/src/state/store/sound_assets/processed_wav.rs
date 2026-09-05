@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::{anyhow, Context, Result};
 
-use super::super::super::local_asset_path::path_identity_key;
+use super::super::super::assets::local_asset_path::path_identity_key;
 use super::{
     recover_interrupted_sound_deletions, AppStore, SoundRecoveryOutcome,
     PROCESSED_WAV_TRANSACTION_LOCK,

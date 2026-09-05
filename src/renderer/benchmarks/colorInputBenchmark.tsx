@@ -1,6 +1,6 @@
 import React, { Profiler } from 'react';
 
-import { ColorInput } from '@components/main/Grid/PropertiesPanel/PropertyInputs';
+import { ColorInput } from '@components/main/Grid/PropertiesPanel/controls/PropertyInputs';
 import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
 
 interface ColorInputBenchmarkSurfaceProps {

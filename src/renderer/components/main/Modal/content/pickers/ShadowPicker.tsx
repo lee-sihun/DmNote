@@ -4,7 +4,7 @@ import {
   type ElementShadowSpec,
   type ElementShadowValuePatch,
 } from '@src/types/key/shadows';
-import PickerSurface from '@components/main/Grid/PropertiesPanel/PickerSurface';
+import PickerSurface from '@components/main/Grid/PropertiesPanel/controls/PickerSurface';
 import ColorPicker from './ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
 import { ColorSwatchButton } from './ColorSwatch';
@@ -13,7 +13,7 @@ import {
   NumberInput,
   PropertyRow,
   PropertySection,
-} from '@components/main/Grid/PropertiesPanel/PropertyInputs';
+} from '@components/main/Grid/PropertiesPanel/controls/PropertyInputs';
 import {
   useEditStatePreviewPublisher,
   type EditStateAnchor,

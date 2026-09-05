@@ -9,7 +9,7 @@ use serde::Serialize;
 
 use crate::{
     models::{AppStoreData, CustomCssHistoryEntry},
-    state::local_asset_path::path_identity_key,
+    state::assets::local_asset_path::path_identity_key,
 };
 
 pub(crate) const MAX_CUSTOM_CSS_BYTES: u64 = 1024 * 1024;

@@ -7,7 +7,7 @@ import {
   createRafLatestScheduler,
   type ContinuousInputStrategy,
 } from '@utils/animation/rafLatestScheduler';
-import { getEditSessionTarget } from '@src/renderer/editor/runtime/editSessionTarget';
+import { getEditSessionTarget } from '@src/renderer/editor/runtime/intent/editSessionTarget';
 import { useIsEditSessionScoped } from '@src/renderer/contexts/EditSessionScope';
 import { useGradientEditStore } from '@stores/grid/useGradientEditStore';
 import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';

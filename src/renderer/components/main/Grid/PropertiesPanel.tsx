@@ -33,25 +33,25 @@ import {
 import {
   SIDE_PANEL_FRAME_CLASS,
   WINDOW_PANEL_FRAME_CLASS,
-} from './PropertiesPanel/panelChrome';
-import { resolveSelectionPanelRoute } from './PropertiesPanel/selectionPanelRoute';
-import { PanelNavProvider } from './PropertiesPanel/PanelNavContext';
-import PanelHeaderActions from './PropertiesPanel/PanelHeaderActions';
-import PanelToggleButton from './PropertiesPanel/PanelToggleButton';
+} from './PropertiesPanel/navigation/panelChrome';
+import { resolveSelectionPanelRoute } from './PropertiesPanel/selection/selectionPanelRoute';
+import { PanelNavProvider } from './PropertiesPanel/navigation/PanelNavContext';
+import PanelHeaderActions from './PropertiesPanel/navigation/PanelHeaderActions';
+import PanelToggleButton from './PropertiesPanel/navigation/PanelToggleButton';
 import { EditSessionScope } from '@src/renderer/contexts/EditSessionScope';
-import { previewSingleGraphColor } from './PropertiesPanel/previewPatchForwarders';
-import PluginSettingsForm from './PropertiesPanel/PluginSettingsForm';
-import { usePropertiesPanelSelection } from './PropertiesPanel/usePropertiesPanelSelection';
-import { usePanelNavigation } from './PropertiesPanel/usePanelNavigation';
-import { createBatchSelectionModel } from './PropertiesPanel/batchSelectionModel';
-import { singleSelectionHandlers } from './PropertiesPanel/singleSelectionHandlers';
-import { shouldNormalizePropertyTabToStyle } from './PropertiesPanel/propertyPanelAdapters';
-import { usePropertiesPanelRename } from './PropertiesPanel/usePropertiesPanelRename';
-import { usePluginSettingsPanelController } from './PropertiesPanel/usePluginSettingsPanelController';
-import { usePropertiesPanelVisibility } from './PropertiesPanel/usePropertiesPanelVisibility';
-import { usePropertiesPanelBatchGeometry } from './PropertiesPanel/usePropertiesPanelBatchGeometry';
-import { usePropertiesPanelBatchCommitHandlers } from './PropertiesPanel/usePropertiesPanelBatchCommitHandlers';
-import { useBatchColorPickerController } from './PropertiesPanel/useBatchColorPickerController';
+import { previewSingleGraphColor } from './PropertiesPanel/selection/previewPatchForwarders';
+import PluginSettingsForm from './PropertiesPanel/plugin/PluginSettingsForm';
+import { usePropertiesPanelSelection } from './PropertiesPanel/selection/usePropertiesPanelSelection';
+import { usePanelNavigation } from './PropertiesPanel/navigation/usePanelNavigation';
+import { createBatchSelectionModel } from './PropertiesPanel/batch/batchSelectionModel';
+import { singleSelectionHandlers } from './PropertiesPanel/selection/singleSelectionHandlers';
+import { shouldNormalizePropertyTabToStyle } from './PropertiesPanel/selection/propertyPanelAdapters';
+import { usePropertiesPanelRename } from './PropertiesPanel/navigation/usePropertiesPanelRename';
+import { usePluginSettingsPanelController } from './PropertiesPanel/plugin/usePluginSettingsPanelController';
+import { usePropertiesPanelVisibility } from './PropertiesPanel/navigation/usePropertiesPanelVisibility';
+import { usePropertiesPanelBatchGeometry } from './PropertiesPanel/batch/usePropertiesPanelBatchGeometry';
+import { usePropertiesPanelBatchCommitHandlers } from './PropertiesPanel/batch/usePropertiesPanelBatchCommitHandlers';
+import { useBatchColorPickerController } from './PropertiesPanel/batch/useBatchColorPickerController';
 
 // ============================================================================
 // 메인 컴포넌트 Props

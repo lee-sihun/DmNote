@@ -12,8 +12,8 @@ import { NOTE_SETTINGS_CONSTRAINTS } from '@src/types/settings/noteSettingsConst
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
-import { createNoteLiteralHandlers } from '../noteLiteralHandlers';
-import NoteGlowPaintSourceDropdown from '../NoteGlowPaintSourceDropdown';
+import { createNoteLiteralHandlers } from '../selection/noteLiteralHandlers';
+import NoteGlowPaintSourceDropdown from '../controls/NoteGlowPaintSourceDropdown';
 import type { EditorPreviewStylePropertyPatchV1 } from '@src/types/editor';
 import type { BatchElementPropertyUpdate } from '../types';
 

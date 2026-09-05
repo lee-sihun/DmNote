@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { subscribe } from './shared';
-import { enqueueEditorCompatibilityWrite } from '@src/renderer/editor/runtime/editorCompatibilityQueue';
-import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
+import { enqueueEditorCompatibilityWrite } from '@src/renderer/editor/runtime/lifecycle/editorCompatibilityQueue';
+import { editorCoordinator } from '@src/renderer/editor/runtime/coordinator/editorStateCoordinator';
 
 import type { StatItemPositions } from '@src/types/key/statItems';
 import type { GraphItemPositions } from '@src/types/key/graphItems';

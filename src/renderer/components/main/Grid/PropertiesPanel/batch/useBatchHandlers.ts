@@ -3,7 +3,7 @@ import {
   computeBatchGeometryPlan,
   computeBatchSpacingValue,
   type BatchGeometryOperation,
-} from '@src/renderer/editor/runtime/batchGeometryPlan';
+} from '@src/renderer/editor/runtime/geometry/batchGeometryPlan';
 
 import type { KeyPosition } from '@src/types/key/keys';
 import type { StatItemPosition } from '@src/types/key/statItems';

@@ -2,7 +2,7 @@ import { createPortal } from 'react-dom';
 import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
 import FontPickerOpenButton from '@components/main/Modal/content/pickers/FontPickerOpenButton';
 import { useFontStore } from '@stores/useFontStore';
-import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
+import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
 import { paintDescriptor, resolveStatePair } from '@src/types/color';
 import type {
   EditorPaintPropertyPatchV1,
@@ -28,8 +28,8 @@ import {
   TextInput,
   createFontStyleToggleHandlers,
 } from '../index';
-import FontWeightDropdown from '../FontWeightDropdown';
-import { usePanelNav } from '../PanelNavContext';
+import FontWeightDropdown from '../controls/FontWeightDropdown';
+import { usePanelNav } from '../navigation/PanelNavContext';
 import type { BatchElementPropertyUpdate } from '../types';
 
 const FONT_PAGE_KEY = 'batch-style:font';

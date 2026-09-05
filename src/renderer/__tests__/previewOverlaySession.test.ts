@@ -8,9 +8,9 @@ import { useStatItemStore } from '@stores/data/useStatItemStore';
 import {
   composePreviewPositions,
   previewOverlay,
-} from '@src/renderer/editor/runtime/previewOverlay';
-import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
-import { runExclusiveLegacyMutation } from '@src/renderer/editor/runtime/legacyEditorMutation';
+} from '@src/renderer/editor/runtime/gesture/previewOverlay';
+import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
+import { runExclusiveLegacyMutation } from '@src/renderer/editor/runtime/lifecycle/legacyEditorMutation';
 import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
 import { previewApi } from '@api/modules/previewApi';
 
@@ -39,16 +39,19 @@ vi.mock('@api/modules/previewApi', () => ({
   },
 }));
 
-vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
-  editorCoordinator: {
-    commitPatch: commitPatchMock,
-    commitGeneratedPatch: commitGeneratedPatchMock,
-    runExclusiveLegacyMutation: vi.fn(
-      async (mutation: () => Promise<unknown>) => mutation(),
-    ),
-    getState: () => ({ revision: null }),
-  },
-}));
+vi.mock(
+  '@src/renderer/editor/runtime/coordinator/editorStateCoordinator',
+  () => ({
+    editorCoordinator: {
+      commitPatch: commitPatchMock,
+      commitGeneratedPatch: commitGeneratedPatchMock,
+      runExclusiveLegacyMutation: vi.fn(
+        async (mutation: () => Promise<unknown>) => mutation(),
+      ),
+      getState: () => ({ revision: null }),
+    },
+  }),
+);
 
 const basePosition = (dx: number, id: string) => ({
   ...createDefaultKeyPosition(),

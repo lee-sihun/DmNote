@@ -3,7 +3,7 @@ import { subscribe } from './shared';
 import {
   runExclusiveLegacyMutation,
   runLegacyEditorMutation,
-} from '@src/renderer/editor/runtime/legacyEditorMutation';
+} from '@src/renderer/editor/runtime/lifecycle/legacyEditorMutation';
 
 export const fontApi = {
   load: () =>

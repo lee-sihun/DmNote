@@ -5,7 +5,7 @@ import {
   HueSlider,
   AlphaSlider,
 } from './colorPickerPrimitives';
-import PickerSurface from '@components/main/Grid/PropertiesPanel/PickerSurface';
+import PickerSurface from '@components/main/Grid/PropertiesPanel/controls/PickerSurface';
 import {
   MODES,
   isGradientColor,

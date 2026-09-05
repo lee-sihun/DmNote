@@ -9,7 +9,7 @@ import type {
 import type { KeySlot } from '@src/types/key/keys';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
-import { ElementIntentAbort } from '@src/renderer/editor/runtime/elementIntent';
+import { ElementIntentAbort } from '@src/renderer/editor/runtime/intent/elementIntent';
 import {
   applyZIndexToLayerOrder,
   buildLayerItemsForMode,

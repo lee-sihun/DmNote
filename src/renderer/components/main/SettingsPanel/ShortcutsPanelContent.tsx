@@ -13,7 +13,7 @@ import type {
   ShortcutsState,
 } from '@src/types/settings/shortcuts';
 import { getDefaultShortcuts } from '@src/renderer/defaults';
-import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
+import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/lifecycle/historyEditorFlushLock';
 
 type ShortcutKey = keyof ShortcutsState;
 

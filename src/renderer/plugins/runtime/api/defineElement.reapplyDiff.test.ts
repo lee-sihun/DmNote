@@ -103,7 +103,7 @@ vi.mock('@stores/data/useHistoryStatusStore', () => ({
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import { drainEditorWrites } from '@src/renderer/editor/runtime/editorWriteBarrier';
+import { drainEditorWrites } from '@src/renderer/editor/runtime/lifecycle/editorWriteBarrier';
 import {
   applyCanonicalPluginInstances,
   applyCommittedPluginInstancesProjection,

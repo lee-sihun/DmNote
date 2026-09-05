@@ -25,8 +25,8 @@ use serde_json::Value;
 use tauri::path::PathResolver;
 use tauri::Runtime;
 
+use super::assets::builtin_sounds::seed_builtin_sounds;
 use super::atomic_file::atomic_replace;
-use super::builtin_sounds::seed_builtin_sounds;
 use super::editor::{
     canonical_request_fingerprint, next_revision, repair_selected_mode, request_fingerprint,
     request_payload_size, sync_key_counters, touched_pair, validate_document_transition,

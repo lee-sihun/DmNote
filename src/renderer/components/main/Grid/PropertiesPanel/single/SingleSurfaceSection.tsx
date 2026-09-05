@@ -17,10 +17,14 @@ import {
   elementShadowLeafFromPartial,
   resolveElementShadowForPosition,
 } from '@src/types/key/shadows';
-import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
+import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
 import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
-import ShadowControls from '../ShadowControls';
-import { NumberInput, PropertyRow, PropertySection } from '../PropertyInputs';
+import ShadowControls from '../controls/ShadowControls';
+import {
+  NumberInput,
+  PropertyRow,
+  PropertySection,
+} from '../controls/PropertyInputs';
 
 interface SingleSurfaceSectionProps {
   keyPosition: KeyPosition;

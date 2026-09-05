@@ -1,6 +1,6 @@
 import React, { Profiler, useState } from 'react';
 
-import { TextInput } from '@components/main/Grid/PropertiesPanel/PropertyInputs';
+import { TextInput } from '@components/main/Grid/PropertiesPanel/controls/PropertyInputs';
 import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
 
 interface TextInputBenchmarkSurfaceProps {

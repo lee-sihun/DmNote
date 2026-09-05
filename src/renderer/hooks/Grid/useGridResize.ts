@@ -5,14 +5,14 @@ import {
   reportElementOpSkipped,
   type ElementIntentReceipt,
   type PropertyIntents,
-} from '@src/renderer/editor/runtime/elementIntent';
+} from '@src/renderer/editor/runtime/intent/elementIntent';
 import type { EditorOpV1 } from '@src/types/editor';
-import { runMixedElementOpsIntent } from '@src/renderer/editor/runtime/mixedElementIntent';
+import { runMixedElementOpsIntent } from '@src/renderer/editor/runtime/intent/mixedElementIntent';
 import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import {
   commitElementBoundsById,
   commitSingleElementBoundsById,
-} from '@src/renderer/editor/runtime/elementOps';
+} from '@src/renderer/editor/runtime/operations/elementOps';
 import { useEffect, useRef, useState } from 'react';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useSmartGuidesStore } from '@stores/grid/useSmartGuidesStore';

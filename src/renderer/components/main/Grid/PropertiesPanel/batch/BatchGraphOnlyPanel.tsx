@@ -2,9 +2,9 @@ import React from 'react';
 import type { KeyPosition } from '@src/types/key/keys';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
-import { PANEL_ROOT_CLASS } from '../panelChrome';
+import { PANEL_ROOT_CLASS } from '../navigation/panelChrome';
 import { BatchStyleTabContent, TABS, type TabType } from '../index';
-import EditSessionBoundary from '../EditSessionBoundary';
+import EditSessionBoundary from '../selection/EditSessionBoundary';
 import {
   captureBatchElementBinding,
   useBatchElementBinding,

@@ -30,11 +30,11 @@ use crate::{
     services::{css_watcher::commit_css_reload, settings::apply_patch_to_store},
     state::{
         app_state::KeyCounterEventEmitter,
+        assets::local_asset_path::path_identity_key,
         history::{
             HistoryDirection, HistoryScope, PresetFullHistorySnapshot, HISTORY_ENTRY_TOO_LARGE,
             HISTORY_IN_PROGRESS,
         },
-        local_asset_path::path_identity_key,
         AppState,
     },
 };

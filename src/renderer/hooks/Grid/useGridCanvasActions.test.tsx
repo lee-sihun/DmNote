@@ -32,7 +32,7 @@ const core = vi.hoisted(() => ({
   ),
 }));
 
-vi.mock('@src/renderer/editor/runtime/elementOps', () => core);
+vi.mock('@src/renderer/editor/runtime/operations/elementOps', () => core);
 
 import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
 import {

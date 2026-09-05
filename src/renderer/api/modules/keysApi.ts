@@ -1,9 +1,9 @@
 import { invoke } from '@tauri-apps/api/core';
 import { subscribe } from './shared';
 import { rawKeyEventBus } from '@utils/core/rawKeyEventBus';
-import { enqueueEditorCompatibilityWrite } from '@src/renderer/editor/runtime/editorCompatibilityQueue';
-import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
-import { runExclusiveLegacyMutation } from '@src/renderer/editor/runtime/legacyEditorMutation';
+import { enqueueEditorCompatibilityWrite } from '@src/renderer/editor/runtime/lifecycle/editorCompatibilityQueue';
+import { editorCoordinator } from '@src/renderer/editor/runtime/coordinator/editorStateCoordinator';
+import { runExclusiveLegacyMutation } from '@src/renderer/editor/runtime/lifecycle/legacyEditorMutation';
 import { setKeyMode } from './keyModeApi';
 
 import type {

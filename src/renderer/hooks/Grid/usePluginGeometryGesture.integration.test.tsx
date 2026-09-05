@@ -16,7 +16,7 @@ import {
   registerPluginInstancesStagedRelease,
   touchPluginInstancesEditSession,
 } from '@plugins/runtime/displayElement/instancesCommitQueue';
-import { drainEditorWrites } from '@src/renderer/editor/runtime/editorWriteBarrier';
+import { drainEditorWrites } from '@src/renderer/editor/runtime/lifecycle/editorWriteBarrier';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 
 import { createPluginGeometryGestureController } from './usePluginGeometryGesture';

@@ -18,7 +18,7 @@ import {
   type ClipboardItem,
 } from '@stores/grid/useGridSelectionStore';
 import type { KeyMappings } from '@src/types/key/keys';
-import { commitGeneratedSemanticOps } from '@src/renderer/editor/runtime/editorSemanticOps';
+import { commitGeneratedSemanticOps } from '@src/renderer/editor/runtime/operations/editorSemanticOps';
 import {
   ElementIntentAbort,
   createPropertyReceipt,
@@ -26,18 +26,18 @@ import {
   reportElementOpSkipped,
   type PropertyIntents,
   type PropertyReceiptEntry,
-} from '@src/renderer/editor/runtime/elementIntent';
+} from '@src/renderer/editor/runtime/intent/elementIntent';
 import {
   runMixedElementOpsIntent,
   runMixedGestureElementIntent,
-} from '@src/renderer/editor/runtime/mixedElementIntent';
+} from '@src/renderer/editor/runtime/intent/mixedElementIntent';
 import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
 import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
-import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
+import { editorCoordinator } from '@src/renderer/editor/runtime/coordinator/editorStateCoordinator';
 import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import { rotatePluginInstancesEditSession } from '@plugins/runtime/displayElement/instancesCommitQueue';
-import { deleteFrozenSelection } from '@src/renderer/editor/runtime/deleteFrozenSelection';
+import { deleteFrozenSelection } from '@src/renderer/editor/runtime/intent/deleteFrozenSelection';
 import {
   beginMixedGestureTransaction,
   cancelUncommittedMixedGestureTransaction,

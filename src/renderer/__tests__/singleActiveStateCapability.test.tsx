@@ -6,7 +6,7 @@ import type { KeyPosition } from '@src/types/key/keys';
 import { createDefaultCounterSettings } from '@src/types/key/keys';
 import StyleTabContent from '@components/main/Grid/PropertiesPanel/single/StyleTabContent';
 import CounterTabContent from '@components/main/Grid/PropertiesPanel/single/CounterTabContent';
-import { PanelNavProvider } from '@components/main/Grid/PropertiesPanel/PanelNavContext';
+import { PanelNavProvider } from '@components/main/Grid/PropertiesPanel/navigation/PanelNavContext';
 
 interface CapturedColorPickerProps {
   open: boolean;
@@ -28,9 +28,12 @@ vi.mock('@components/main/Modal/content/pickers/ColorPicker', () => ({
   },
 }));
 
-vi.mock('@components/main/Grid/PropertiesPanel/ShadowControls', () => ({
-  default: () => null,
-}));
+vi.mock(
+  '@components/main/Grid/PropertiesPanel/controls/ShadowControls',
+  () => ({
+    default: () => null,
+  }),
+);
 
 const counter = createDefaultCounterSettings();
 const keyPosition = {

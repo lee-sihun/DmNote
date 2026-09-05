@@ -6,7 +6,7 @@ const routing = vi.hoisted(() => ({
   invoke: vi.fn(async () => ({})),
 }));
 
-vi.mock('@src/renderer/editor/runtime/legacyEditorMutation', () => ({
+vi.mock('@src/renderer/editor/runtime/lifecycle/legacyEditorMutation', () => ({
   runExclusiveLegacyMutation: routing.exclusive,
   runLegacyEditorMutation: routing.legacy,
 }));

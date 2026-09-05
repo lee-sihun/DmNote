@@ -4,8 +4,8 @@ import {
   panelWindowApi,
   type PanelDragGeometry,
 } from '@api/modules/panelWindowApi';
-import { PANEL_HEADER_HEIGHT } from '@components/main/Grid/PropertiesPanel/panelChrome';
-import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
+import { PANEL_HEADER_HEIGHT } from '@components/main/Grid/PropertiesPanel/navigation/panelChrome';
+import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/lifecycle/historyEditorFlushLock';
 import {
   detachPropertiesPanel,
   dockPropertiesPanel,

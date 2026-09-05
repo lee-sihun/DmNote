@@ -4,8 +4,8 @@ import ListPopup, { type ListItem } from '../main/Modal/ListPopup';
 import { usePopupPresence } from '@hooks/ui/usePopupPresence';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import { commitStableLayerZOrder } from '@src/renderer/editor/runtime/layerZOrderIntent';
-import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
+import { commitStableLayerZOrder } from '@src/renderer/editor/runtime/intent/layerZOrderIntent';
+import { reportElementOpError } from '@src/renderer/editor/runtime/intent/elementIntent';
 import type {
   PluginDefinitionInternal,
   PluginDisplayElementInternal,

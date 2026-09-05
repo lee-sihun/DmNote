@@ -5,7 +5,7 @@ import type {
   GraphItemPosition,
   GraphItemType,
 } from '@src/types/key/graphItems';
-import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
+import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import { paintDescriptor } from '@src/types/color';
 import {
@@ -13,7 +13,7 @@ import {
   DEFAULT_ELEMENT_RADIUS,
 } from '@utils/core/elementDefaults';
 import { resolveElementBorder } from '@utils/core/elementBorder';
-import { PANEL_ROOT_CLASS } from '../panelChrome';
+import { PANEL_ROOT_CLASS } from '../navigation/panelChrome';
 import {
   PropertyRow,
   NumberInput,
@@ -25,8 +25,8 @@ import {
 } from '../index';
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
-import EditSessionBoundary from '../EditSessionBoundary';
-import type { GeometryField } from '@src/renderer/editor/runtime/elementOps';
+import EditSessionBoundary from '../selection/EditSessionBoundary';
+import type { GeometryField } from '@src/renderer/editor/runtime/operations/elementOps';
 import type {
   EditorElementPropertyPatchV1,
   EditorPaintPropertyPatchV1,

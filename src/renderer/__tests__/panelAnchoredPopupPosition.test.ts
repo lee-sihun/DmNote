@@ -106,7 +106,7 @@ describe('사이드 패널 팝업 앵커 정렬', () => {
     const surface = readFileSync(
       resolve(
         process.cwd(),
-        'src/renderer/components/main/Grid/PropertiesPanel/PickerSurface.tsx',
+        'src/renderer/components/main/Grid/PropertiesPanel/controls/PickerSurface.tsx',
       ),
       'utf8',
     );

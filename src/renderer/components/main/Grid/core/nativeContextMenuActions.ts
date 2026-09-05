@@ -1,6 +1,6 @@
-import { deleteElementById } from '@src/renderer/editor/runtime/elementOps';
-import { commitStableLayerZOrder } from '@src/renderer/editor/runtime/layerZOrderIntent';
-import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
+import { deleteElementById } from '@src/renderer/editor/runtime/operations/elementOps';
+import { commitStableLayerZOrder } from '@src/renderer/editor/runtime/intent/layerZOrderIntent';
+import { reportElementOpError } from '@src/renderer/editor/runtime/intent/elementIntent';
 import type { NativeElementType } from '@src/renderer/editor/model/elementIdMap';
 
 type NativeLayerAction = 'front' | 'forward' | 'backward' | 'back';

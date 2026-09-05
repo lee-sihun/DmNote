@@ -12,7 +12,7 @@ import {
   useGridSelectionStore,
   type SelectedElement,
 } from '@stores/grid/useGridSelectionStore';
-import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
+import { reportElementOpError } from '@src/renderer/editor/runtime/intent/elementIntent';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { ARROW_KEY_HISTORY_DELAY } from './constants';
 import { isMac } from '@utils/core/platform';
@@ -21,7 +21,7 @@ import {
   ungroupSelectedElements,
 } from '@utils/grid/groupActions';
 import { useHistoryShortcuts } from './useHistoryShortcuts';
-import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
+import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/lifecycle/historyEditorFlushLock';
 import { isModalLayerActive } from '@components/main/Modal/popupLayer';
 
 interface UseGridKeyboardParams {

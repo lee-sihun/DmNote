@@ -20,18 +20,21 @@ vi.mock('@api/modules/keysApi', () => ({
   },
 }));
 
-vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
+vi.mock('@src/renderer/editor/runtime/operations/elementOps', () => ({
   rebindKeySlotById: (id: string, slot: unknown) =>
     apiMocks.rebindKeySlotById(id, slot),
 }));
 
-vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
-  editorCoordinator: {
-    flush: vi.fn(),
-    getState: vi.fn(() => ({ revision: 1 })),
-    sync: vi.fn(),
-  },
-}));
+vi.mock(
+  '@src/renderer/editor/runtime/coordinator/editorStateCoordinator',
+  () => ({
+    editorCoordinator: {
+      flush: vi.fn(),
+      getState: vi.fn(() => ({ revision: 1 })),
+      sync: vi.fn(),
+    },
+  }),
+);
 
 vi.mock('@api/pluginDisplayElements', () => ({
   setUndoRedoInProgress: vi.fn(),

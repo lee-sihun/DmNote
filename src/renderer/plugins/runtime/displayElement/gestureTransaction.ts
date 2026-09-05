@@ -1,8 +1,8 @@
 import { gestureApi } from '@api/modules/gestureApi';
 import { editorApi } from '@api/modules/editorApi';
-import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
-import { trackEditorWrite } from '@src/renderer/editor/runtime/editorWriteBarrier';
-import { ElementIntentAbort } from '@src/renderer/editor/runtime/elementIntent';
+import { editorCoordinator } from '@src/renderer/editor/runtime/coordinator/editorStateCoordinator';
+import { trackEditorWrite } from '@src/renderer/editor/runtime/lifecycle/editorWriteBarrier';
+import { ElementIntentAbort } from '@src/renderer/editor/runtime/intent/elementIntent';
 import { stableStringify } from '@utils/core/stableStringify';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useHistoryStatusStore } from '@stores/data/useHistoryStatusStore';
@@ -29,7 +29,7 @@ import { EDITOR_OPS_VERSION } from '@src/types/editor';
 import type {
   EditorGestureOpsMutation,
   EditorPatchGenerator,
-} from '@src/renderer/editor/runtime/editorCoordinator';
+} from '@src/renderer/editor/runtime/coordinator/editorCoordinator';
 import type {
   CanonicalEditorDocumentV1,
   EditorOpV1,

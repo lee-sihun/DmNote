@@ -12,8 +12,8 @@ import {
 } from 'vitest';
 import type { KeyPosition } from '@src/types/key/keys';
 import BatchStyleTabContent from '@components/main/Grid/PropertiesPanel/batch/BatchStyleTabContent';
-import { PanelNavProvider } from '@components/main/Grid/PropertiesPanel/PanelNavContext';
-import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
+import { PanelNavProvider } from '@components/main/Grid/PropertiesPanel/navigation/PanelNavContext';
+import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -32,10 +32,10 @@ const captured = vi.hoisted(() => ({
 }));
 
 vi.mock(
-  '@components/main/Grid/PropertiesPanel/PropertyInputs',
+  '@components/main/Grid/PropertiesPanel/controls/PropertyInputs',
   async (importOriginal) => {
     const mod = await importOriginal<
-      typeof import('@components/main/Grid/PropertiesPanel/PropertyInputs')
+      typeof import('@components/main/Grid/PropertiesPanel/controls/PropertyInputs')
     >();
     return {
       ...mod,
@@ -49,9 +49,12 @@ vi.mock(
   },
 );
 
-vi.mock('@components/main/Grid/PropertiesPanel/ShadowControls', () => ({
-  default: () => <div data-testid="shadow-controls" />,
-}));
+vi.mock(
+  '@components/main/Grid/PropertiesPanel/controls/ShadowControls',
+  () => ({
+    default: () => <div data-testid="shadow-controls" />,
+  }),
+);
 
 const flatPosition = () =>
   ({

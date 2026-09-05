@@ -1,11 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
-import PickerSurface from '@components/main/Grid/PropertiesPanel/PickerSurface';
+import PickerSurface from '@components/main/Grid/PropertiesPanel/controls/PickerSurface';
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import { NumberInput } from '@components/main/common/NumberInput';
 import TabSwitch from '@components/main/common/TabSwitch';
-import { PropertySection } from '@components/main/Grid/PropertiesPanel/PropertyInputs';
+import { PropertySection } from '@components/main/Grid/PropertiesPanel/controls/PropertyInputs';
 import { resolveImageSource } from '@utils/core/imageSource';
 import { canDecodeImage } from '@utils/core/assetProbe';
 import { useEditSessionCompletionGuard } from '@src/renderer/contexts/EditSessionScope';

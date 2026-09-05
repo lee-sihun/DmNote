@@ -141,7 +141,7 @@ const errors = vi.hoisted(() => ({
   reportElementOpError: vi.fn(),
 }));
 
-vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
+vi.mock('@src/renderer/editor/runtime/operations/elementOps', () => ({
   patchElementPropertyByTargetsViaAuthority:
     patches.patchElementPropertyByTargetsViaAuthority,
   patchCounterBooleanByTargetsViaAuthority:
@@ -190,7 +190,7 @@ vi.mock('@plugins/runtime/displayElement/pluginElementActions', () => ({
   patchNotePaintViaAuthority: patches.patchNotePaintViaAuthority,
   patchStylePropertyViaAuthority: patches.patchDisplayTextViaAuthority,
 }));
-vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
+vi.mock('@src/renderer/editor/runtime/intent/elementIntent', () => ({
   reportElementOpError: errors.reportElementOpError,
   reportElementOpSkipped: vi.fn(),
 }));
@@ -237,10 +237,10 @@ vi.mock('@components/main/common/Dropdown', () => ({
   },
 }));
 vi.mock(
-  '@components/main/Grid/PropertiesPanel/PropertyInputs',
+  '@components/main/Grid/PropertiesPanel/controls/PropertyInputs',
   async (importOriginal) => {
     const actual = await importOriginal<
-      typeof import('@components/main/Grid/PropertiesPanel/PropertyInputs')
+      typeof import('@components/main/Grid/PropertiesPanel/controls/PropertyInputs')
     >();
     return {
       ...actual,
@@ -277,13 +277,16 @@ vi.mock('@components/main/Modal/content/pickers/FontPicker', () => ({
     return null;
   },
 }));
-vi.mock('@components/main/Grid/PropertiesPanel/ShadowControls', () => ({
-  default: (props: (typeof captured.shadows)[number]) => {
-    captured.shadows.push(props);
-    return null;
-  },
-}));
-vi.mock('@src/renderer/editor/runtime/editGestureController', () => ({
+vi.mock(
+  '@components/main/Grid/PropertiesPanel/controls/ShadowControls',
+  () => ({
+    default: (props: (typeof captured.shadows)[number]) => {
+      captured.shadows.push(props);
+      return null;
+    },
+  }),
+);
+vi.mock('@src/renderer/editor/runtime/gesture/editGestureController', () => ({
   editGestureController: {
     preview: gestures.preview,
     cancel: gestures.cancel,
@@ -293,7 +296,7 @@ vi.mock('@src/renderer/editor/runtime/editGestureController', () => ({
   },
 }));
 
-import { PanelNavProvider } from '@components/main/Grid/PropertiesPanel/PanelNavContext';
+import { PanelNavProvider } from '@components/main/Grid/PropertiesPanel/navigation/PanelNavContext';
 import { BatchKeyLikePanel as ActualBatchKeyLikePanel } from '@components/main/Grid/PropertiesPanel/batch/BatchSelectionPanel';
 import {
   BatchGraphOnlyPanel,

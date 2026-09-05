@@ -2,7 +2,7 @@
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ColorInput } from '@components/main/Grid/PropertiesPanel/PropertyInputs';
+import { ColorInput } from '@components/main/Grid/PropertiesPanel/controls/PropertyInputs';
 import ImagePicker from '@components/main/Modal/content/pickers/ImagePicker';
 
 interface CapturedColorPickerProps {

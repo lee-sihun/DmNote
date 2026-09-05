@@ -9,7 +9,7 @@ import {
   pluginInstancesApi,
   type PluginGroupRefsByPlugin,
 } from '@api/modules/pluginInstancesApi';
-import { registerStoredPluginGroupRefsProvider } from '@src/renderer/editor/runtime/pluginGroupMembers';
+import { registerStoredPluginGroupRefsProvider } from '@src/renderer/editor/runtime/intent/pluginGroupMembers';
 
 let refs: PluginGroupRefsByPlugin = {};
 let appliedRevision = -1;

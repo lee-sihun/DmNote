@@ -22,10 +22,10 @@ const operationMocks = vi.hoisted(() => ({
 vi.mock('@hooks/Grid/elementPositionCommit', () => ({
   commitElementPosition: operationMocks.commitPosition,
 }));
-vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
+vi.mock('@src/renderer/editor/runtime/operations/elementOps', () => ({
   deleteElementById: operationMocks.deleteElement,
 }));
-vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
+vi.mock('@src/renderer/editor/runtime/intent/elementIntent', () => ({
   reportElementOpError: vi.fn(),
 }));
 vi.mock('@hooks/shared/useStableHandlerSlots', () => ({

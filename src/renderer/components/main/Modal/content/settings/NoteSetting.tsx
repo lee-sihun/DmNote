@@ -5,7 +5,7 @@ import TabSwitch from '@components/main/common/TabSwitch';
 import {
   PropertyRow,
   PropertySection,
-} from '@components/main/Grid/PropertiesPanel/PropertyInputs';
+} from '@components/main/Grid/PropertiesPanel/controls/PropertyInputs';
 import Modal from '../../Modal';
 import type { PopupMotionState } from '@hooks/ui/usePopupPresence';
 import { useTranslation } from '@contexts/useTranslation';

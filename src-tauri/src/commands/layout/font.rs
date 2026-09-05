@@ -11,7 +11,7 @@ use crate::{
     errors::{CmdResult, CommandError},
     models::FontWeightRange,
     services::font_metadata::parse_font_metadata,
-    state::image_asset::import_font_file,
+    state::assets::image_asset::import_font_file,
 };
 
 /// 폰트 로드 결과 응답 타입

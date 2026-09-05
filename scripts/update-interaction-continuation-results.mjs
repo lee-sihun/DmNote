@@ -99,7 +99,7 @@ const pluginRate = improvement(
   pluginAfter.eventBlockingMs.p95,
 );
 const panelImplementation = implementationCommit(
-  'src/renderer/components/main/Grid/PropertiesPanel/PanelToggleButton.tsx',
+  'src/renderer/components/main/Grid/PropertiesPanel/navigation/PanelToggleButton.tsx',
 );
 const gridImplementation = implementationCommit(
   'src/renderer/hooks/Grid/useGridKeyboard.ts',

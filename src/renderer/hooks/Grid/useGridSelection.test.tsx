@@ -18,8 +18,8 @@ import { handlerRegistry } from '@plugins/runtime/handlers';
 
 import { PASTE_OFFSET } from './constants';
 import { useGridSelection } from './useGridSelection';
-import { deleteFrozenSelection } from '@src/renderer/editor/runtime/deleteFrozenSelection';
-import { ElementIntentAbort } from '@src/renderer/editor/runtime/elementIntent';
+import { deleteFrozenSelection } from '@src/renderer/editor/runtime/intent/deleteFrozenSelection';
+import { ElementIntentAbort } from '@src/renderer/editor/runtime/intent/elementIntent';
 
 const mocks = vi.hoisted(() => ({
   commitGeneratedSemanticOps: vi.fn(
@@ -61,19 +61,22 @@ const mocks = vi.hoisted(() => ({
   sendBridgeMessage: vi.fn(),
 }));
 
-vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
-  editorCoordinator: {
-    commitPatch: mocks.commitPatch,
-    commitGeneratedPatch: mocks.commitGeneratedPatch,
-    getState: () => ({ lastAck: mocks.lastAck }),
-  },
-}));
+vi.mock(
+  '@src/renderer/editor/runtime/coordinator/editorStateCoordinator',
+  () => ({
+    editorCoordinator: {
+      commitPatch: mocks.commitPatch,
+      commitGeneratedPatch: mocks.commitGeneratedPatch,
+      getState: () => ({ lastAck: mocks.lastAck }),
+    },
+  }),
+);
 
-vi.mock('@src/renderer/editor/runtime/editorSemanticOps', () => ({
+vi.mock('@src/renderer/editor/runtime/operations/editorSemanticOps', () => ({
   commitGeneratedSemanticOps: mocks.commitGeneratedSemanticOps,
 }));
 
-vi.mock('@src/renderer/editor/runtime/mixedElementIntent', () => ({
+vi.mock('@src/renderer/editor/runtime/intent/mixedElementIntent', () => ({
   applyPluginRemovalEagerly: (
     _fullIds: readonly string[],
     mutate: () => void,

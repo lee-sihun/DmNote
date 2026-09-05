@@ -1,6 +1,6 @@
 import React, { Profiler, useState } from 'react';
 
-import { NumberInput } from '@components/main/Grid/PropertiesPanel/PropertyInputs';
+import { NumberInput } from '@components/main/Grid/PropertiesPanel/controls/PropertyInputs';
 import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
 
 interface NumberInputBenchmarkSurfaceProps {
