@@ -67,6 +67,16 @@ src-tauri/src/         # Rust Backend
 └── audio/            # Sound engine
 ```
 
+### Editor runtime and native state
+
+`src/renderer/editor/runtime/` groups modules by responsibility: `coordinator` owns commit coordination and reconciliation, `projection` computes semantic document changes, `operations` exposes element edits, `intent` resolves targets, `geometry` plans layout, `gesture` owns previews and sessions, and `lifecycle` coordinates flushing and write barriers. Tests stay next to their implementation. Import the owning module directly; avoid a shared barrel that pulls UI stores into the commit engine.
+
+`PropertiesPanel/` groups reusable inputs in `controls`, panel chrome and navigation in `navigation`, selection adapters in `selection`, and plugin settings in `plugin`. Existing `single`, `batch`, and `layer` groups remain. Keep each test with its implementation when moving modules.
+
+`src-tauri/src/state/assets/` owns local asset identity and import helpers. `state/window/` owns platform window integration and panel dragging; `panel_drag/machine.rs` owns gesture state transitions. Document commits, persistence and recovery remain in their existing state modules.
+
+`npm run type-check` also runs `tsconfig.strict.json`. This enables strict checking for shared contracts, editor models, the commit engine, semantic projections and the pure geometry planner, including their imported dependencies. UI integration and test fixtures still use the main configuration. Expand this scope as those areas are migrated; do not suppress errors with non-null assertions or `any`.
+
 ## 📌 Coding Rules
 
 ### File Naming
@@ -106,7 +116,7 @@ src-tauri/src/         # Rust Backend
 ### Frontend Changes
 
 ```bash
-npx tsc --noEmit    # Type check
+npm run type-check  # Full type check + strict core checks
 npm run lint        # Lint
 npm run format      # Format
 ```

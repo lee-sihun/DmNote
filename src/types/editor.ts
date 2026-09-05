@@ -1038,9 +1038,14 @@ const assertExactPosition = (
       assertRawKeysPreserved(child, canonical[key], `${path}.${key}`);
     }
   };
+  const canonicalPosition: Record<string, unknown> = parsed.data;
   for (const key of Object.keys(value)) {
     if (!KEY_POSITION_KEYS.has(key)) continue;
-    assertRawKeysPreserved(value[key], parsed.data[key], `${label}.${key}`);
+    assertRawKeysPreserved(
+      value[key],
+      canonicalPosition[key],
+      `${label}.${key}`,
+    );
   }
 };
 

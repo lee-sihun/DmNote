@@ -286,3 +286,16 @@ Rust 선언의 signature/attribute 대조에서 나타난 production 차이는 t
 ### 재병합 승인
 
 2026-09-05 사용자가 재검토 후 main 병합을 명시적으로 승인했다. 원격을 다시 조회해 main이 `d2b9f9ab`, 검증한 후보가 `17198717`이고 main에 추가 변경이 없음을 확인했다. 탭 정규화 보정과 추가 계약 테스트를 포함한 후보를 통합하며, 위 승인 대기 조건은 해소됐다. 이 상태 기록 외에 검증 이후 제품 코드와 테스트 변경은 없다.
+
+## 2026-09-05 런타임 안전성·폴더 구조·strict 검사 후속 작업
+
+작업 브랜치: `refactor/runtime-safety-and-structure`. 앞선 리팩터링·병합 기록과 후속 계획은 유지하며, 이번 변경은 다음과 같다. 코드사이닝은 운영 인증 심사 완료까지 보류한 사용자 결정에 따라 변경하지 않았다.
+
+- OBS 미디어 percent decoder의 UTF-8 문자열 슬라이싱을 바이트 해석으로 변경했다. 잘못된 Unicode·불완전한 escape 입력과 인증된 media 요청의 400 응답을 테스트한다.
+- 웹폰트 모달 테스트는 가상 타이머와 명시적 Font Loading API 모킹을 사용한다. 디바운스 후 로드와 닫기 시 취소·스타일 정리를 검증한다.
+- `editor/runtime`의 직속 파일 63개를 `coordinator`, `projection`, `operations`, `intent`, `geometry`, `gesture`, `lifecycle`로 묶었다. 편집 조정기에서 계약 타입, 공통 rebase 계산·의미 연산 결과 검증, pending gesture 보존 정책을 분리했다.
+- `PropertiesPanel`의 직속 파일은 50개에서 3개로 줄였다. `controls`, `navigation`, `selection`, `plugin`을 추가하고 batch 전용 모듈은 기존 `batch`에 배치했다. 테스트와 관련 스크립트 경로도 함께 이동했다.
+- Rust `state`의 자산 유틸리티는 `assets`, 창·플랫폼 연동은 `window`로 옮겼다. 직속 파일은 21개에서 13개로 줄었고, 패널 드래그 상태 전이는 `window/panel_drag/machine.rs`로 분리했다. 저장·복구 트랜잭션의 소유권과 command/event·permissions는 유지했다.
+- `tsconfig.strict.json`에서 공유 타입, 편집 모델, 커밋 엔진, 의미 연산 투영, 순수 배치 계획과 import 의존성을 검사한다. `npm run type-check`에 연결했으므로 기존 CI 품질 검사에도 포함된다. 전체 UI·테스트 fixture의 strict 전환은 아직 완료하지 않았으며, 해당 영역 정리 시 검사 범위를 확장한다.
+
+검증: 프론트 전체 테스트 3,604개 통과·18개 제외, Rust 테스트 1,048개 통과·6개 제외, CI 정책 테스트 15개 통과. TypeScript 일반·strict 검사, Vite build, Rust check·Clippy(`--all-targets --locked -- -D warnings`) 통과. ESLint는 기존 `SoundTrimModal`의 훅 의존성 경고 1건을 유지한다. 빌드의 대형 청크 경고도 남아 있다. Windows 실제 빌드·WebView·ASIO 장치 검증은 이번 macOS 로컬 검증에 포함하지 않았다.
