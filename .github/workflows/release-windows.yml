@@ -29,18 +29,27 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      contents: write # 빌드 전에 원격 릴리스 태그 생성
+      contents: read
     outputs:
+      node_version: ${{ steps.toolchain.outputs.node }}
+      rust_version: ${{ steps.toolchain.outputs.rust }}
       version: ${{ steps.check.outputs.version }}
       release: ${{ steps.check.outputs.release }}
       test_signing: ${{ steps.check.outputs.test_signing }}
       should_build: ${{ steps.check.outputs.should_build }}
       release_sha: ${{ steps.check.outputs.release_sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      - id: toolchain
+        name: 빌드 도구 버전 확인
+        shell: bash
+        run: |
+          echo "node=$(cat .node-version)" >> "$GITHUB_OUTPUT"
+          echo "rust=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
 
       - name: SignPath 설정 확인
         if: github.event_name == 'workflow_dispatch' && inputs.release != true
@@ -137,13 +146,30 @@ jobs:
           echo "release_sha=$RELEASE_SHA" >> "$GITHUB_OUTPUT"
           echo "release=$RELEASE test_signing=$TEST_SIGNING should_build=$SHOULD_BUILD release_sha=$RELEASE_SHA"
 
+  validate:
+    name: 배포 SHA 검증
+    needs: preflight
+    if: needs.preflight.outputs.should_build == 'true'
+    uses: ./.github/workflows/ci-release.yml
+    with:
+      validation_ref: ${{ needs.preflight.outputs.release_sha }}
+      platform: windows
+
+  tag:
+    name: 검증된 릴리즈 태그
+    needs: [preflight, validate]
+    if: needs.preflight.outputs.release == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
       - name: 릴리스 태그 확인 / 생성
-        if: steps.check.outputs.release == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.check.outputs.version }}
-          TARGET: ${{ steps.check.outputs.release_sha }}
+          TAG: ${{ needs.preflight.outputs.version }}
+          TARGET: ${{ needs.preflight.outputs.release_sha }}
         run: |
           set -euo pipefail
 
@@ -177,8 +203,8 @@ jobs:
 
   build-sign-package:
     name: Windows 빌드·패키징
-    needs: preflight
-    if: needs.preflight.outputs.should_build == 'true'
+    needs: [preflight, validate, tag]
+    if: ${{ !cancelled() && needs.preflight.outputs.should_build == 'true' && needs.validate.result == 'success' && (needs.tag.result == 'success' || needs.tag.result == 'skipped') }}
     concurrency:
       group: release-windows
       cancel-in-progress: false
@@ -192,19 +218,19 @@ jobs:
       SIGNING_POLICY_SLUG: test-signing
       TEST_SIGNING: ${{ needs.preflight.outputs.test_signing }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.preflight.outputs.release_sha }}
           persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 22
+          node-version: ${{ needs.preflight.outputs.node_version }}
           cache: npm
 
       - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable, 2026-08-05
         with:
-          toolchain: stable
+          toolchain: ${{ needs.preflight.outputs.rust_version }}
 
       - name: Windows 빌드 도구 확인
         shell: pwsh
@@ -223,12 +249,9 @@ jobs:
 
       - run: npm ci
 
-      - name: Windows ASIO 출력 정책 테스트
-        run: cargo test --manifest-path src-tauri/Cargo.toml --features asio-backend audio::engine --lib
-
       # 자동 업데이트 자산과 포터블 ZIP이 공유할 raw EXE를 한 번만 빌드
       - name: Windows x64 빌드
-        run: npm run tauri:build -- --no-bundle
+        run: npm run tauri:build -- --no-bundle --ci -- --locked
 
       - name: 빌드 산출물 준비
         id: prepare
@@ -256,7 +279,7 @@ jobs:
       - name: 미서명 EXE 업로드
         if: needs.preflight.outputs.test_signing == 'true'
         id: upload-unsigned
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dmnote-windows-unsigned-${{ env.VERSION }}
           path: dist/signing-input/DM.NOTE.exe
@@ -266,7 +289,7 @@ jobs:
       - name: SignPath 테스트 서명
         if: needs.preflight.outputs.test_signing == 'true'
         id: signpath
-        uses: signpath/github-action-submit-signing-request@v2
+        uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
@@ -394,7 +417,7 @@ jobs:
 
       - name: 테스트 서명 산출물 업로드
         if: needs.preflight.outputs.test_signing == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dmnote-windows-test-signed-${{ env.VERSION }}
           path: dist/windows-final/*

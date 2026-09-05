@@ -1,0 +1,75 @@
+name: Release Validation
+on:
+  workflow_call:
+    inputs:
+      validation_ref:
+        description: 배포할 commit SHA
+        type: string
+        required: true
+      platform:
+        description: windows 또는 macos
+        type: string
+        required: true
+permissions:
+  contents: read
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: '0'
+  CARGO_PROFILE_DEV_DEBUG: '0'
+  CARGO_PROFILE_TEST_DEBUG: '0'
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: 입력 검증
+        env:
+          VALIDATION_REF: ${{ inputs.validation_ref }}
+          PLATFORM: ${{ inputs.platform }}
+        run: |
+          [[ "$VALIDATION_REF" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$PLATFORM" == windows || "$PLATFORM" == macos ]]
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.validation_ref }}
+          path: release-source
+          persist-credentials: false
+      - uses: ./.github/actions/setup-node
+        with:
+          workspace: release-source
+      - name: 배포 소스 품질 검사
+        working-directory: release-source
+        run: |
+          npm ci --no-audit --no-fund
+          npm run format:check
+          npm run lint
+          npm run type-check
+          npm test
+          npm run build
+          cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+  native:
+    needs: quality
+    runs-on: ${{ inputs.platform == 'windows' && 'windows-2025' || 'macos-15' }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.validation_ref }}
+          path: release-source
+          persist-credentials: false
+      - if: inputs.platform == 'windows'
+        uses: ./.github/actions/validate-windows
+        with:
+          workspace: release-source
+      - if: inputs.platform == 'macos'
+        uses: ./.github/actions/validate-macos
+        with:
+          workspace: release-source
