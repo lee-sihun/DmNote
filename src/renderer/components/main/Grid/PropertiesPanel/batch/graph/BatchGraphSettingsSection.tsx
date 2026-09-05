@@ -5,8 +5,12 @@ import type {
 import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
 import Checkbox from '@components/main/common/checkbox/Checkbox';
 import Dropdown from '@components/main/common/dropdown/Dropdown';
-import { ColorInput, NumberInput, PropertyRow } from '../index';
-import { previewBatchGraphColor } from '../selection/previewPatchForwarders';
+import {
+  ColorInput,
+  NumberInput,
+  PropertyRow,
+} from '../../controls/PropertyInputs';
+import { previewBatchGraphColor } from '../../selection/previewPatchForwarders';
 import {
   snapBatchGraphSpeed,
   type BatchGraphSettingsModel,

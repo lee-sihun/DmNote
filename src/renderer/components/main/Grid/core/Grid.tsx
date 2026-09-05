@@ -32,13 +32,13 @@ import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { PluginElementsRenderer } from '@components/shared/PluginElementsRenderer';
-import { useGridZoomPan } from '@hooks/Grid/useGridZoomPan';
+import { useGridZoomPan } from '@hooks/Grid/viewport/useGridZoomPan';
 import {
   addCanvasElementAt,
   placeFrozenDuplicateAt,
   useGridCanvasActions,
-} from '@hooks/Grid/useGridCanvasActions';
-import type { DuplicateState } from '@hooks/Grid/useGridCanvasActions';
+} from '@hooks/Grid/contextMenu/useGridCanvasActions';
+import type { DuplicateState } from '@hooks/Grid/contextMenu/useGridCanvasActions';
 import GridMinimap from './GridMinimap';
 import GridBackground from './GridBackground';
 import SmartGuidesOverlay from '../overlays/SmartGuidesOverlay';
@@ -90,7 +90,7 @@ import DuplicateElementGhost from './DuplicateElementGhost';
 import NativeGridElements from './NativeGridElements';
 import GridSelectionOverlays from '../overlays/GridSelectionOverlays';
 import { executeNativeContextMenuAction } from './nativeContextMenuActions';
-import { useSelectedElementDragLifecycle } from '@hooks/Grid/useSelectedElementDragLifecycle';
+import { useSelectedElementDragLifecycle } from '@hooks/Grid/drag/useSelectedElementDragLifecycle';
 
 type ToolbarAddRequest = {
   id: number;

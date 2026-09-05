@@ -62,7 +62,7 @@ const correctness = spawnSync(
     'run',
     'src/renderer/components/main/Grid/handles/ResizeHandles.test.tsx',
     'src/renderer/utils/animation/rafLatestScheduler.test.ts',
-    'src/renderer/hooks/Grid/useGridResize.test.tsx',
+    'src/renderer/hooks/Grid/resize/useGridResize.test.tsx',
   ],
   { cwd: root, stdio: 'inherit' },
 );

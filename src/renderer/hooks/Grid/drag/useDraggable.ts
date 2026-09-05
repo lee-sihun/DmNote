@@ -13,7 +13,7 @@ import {
   resumeCustomCursorHover,
   suspendCustomCursorHover,
 } from '@utils/grid/cursorUtils';
-import { DRAG_THRESHOLD } from './constants';
+import { DRAG_THRESHOLD } from '../constants';
 import { tryAcquireDragSession, releaseDragSession } from './dragSession';
 
 interface ElementBounds {

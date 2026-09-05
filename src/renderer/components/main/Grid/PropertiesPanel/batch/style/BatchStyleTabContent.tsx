@@ -8,7 +8,7 @@ import {
   ColorInput,
   TextInput,
   PropertySection,
-} from '../index';
+} from '../../controls/PropertyInputs';
 import Checkbox from '@components/main/common/checkbox/Checkbox';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
@@ -28,7 +28,7 @@ import {
   EMPTY_BATCH_ELEMENT_BINDING,
   type BatchElementBinding,
 } from '@hooks/pickers/useBatchElementBinding';
-import BatchGeometrySection from './BatchGeometrySection';
+import BatchGeometrySection from '../geometry/BatchGeometrySection';
 import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 import type {
@@ -37,7 +37,7 @@ import type {
   EditorStylePropertyPreviewPatchV1,
   EditorShadowPropertyPatchV1,
 } from '@src/types/editor';
-import type { BatchElementPropertyUpdate } from '../types';
+import type { BatchElementPropertyUpdate } from '../../types';
 import BatchSoundSection from './BatchSoundSection';
 import BatchShadowSection from './BatchShadowSection';
 import BatchTypographySection, {

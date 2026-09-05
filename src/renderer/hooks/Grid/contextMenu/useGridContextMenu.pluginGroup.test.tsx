@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   PLUGIN_GROUP_ID,
   useGridContextMenu,
-} from '@hooks/Grid/useGridContextMenu';
+} from '@hooks/Grid/contextMenu/useGridContextMenu';
 import en from '@src/renderer/locales/en.json';
 import ko from '@src/renderer/locales/ko.json';
 import ru from '@src/renderer/locales/ru.json';

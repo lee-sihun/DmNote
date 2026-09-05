@@ -49,9 +49,9 @@ import { shouldNormalizePropertyTabToStyle } from './PropertiesPanel/selection/p
 import { usePropertiesPanelRename } from './PropertiesPanel/navigation/usePropertiesPanelRename';
 import { usePluginSettingsPanelController } from './PropertiesPanel/plugin/usePluginSettingsPanelController';
 import { usePropertiesPanelVisibility } from './PropertiesPanel/navigation/usePropertiesPanelVisibility';
-import { usePropertiesPanelBatchGeometry } from './PropertiesPanel/batch/usePropertiesPanelBatchGeometry';
+import { usePropertiesPanelBatchGeometry } from './PropertiesPanel/batch/geometry/usePropertiesPanelBatchGeometry';
 import { usePropertiesPanelBatchCommitHandlers } from './PropertiesPanel/batch/usePropertiesPanelBatchCommitHandlers';
-import { useBatchColorPickerController } from './PropertiesPanel/batch/useBatchColorPickerController';
+import { useBatchColorPickerController } from './PropertiesPanel/batch/style/useBatchColorPickerController';
 
 // ============================================================================
 // 메인 컴포넌트 Props

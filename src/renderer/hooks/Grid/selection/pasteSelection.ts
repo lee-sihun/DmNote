@@ -40,7 +40,7 @@ import {
 } from '@utils/layerGroupUtils';
 import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import { createFrozenPasteModel } from '@utils/grid/selectionPasteModel';
-import { PASTE_OFFSET } from './constants';
+import { PASTE_OFFSET } from '../constants';
 
 interface PasteSelectionOptions {
   selectedKeyType: string;

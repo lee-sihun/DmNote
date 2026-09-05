@@ -102,7 +102,7 @@ const panelImplementation = implementationCommit(
   'src/renderer/components/main/Grid/PropertiesPanel/navigation/PanelToggleButton.tsx',
 );
 const gridImplementation = implementationCommit(
-  'src/renderer/hooks/Grid/useGridKeyboard.ts',
+  'src/renderer/hooks/Grid/selection/useGridKeyboard.ts',
 );
 const pluginImplementation = implementationCommit(
   'src/renderer/utils/plugin/pluginHandlerDispatcher.ts',

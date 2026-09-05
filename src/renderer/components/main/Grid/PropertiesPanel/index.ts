@@ -22,8 +22,8 @@ export { default as NoteTabContent } from './single/NoteTabContent';
 export { default as CounterTabContent } from './single/CounterTabContent';
 
 // 탭 콘텐츠 컴포넌트 (일괄/다중 선택)
-export { default as BatchStyleTabContent } from './batch/BatchStyleTabContent';
-export { default as BatchNoteTabContent } from './batch/BatchNoteTabContent';
+export { default as BatchStyleTabContent } from './batch/style/BatchStyleTabContent';
+export { default as BatchNoteTabContent } from './batch/note/BatchNoteTabContent';
 export { default as BatchCounterTabContent } from './batch/BatchCounterTabContent';
 
 // 레이어 패널

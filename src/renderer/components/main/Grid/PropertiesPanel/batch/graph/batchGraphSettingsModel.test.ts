@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
-import { aggregateMixedValue } from '@utils/core/mixedValue';
+import { aggregateMixedValue } from '@src/renderer/components/main/Grid/PropertiesPanel/batch/mixedValue';
 import {
   createBatchGraphSettingsModel,
   snapBatchGraphSpeed,

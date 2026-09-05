@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { KeyPosition } from '@src/types/key/keys';
 import type { ElementShadowSpec } from '@src/types/key/shadows';
-import ActualBatchStyleTabContent from '@components/main/Grid/PropertiesPanel/batch/BatchStyleTabContent';
+import ActualBatchStyleTabContent from '@components/main/Grid/PropertiesPanel/batch/style/BatchStyleTabContent';
 import { BatchGraphOnlyPanel as ActualBatchGraphOnlyPanel } from '@components/main/Grid/PropertiesPanel/batch/BatchSelectionPanel';
 import { PanelNavProvider } from '@components/main/Grid/PropertiesPanel/navigation/PanelNavContext';
 import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';

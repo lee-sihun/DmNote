@@ -8,14 +8,11 @@ import {
   normalizeCounterSettings,
   createDefaultCounterSettings,
 } from '@src/types/key/keys';
-import {
-  Tabs,
-  BatchStyleTabContent,
-  BatchNoteTabContent,
-  BatchCounterTabContent,
-  TABS,
-  TabType,
-} from '../index';
+import { Tabs } from '../controls/PropertyInputs';
+import BatchStyleTabContent from './style/BatchStyleTabContent';
+import BatchNoteTabContent from './note/BatchNoteTabContent';
+import BatchCounterTabContent from './BatchCounterTabContent';
+import { TABS, type TabType } from '../types';
 import EditSessionBoundary from '../selection/EditSessionBoundary';
 import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
 import {
@@ -27,12 +24,15 @@ import { BATCH_COUNTER_ANIMATION_PAGE_KEY } from './BatchCounterTabContent';
 import type { EditorCounterFillPropertyPatchV1 } from '@src/types/editor';
 import { hexWithAlphaPercent } from '@utils/color/colorUtils';
 import type { BatchElementPropertyUpdate } from '../types';
-import { useBatchNotePaint, type BatchNoteSurface } from './useBatchNotePaint';
+import {
+  useBatchNotePaint,
+  type BatchNoteSurface,
+} from './note/useBatchNotePaint';
 import BatchPanelHeader from './BatchPanelHeader';
-import BatchImagePickerPopup from './BatchImagePickerPopup';
-import BatchColorPickerPopup from './BatchColorPickerPopup';
-import BatchGraphSettingsSection from './BatchGraphSettingsSection';
-import { createBatchGraphSettingsModel } from './batchGraphSettingsModel';
+import BatchImagePickerPopup from './style/BatchImagePickerPopup';
+import BatchColorPickerPopup from './style/BatchColorPickerPopup';
+import BatchGraphSettingsSection from './graph/BatchGraphSettingsSection';
+import { createBatchGraphSettingsModel } from './graph/batchGraphSettingsModel';
 import { useBatchKeyLikeCommitRuntime } from './useBatchKeyLikeCommitRuntime';
 import {
   commitBoundActiveImage,

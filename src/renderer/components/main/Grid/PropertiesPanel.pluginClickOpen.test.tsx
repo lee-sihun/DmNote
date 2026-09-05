@@ -15,7 +15,7 @@ import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import { releaseDragSession } from '@hooks/Grid/dragSession';
+import { releaseDragSession } from '@hooks/Grid/drag/dragSession';
 import type {
   PluginDefinitionInternal,
   PluginDisplayElementInternal,
@@ -46,9 +46,9 @@ vi.mock('@hooks/Grid', async (importOriginal) => {
   };
 });
 
-vi.mock('@hooks/Grid/useSelectionDrag', async (importOriginal) => {
+vi.mock('@hooks/Grid/drag/useSelectionDrag', async (importOriginal) => {
   const actual = await importOriginal<
-    typeof import('@hooks/Grid/useSelectionDrag')
+    typeof import('@hooks/Grid/drag/useSelectionDrag')
   >();
   return {
     ...actual,

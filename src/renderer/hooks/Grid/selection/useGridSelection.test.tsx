@@ -16,7 +16,7 @@ import type {
 } from '@src/types/plugin/api';
 import { handlerRegistry } from '@plugins/runtime/handlers';
 
-import { PASTE_OFFSET } from './constants';
+import { PASTE_OFFSET } from '../constants';
 import { useGridSelection } from './useGridSelection';
 import { deleteFrozenSelection } from '@src/renderer/editor/runtime/intent/deleteFrozenSelection';
 import { ElementIntentAbort } from '@src/renderer/editor/runtime/intent/elementIntent';

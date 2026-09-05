@@ -302,7 +302,7 @@ import {
   BatchGraphOnlyPanel,
   BatchKnobOnlyPanel,
 } from '@components/main/Grid/PropertiesPanel/batch/BatchSelectionPanel';
-import { BATCH_STYLE_SOUND_PAGE_KEY } from '@components/main/Grid/PropertiesPanel/batch/BatchStyleTabContent';
+import { BATCH_STYLE_SOUND_PAGE_KEY } from '@components/main/Grid/PropertiesPanel/batch/style/BatchStyleTabContent';
 import { BATCH_COUNTER_ANIMATION_PAGE_KEY } from '@components/main/Grid/PropertiesPanel/batch/BatchCounterTabContent';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;

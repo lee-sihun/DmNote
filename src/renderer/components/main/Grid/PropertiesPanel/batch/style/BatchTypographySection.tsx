@@ -18,7 +18,7 @@ import {
   DEFAULT_ELEMENT_FONT_BOLD,
 } from '@utils/element/elementDefaults';
 import { resolveSupportedFontWeight } from '@utils/typography/fontWeights';
-import { aggregateMixedValue } from '@utils/core/mixedValue';
+import { aggregateMixedValue } from '@src/renderer/components/main/Grid/PropertiesPanel/batch/mixedValue';
 import {
   ColorInput,
   FontStyleToggle,
@@ -26,11 +26,11 @@ import {
   PropertyRow,
   PropertySection,
   TextInput,
-  createFontStyleToggleHandlers,
-} from '../index';
-import FontWeightDropdown from '../controls/FontWeightDropdown';
-import { usePanelNav } from '../navigation/PanelNavContext';
-import type { BatchElementPropertyUpdate } from '../types';
+} from '../../controls/PropertyInputs';
+import { createFontStyleToggleHandlers } from '../../selection/fontStyleToggleHandlers';
+import FontWeightDropdown from '../../controls/FontWeightDropdown';
+import { usePanelNav } from '../../navigation/PanelNavContext';
+import type { BatchElementPropertyUpdate } from '../../types';
 
 const FONT_PAGE_KEY = 'batch-style:font';
 

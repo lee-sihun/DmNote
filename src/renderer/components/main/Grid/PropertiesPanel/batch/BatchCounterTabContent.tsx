@@ -13,7 +13,7 @@ import {
   NumberInput,
   FontStyleToggle,
   PropertySection,
-} from '../index';
+} from '../controls/PropertyInputs';
 import Checkbox from '@components/main/common/checkbox/Checkbox';
 import Dropdown from '@components/main/common/dropdown/Dropdown';
 import FontPicker from '@components/main/Modal/content/pickers/font/FontPicker';

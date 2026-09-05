@@ -6,7 +6,7 @@ import React, { act, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { useGridContextMenu } from '@hooks/Grid/useGridContextMenu';
+import { useGridContextMenu } from '@hooks/Grid/contextMenu/useGridContextMenu';
 import { usePluginMenuStore } from '@stores/plugin/usePluginMenuStore';
 import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
 import type { KeyMappings, KeyPosition } from '@src/types/key/keys';

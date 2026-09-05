@@ -42,7 +42,7 @@ vi.mock('@api/modules/editorApi', () => ({
 }));
 
 import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
-import { useGridSelection } from './useGridSelection';
+import { useGridSelection } from '../selection/useGridSelection';
 import { useSelectionDrag } from './useSelectionDrag';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useKeyStore } from '@stores/data/useKeyStore';

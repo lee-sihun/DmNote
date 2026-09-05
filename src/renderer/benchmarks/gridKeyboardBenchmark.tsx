@@ -1,6 +1,6 @@
 import React, { Profiler, useCallback, useMemo, useRef, useState } from 'react';
 
-import { useGridKeyboard } from '@hooks/Grid/useGridKeyboard';
+import { useGridKeyboard } from '@hooks/Grid/selection/useGridKeyboard';
 
 interface GridKeyboardBenchmarkSurfaceProps {
   strategy: 'sync' | 'frame';

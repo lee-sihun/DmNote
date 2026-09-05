@@ -200,7 +200,10 @@ export const commitBoundSoundPath = (
   void persisted.catch(reportElementOpError);
 };
 
-export type { BatchLocalColors, BatchPickerTarget } from './batchPickerTypes';
+export type {
+  BatchLocalColors,
+  BatchPickerTarget,
+} from './style/batchPickerTypes';
 
 export type MixedValueResult<T> = { isMixed: boolean; value: T };
 export type MixedValueGetter<P> = <T>(

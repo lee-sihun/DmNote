@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { PropertyRow, NumberInput } from '../index';
+import { PropertyRow, NumberInput } from '../../controls/PropertyInputs';
 
 const SPACING_COMMIT_DEBOUNCE_MS = 80;
 const SPACING_COMMIT_EPSILON = 0.0001;

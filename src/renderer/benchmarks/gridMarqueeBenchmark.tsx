@@ -1,6 +1,6 @@
 import React, { Profiler } from 'react';
 
-import { useGridMarquee } from '@hooks/Grid/useGridMarquee';
+import { useGridMarquee } from '@hooks/Grid/selection/useGridMarquee';
 
 interface GridMarqueeBenchmarkSurfaceProps {
   strategy: 'legacy' | 'frame';

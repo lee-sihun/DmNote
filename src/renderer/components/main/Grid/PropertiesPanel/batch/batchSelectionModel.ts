@@ -10,7 +10,7 @@ import type {
 import type { KnobItemPosition, KnobItemPositions } from '@src/types/key/knobs';
 import type { StatItemPositions } from '@src/types/key/statItems';
 import { getKeyInfoByGlobalKey } from '@utils/input/KeyMaps';
-import { aggregateMixedValue } from '@utils/core/mixedValue';
+import { aggregateMixedValue } from '@src/renderer/components/main/Grid/PropertiesPanel/batch/mixedValue';
 import { slotCanonical, slotDisplayName } from '@utils/keySlot';
 import { getStatTypeLabel } from '@utils/grid/statTypeLabel';
 

@@ -1,4 +1,4 @@
-import ShadowControls from '../controls/ShadowControls';
+import ShadowControls from '../../controls/ShadowControls';
 import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
 import type {
   EditorShadowPropertyPatchV1,

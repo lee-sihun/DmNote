@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 
-import type { DuplicateState } from '@hooks/Grid/useGridCanvasActions';
+import type { DuplicateState } from '@hooks/Grid/contextMenu/useGridCanvasActions';
 import { resolveImageSource } from '@utils/media/imageSource';
 import {
   DEFAULT_IMAGE_MODE,

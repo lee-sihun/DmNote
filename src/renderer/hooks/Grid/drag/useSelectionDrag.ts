@@ -13,7 +13,7 @@ import {
   calculateSnapPoints,
   type ElementBounds,
 } from '@utils/grid/smartGuides';
-import { DRAG_THRESHOLD } from './constants';
+import { DRAG_THRESHOLD } from '../constants';
 import { tryAcquireDragSession, releaseDragSession } from './dragSession';
 import { isMac } from '@utils/core/platform';
 import { calculateZoomAdjustedGridSize, snapToGrid } from '@hooks/Grid/utils';

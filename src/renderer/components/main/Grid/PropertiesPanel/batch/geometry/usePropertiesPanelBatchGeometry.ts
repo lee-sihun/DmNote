@@ -1,5 +1,5 @@
-import { useBatchHandlers } from './useBatchHandlers';
-import type { usePropertiesPanelSelection } from '../selection/usePropertiesPanelSelection';
+import { useBatchHandlers } from '../useBatchHandlers';
+import type { usePropertiesPanelSelection } from '../../selection/usePropertiesPanelSelection';
 import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
 import {
   commitBatchGeometryByIds,

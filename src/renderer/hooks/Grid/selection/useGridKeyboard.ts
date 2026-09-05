@@ -14,7 +14,7 @@ import {
 } from '@stores/grid/useGridSelectionStore';
 import { reportElementOpError } from '@src/renderer/editor/runtime/intent/elementIntent';
 import { useKeyStore } from '@stores/data/useKeyStore';
-import { ARROW_KEY_HISTORY_DELAY } from './constants';
+import { ARROW_KEY_HISTORY_DELAY } from '../constants';
 import { isMac } from '@utils/core/platform';
 import {
   groupSelectedElements,

@@ -6,7 +6,7 @@ import {
   DisplayElementTemplateHelpers,
 } from '@src/types/plugin/api';
 import { useDraggable } from '@hooks/Grid';
-import { useSelectionDrag } from '@hooks/Grid/useSelectionDrag';
+import { useSelectionDrag } from '@hooks/Grid/drag/useSelectionDrag';
 import { useSmartGuidesElements } from '@hooks/Grid';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import {

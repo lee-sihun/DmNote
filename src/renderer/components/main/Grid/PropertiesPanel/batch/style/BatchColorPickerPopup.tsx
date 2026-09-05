@@ -21,8 +21,11 @@ import type {
   BatchLocalColors,
   BatchPickerTarget,
   MixedValueGetter,
-} from './batchPanelShared';
-import type { BatchNoteSurface, useBatchNotePaint } from './useBatchNotePaint';
+} from '../batchPanelShared';
+import type {
+  BatchNoteSurface,
+  useBatchNotePaint,
+} from '../note/useBatchNotePaint';
 
 type BatchNotePaintController = ReturnType<typeof useBatchNotePaint>;
 

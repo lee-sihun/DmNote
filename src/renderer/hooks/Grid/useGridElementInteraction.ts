@@ -3,7 +3,7 @@ import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { isMac } from '@utils/core/platform';
 import { useDraggable, useSmartGuidesElements } from '@hooks/Grid';
-import { useSelectionDrag } from './useSelectionDrag';
+import { useSelectionDrag } from './drag/useSelectionDrag';
 
 export interface GridElementSelectionRef {
   id: string;

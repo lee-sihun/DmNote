@@ -17,7 +17,7 @@ import {
   captureBatchElementBinding,
   useBatchElementBinding,
 } from '@hooks/pickers/useBatchElementBinding';
-import { BATCH_STYLE_SOUND_PAGE_KEY } from './BatchStyleTabContent';
+import { BATCH_STYLE_SOUND_PAGE_KEY } from './style/BatchStyleTabContent';
 import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import { captureEditorDocument } from '@src/renderer/editor/runtime/coordinator/editorStateCoordinator';

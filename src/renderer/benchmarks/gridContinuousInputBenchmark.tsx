@@ -1,6 +1,6 @@
 import React, { Profiler, useRef } from 'react';
 
-import { useGridZoomPan } from '@hooks/Grid/useGridZoomPan';
+import { useGridZoomPan } from '@hooks/Grid/viewport/useGridZoomPan';
 
 interface GridContinuousInputBenchmarkSurfaceProps {
   strategy: 'legacy' | 'frame';

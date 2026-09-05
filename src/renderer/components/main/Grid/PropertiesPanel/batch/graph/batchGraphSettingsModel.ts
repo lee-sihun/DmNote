@@ -3,7 +3,7 @@ import type {
   GraphItemType,
 } from '@src/types/key/graphItems';
 import { parseAlphaPercent, toRgbHexColor } from '@utils/color/colorUtils';
-import type { MixedValueGetter, MixedValueResult } from './batchPanelShared';
+import type { MixedValueGetter, MixedValueResult } from '../batchPanelShared';
 
 export interface BatchGraphSettingsModel {
   graphType: MixedValueResult<GraphItemType>;

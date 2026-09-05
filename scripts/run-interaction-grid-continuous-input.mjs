@@ -63,9 +63,9 @@ const correctness = spawnSync(
   [
     'vitest',
     'run',
-    'src/renderer/hooks/Grid/useGridZoomPan.test.tsx',
-    'src/renderer/hooks/Grid/useDraggable.test.tsx',
-    'src/renderer/hooks/Grid/useSelectionDrag.test.tsx',
+    'src/renderer/hooks/Grid/viewport/useGridZoomPan.test.tsx',
+    'src/renderer/hooks/Grid/drag/useDraggable.test.tsx',
+    'src/renderer/hooks/Grid/drag/useSelectionDrag.test.tsx',
   ],
   { cwd: root, stdio: 'inherit' },
 );
@@ -78,7 +78,7 @@ const implementation = execFileSync(
     '-1',
     '--format=%H',
     '--',
-    'src/renderer/hooks/Grid/useGridZoomPan.ts',
+    'src/renderer/hooks/Grid/viewport/useGridZoomPan.ts',
   ],
   { cwd: root, encoding: 'utf8' },
 ).trim();

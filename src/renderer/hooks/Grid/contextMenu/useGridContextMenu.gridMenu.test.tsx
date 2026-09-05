@@ -6,7 +6,7 @@ import React, { act, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useGridContextMenu } from '@hooks/Grid/useGridContextMenu';
+import { useGridContextMenu } from '@hooks/Grid/contextMenu/useGridContextMenu';
 import { usePanelHostStore } from '@stores/grid/usePanelHostStore';
 import en from '@src/renderer/locales/en.json';
 import ko from '@src/renderer/locales/ko.json';

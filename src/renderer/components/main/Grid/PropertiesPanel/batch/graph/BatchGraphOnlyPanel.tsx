@@ -2,16 +2,17 @@ import React from 'react';
 import type { KeyPosition } from '@src/types/key/keys';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
-import { PANEL_ROOT_CLASS } from '../navigation/panelChrome';
-import { BatchStyleTabContent, TABS, type TabType } from '../index';
-import EditSessionBoundary from '../selection/EditSessionBoundary';
+import { PANEL_ROOT_CLASS } from '../../navigation/panelChrome';
+import BatchStyleTabContent from '../style/BatchStyleTabContent';
+import { TABS, type TabType } from '../../types';
+import EditSessionBoundary from '../../selection/EditSessionBoundary';
 import {
   captureBatchElementBinding,
   useBatchElementBinding,
 } from '@hooks/pickers/useBatchElementBinding';
-import type { BatchElementPropertyUpdate } from '../types';
-import BatchPanelHeader from './BatchPanelHeader';
-import BatchImagePickerPopup from './BatchImagePickerPopup';
+import type { BatchElementPropertyUpdate } from '../../types';
+import BatchPanelHeader from '../BatchPanelHeader';
+import BatchImagePickerPopup from '../style/BatchImagePickerPopup';
 import BatchGraphSettingsSection from './BatchGraphSettingsSection';
 import { createBatchGraphSettingsModel } from './batchGraphSettingsModel';
 import {
@@ -22,7 +23,7 @@ import {
   type KeyData,
   type MixedValueGetter,
   type MixedValueResult,
-} from './batchPanelShared';
+} from '../batchPanelShared';
 
 interface BatchGraphOnlyPanelProps {
   setPanelElement: (el: HTMLDivElement | null) => void;

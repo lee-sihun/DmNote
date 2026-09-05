@@ -11,7 +11,7 @@ import {
   type Mock,
 } from 'vitest';
 import type { KeyPosition } from '@src/types/key/keys';
-import BatchStyleTabContent from '@components/main/Grid/PropertiesPanel/batch/BatchStyleTabContent';
+import BatchStyleTabContent from '@components/main/Grid/PropertiesPanel/batch/style/BatchStyleTabContent';
 import { PanelNavProvider } from '@components/main/Grid/PropertiesPanel/navigation/PanelNavContext';
 import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
 

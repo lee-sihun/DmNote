@@ -1,6 +1,6 @@
 import type { BatchElementBinding } from '@hooks/pickers/useBatchElementBinding';
 import type { KeyPosition } from '@src/types/key/keys';
-import SoundSection from '../controls/SoundSection';
+import SoundSection from '../../controls/SoundSection';
 
 export const BATCH_STYLE_SOUND_PAGE_KEY = 'batch-style:sound';
 
