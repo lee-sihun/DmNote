@@ -4,6 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import type { BootstrapPayload } from '@src/types/app';
 import type { EditorCoordinatorState } from '@src/renderer/editor/runtime/editorCoordinator';
+import {
+  isHistoryEditorFlushLocked,
+  subscribeHistoryEditorFlushStart,
+} from '@src/renderer/editor/runtime/historyEditorFlushLock';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -27,8 +31,17 @@ const mocks = vi.hoisted(() => ({
   resyncListener: null as null | (() => void),
   bootstrap: vi.fn(),
   syncHistoryStatus: vi.fn(),
-  dialogAlert: vi.fn(() => Promise.resolve()),
+  dialogAlert: vi.fn<(message: string, options?: unknown) => Promise<void>>(
+    () => Promise.resolve(),
+  ),
   editorStateListener: null as null | ((state: EditorCoordinatorState) => void),
+  closeListener: null as
+    | null
+    | ((payload: { handshakeId: string; action: 'history' | 'quit' }) => void),
+  releaseListener: null as null | ((payload: { handshakeId: string }) => void),
+  settle: vi.fn(),
+  ack: vi.fn(),
+  cancel: vi.fn(),
   editorState: {
     conflict: null,
     failureKind: null,
@@ -116,12 +129,16 @@ vi.mock('@api/modules/shared', () => ({
     if (event === 'keys:counters-state') {
       mocks.counterStateListener = listener;
     }
+    if (event === 'app:close-requested') mocks.closeListener = listener;
+    if (event === 'app:history-flush-released')
+      mocks.releaseListener = listener;
     return vi.fn();
   }),
 }));
 vi.mock('@api/modules/appApi', () => ({
-  acknowledgeLifecycleAfterEditorFlush: vi.fn(),
-  cancelLifecycleEditorFlush: vi.fn(),
+  acknowledgeLifecycleAfterEditorFlush: mocks.ack,
+  cancelLifecycleEditorFlush: mocks.cancel,
+  windowApi: { showMain: vi.fn(async () => {}) },
 }));
 vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
   editorCoordinator: {
@@ -165,12 +182,7 @@ vi.mock('@stores/data/useHistoryStatusStore', () => ({
   syncHistoryStatus: mocks.syncHistoryStatus,
 }));
 vi.mock('@src/renderer/editor/runtime/lifecycleEditorFlush', () => ({
-  flushFocusedEditor: vi.fn(),
-}));
-vi.mock('@src/renderer/editor/runtime/historyEditorFlushLock', () => ({
-  acquireHistoryEditorFlushLock: vi.fn(),
-  releaseHistoryEditorFlushLock: vi.fn(),
-  resetHistoryEditorFlushLock: vi.fn(),
+  flushFocusedEditor: mocks.settle,
 }));
 vi.mock('@src/renderer/defaults', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@src/renderer/defaults')>()),
@@ -290,7 +302,11 @@ const makeApiMock = () =>
       }),
     },
     ui: { dialog: { alert: mocks.dialogAlert } },
-    overlay: { onLock: vi.fn(() => vi.fn()), onAnchor: vi.fn(() => vi.fn()) },
+    overlay: {
+      get: vi.fn(async () => ({ visible: false })),
+      onLock: vi.fn(() => vi.fn()),
+      onAnchor: vi.fn(() => vi.fn()),
+    },
     css: { onUse: vi.fn(() => vi.fn()), onContent: vi.fn(() => vi.fn()) },
     js: { onUse: vi.fn(() => vi.fn()), onState: vi.fn(() => vi.fn()) },
   } as unknown as Window['api']);
@@ -332,6 +348,11 @@ describe('모드 전환 선택 리셋', () => {
     mocks.presetSnapshotListener = null;
     mocks.dialogAlert.mockClear();
     mocks.editorStateListener = null;
+    mocks.closeListener = null;
+    mocks.releaseListener = null;
+    mocks.settle.mockReset().mockResolvedValue(true);
+    mocks.ack.mockReset().mockResolvedValue(undefined);
+    mocks.cancel.mockReset().mockResolvedValue(undefined);
     mocks.editorState = {
       conflict: null,
       failureKind: null,
@@ -367,6 +388,116 @@ describe('모드 전환 선택 리셋', () => {
 
     expect(clearSelection).toHaveBeenCalledTimes(1);
     expect(mocks.keyState.selectedKeyType).toBe('8key');
+  });
+
+  it.each(['history', 'quit'] as const)(
+    '%s 정산 실패를 취소하고 사용자에게 알린다',
+    async (action) => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      mocks.settle.mockResolvedValue(false);
+      await act(async () => {
+        mocks.closeListener?.({ handshakeId: 'failed-save', action });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(mocks.cancel).toHaveBeenCalledWith('failed-save');
+      expect(mocks.ack).not.toHaveBeenCalled();
+      expect(mocks.dialogAlert).toHaveBeenCalledOnce();
+      expect(mocks.dialogAlert.mock.calls[0][0]).toContain('저장에 실패해');
+    },
+  );
+
+  it('취소 리스너 예외는 즉시 취소 응답으로 연결하고 해제 후 다시 실행할 수 있다', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const failure = new Error('gesture cancellation failed');
+    const cancelNext = vi.fn();
+    const unsubscribeFailure = subscribeHistoryEditorFlushStart(() => {
+      throw failure;
+    });
+    const unsubscribeNext = subscribeHistoryEditorFlushStart(cancelNext);
+    let finishCancel!: () => void;
+    mocks.cancel.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishCancel = resolve;
+        }),
+    );
+    try {
+      await act(async () => {
+        expect(() =>
+          mocks.closeListener?.({
+            handshakeId: 'failed-cancellation',
+            action: 'history',
+          }),
+        ).not.toThrow();
+        expect(document.documentElement.inert).toBe(true);
+        await Promise.resolve();
+      });
+      expect(cancelNext).toHaveBeenCalledOnce();
+      expect(mocks.cancel).toHaveBeenCalledExactlyOnceWith(
+        'failed-cancellation',
+      );
+      expect(mocks.settle).not.toHaveBeenCalled();
+      expect(mocks.ack).not.toHaveBeenCalled();
+      expect(mocks.dialogAlert).not.toHaveBeenCalled();
+      await act(async () => {
+        mocks.releaseListener?.({ handshakeId: 'failed-cancellation' });
+        finishCancel();
+      });
+      expect(isHistoryEditorFlushLocked()).toBe(false);
+      expect(document.documentElement.inert).toBe(false);
+      expect(mocks.dialogAlert).toHaveBeenCalledOnce();
+      expect(mocks.dialogAlert.mock.calls[0][0]).toContain('실행 취소');
+      unsubscribeFailure();
+      mocks.settle.mockImplementationOnce(async () => {
+        expect(document.documentElement.inert).toBe(true);
+        return true;
+      });
+      await act(async () => {
+        mocks.closeListener?.({
+          handshakeId: 'next-history',
+          action: 'history',
+        });
+      });
+      expect(mocks.settle).toHaveBeenCalledOnce();
+      expect(mocks.ack).toHaveBeenCalledExactlyOnceWith('next-history');
+      mocks.releaseListener?.({ handshakeId: 'next-history' });
+      expect(isHistoryEditorFlushLocked()).toBe(false);
+    } finally {
+      unsubscribeFailure();
+      unsubscribeNext();
+    }
+  });
+
+  it('재시도할 초안이 없는 transient 오류도 한 번 안내한다', () => {
+    const state = {
+      ...mocks.editorState,
+      phase: 'error',
+      dirty: false,
+      failureKind: 'transient',
+      error: { errorCode: 'IO_ERROR', message: 'failed', retryable: true },
+    } as EditorCoordinatorState;
+    act(() => {
+      mocks.editorStateListener?.(state);
+      mocks.editorStateListener?.(state);
+    });
+    expect(mocks.dialogAlert).toHaveBeenCalledOnce();
+    expect(mocks.dialogAlert.mock.calls[0][0]).toContain(
+      '편집 저장 중 문제가 생겼습니다',
+    );
+  });
+
+  it('보존된 transient 초안은 상태 안내에 맡기고 대화상자를 중복 표시하지 않는다', () => {
+    const state = {
+      ...mocks.editorState,
+      phase: 'error',
+      dirty: true,
+      failureKind: 'transient',
+      error: { errorCode: 'IO_ERROR', message: 'failed', retryable: true },
+    } as EditorCoordinatorState;
+    act(() => {
+      mocks.editorStateListener?.(state);
+    });
+    expect(mocks.dialogAlert).not.toHaveBeenCalled();
   });
 
   it('customTabs만 바뀌고 모드가 같으면 선택을 건드리지 않는다', () => {
