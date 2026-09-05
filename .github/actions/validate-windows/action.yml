@@ -27,7 +27,12 @@ runs:
     - name: ASIO 전체 Rust 테스트
       shell: bash
       working-directory: ${{ inputs.workspace }}/src-tauri
-      run: cargo test --all-targets --locked --features asio-backend
+      run: cargo test --all-targets --locked --features asio-backend -- --test-threads=1 --nocapture
+    - name: Windows 충돌 진단
+      if: failure()
+      shell: pwsh
+      run: |
+        Get-WinEvent -FilterHashtable @{LogName='Application'; Id=1000; StartTime=(Get-Date).AddMinutes(-30)} -ErrorAction SilentlyContinue | Format-List Message
     - name: PR 앱 빌드
       working-directory: ${{ inputs.workspace }}
       shell: bash
