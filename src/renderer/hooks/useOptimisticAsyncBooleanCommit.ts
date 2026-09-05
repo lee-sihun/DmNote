@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { registerPendingOptimisticCommit } from './pendingOptimisticCommits';
 
 interface UseOptimisticAsyncBooleanCommitOptions {
   canonicalValue: boolean;
@@ -28,6 +29,7 @@ export const useOptimisticAsyncBooleanCommit = ({
   const runningRef = useRef(false);
   const runningPromiseRef = useRef<Promise<void> | null>(null);
   const mountedRef = useRef(true);
+  const unregisterPendingRef = useRef<(() => void) | null>(null);
 
   const updateOptimisticValue = useCallback((value: boolean | null) => {
     optimisticValueRef.current = value;
@@ -81,7 +83,9 @@ export const useOptimisticAsyncBooleanCommit = ({
     }
   }, [reconcileCanonicalValue, updateOptimisticValue]);
 
-  const flush = async () => {
+  const cancelScheduledCommit = useCallback(() => {
+    unregisterPendingRef.current?.();
+    unregisterPendingRef.current = null;
     if (commitFrameRef.current !== null) {
       cancelAnimationFrame(commitFrameRef.current);
       commitFrameRef.current = null;
@@ -90,8 +94,12 @@ export const useOptimisticAsyncBooleanCommit = ({
       window.clearTimeout(commitTimerRef.current);
       commitTimerRef.current = null;
     }
+  }, []);
+
+  const flush = useCallback(async () => {
+    cancelScheduledCommit();
     await drainPendingValue();
-  };
+  }, [cancelScheduledCommit, drainPendingValue]);
 
   useLayoutEffect(() => {
     canonicalValueRef.current = canonicalValue;
@@ -113,19 +121,14 @@ export const useOptimisticAsyncBooleanCommit = ({
 
     return () => {
       mountedRef.current = false;
-      if (commitFrameRef.current !== null) {
-        cancelAnimationFrame(commitFrameRef.current);
-      }
-      if (commitTimerRef.current !== null) {
-        window.clearTimeout(commitTimerRef.current);
-      }
+      cancelScheduledCommit();
 
       const pending = pendingValueRef.current;
       if (!runningRef.current && pending !== null) {
         void drainPendingValue();
       }
     };
-  }, [drainPendingValue]);
+  }, [cancelScheduledCommit, drainPendingValue]);
 
   const toggle = () => {
     const current = optimisticValueRef.current ?? canonicalValueRef.current;
@@ -135,18 +138,16 @@ export const useOptimisticAsyncBooleanCommit = ({
 
     if (runningRef.current) return next;
 
-    if (commitFrameRef.current !== null) {
-      cancelAnimationFrame(commitFrameRef.current);
-    }
-    if (commitTimerRef.current !== null) {
-      window.clearTimeout(commitTimerRef.current);
-    }
+    cancelScheduledCommit();
+    unregisterPendingRef.current = registerPendingOptimisticCommit(() => {
+      void flush();
+    });
 
     commitFrameRef.current = requestAnimationFrame(() => {
       commitFrameRef.current = null;
       commitTimerRef.current = window.setTimeout(() => {
         commitTimerRef.current = null;
-        void drainPendingValue();
+        void flush();
       }, 0);
     });
 

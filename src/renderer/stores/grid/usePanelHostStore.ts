@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 
 import { panelWindowApi } from '@api/modules/panelWindowApi';
-import { drainPendingOptimisticCommits } from '@hooks/pendingOptimisticCommits';
 import { flushFocusedEditor } from '@src/renderer/editor/runtime/lifecycleEditorFlush';
 import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 import {
@@ -130,7 +129,6 @@ const restorePlacement = async (placement: PanelHostPlacement) => {
 // 낙관 커밋의 rAF는 떠나는 창과 함께 멈추므로 대기분도 지금 확정한다
 const settleEditsBeforeMove = async (): Promise<boolean> => {
   try {
-    drainPendingOptimisticCommits();
     return await flushFocusedEditor();
   } catch (error) {
     console.error('패널 이동 전 편집 정산 실패', error);

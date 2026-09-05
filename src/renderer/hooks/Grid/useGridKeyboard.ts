@@ -23,6 +23,7 @@ import {
 import { useHistoryShortcuts } from './useHistoryShortcuts';
 import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
 import { isModalLayerActive } from '@components/main/Modal/popupLayer';
+import { registerPendingOptimisticCommit } from '@hooks/pendingOptimisticCommits';
 
 interface UseGridKeyboardParams {
   selectedElements: SelectedElement[];
@@ -74,12 +75,15 @@ export function useGridKeyboard({
     gestureId: string;
   } | null>(null);
   const arrowMoveFrame = useRef<number | null>(null);
+  const unregisterPendingArrowMove = useRef<(() => void) | null>(null);
 
   useHistoryShortcuts({ onUndo, onRedo });
 
   // 선택 요소 키보드 조작
   useEffect(() => {
     const flushArrowMove = () => {
+      unregisterPendingArrowMove.current?.();
+      unregisterPendingArrowMove.current = null;
       if (arrowMoveFrame.current !== null) {
         cancelAnimationFrame(arrowMoveFrame.current);
         arrowMoveFrame.current = null;
@@ -110,6 +114,8 @@ export function useGridKeyboard({
           }
         : { deltaX, deltaY, gestureId };
       if (arrowMoveFrame.current !== null) return;
+      unregisterPendingArrowMove.current =
+        registerPendingOptimisticCommit(flushArrowMove);
       arrowMoveFrame.current = requestAnimationFrame(() => {
         arrowMoveFrame.current = null;
         flushArrowMove();

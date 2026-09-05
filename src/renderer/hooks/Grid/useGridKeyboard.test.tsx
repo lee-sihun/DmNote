@@ -15,6 +15,12 @@ import { useGridSelection } from './useGridSelection';
 import { registerPopupLayer } from '@components/main/Modal/popupLayer';
 
 import type { CanonicalKeyPosition } from '@src/types/editor';
+import { flushFocusedEditor } from '@src/renderer/editor/runtime/lifecycleEditorFlush';
+import { trackEditorWrite } from '@src/renderer/editor/runtime/editorWriteBarrier';
+import {
+  acquireHistoryEditorFlushLock,
+  resetHistoryEditorFlushLock,
+} from '@src/renderer/editor/runtime/historyEditorFlushLock';
 
 const {
   commitPatchMock,
@@ -189,6 +195,7 @@ describe('useGridKeyboard arrow history burst', () => {
 
   beforeEach(async () => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    resetHistoryEditorFlushLock();
     vi.useFakeTimers();
     vi.setSystemTime(1_000);
     commitPatchMock.mockClear();
@@ -236,6 +243,8 @@ describe('useGridKeyboard arrow history burst', () => {
       .querySelectorAll('[data-dmn-modal-backdrop="true"]')
       .forEach((element) => element.remove());
     randomUUIDMock.mockRestore();
+    resetHistoryEditorFlushLock();
+    vi.unstubAllGlobals();
     vi.useRealTimers();
     globalThis.IS_REACT_ACT_ENVIRONMENT = false;
   });
@@ -411,6 +420,159 @@ describe('useGridKeyboard arrow history burst', () => {
       },
     ]);
     vi.unstubAllGlobals();
+  });
+
+  it.each(['종료 후 언마운트', '히스토리 후 늦은 프레임'] as const)(
+    '%s 전에 멈춘 화살표 예약을 한 번 정산한다',
+    async (boundary) => {
+      const callbacks = new Map<number, FrameRequestCallback>();
+      vi.stubGlobal(
+        'requestAnimationFrame',
+        (callback: FrameRequestCallback) => {
+          callbacks.set(1, callback);
+          return 1;
+        },
+      );
+      vi.stubGlobal('cancelAnimationFrame', (id: number) =>
+        callbacks.delete(id),
+      );
+      await act(async () =>
+        root.render(<Harness continuousInputStrategy="frame" />),
+      );
+      pressArrow('ArrowRight');
+      pressArrow('ArrowRight');
+      expect(commitPatchMock).not.toHaveBeenCalled();
+      const delayedCallbacks = [...callbacks.values()];
+      if (boundary === '히스토리 후 늦은 프레임') {
+        acquireHistoryEditorFlushLock('arrow-history');
+      }
+      let settlement!: Promise<boolean>;
+      await act(async () => {
+        settlement = flushFocusedEditor();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(await settlement).toBe(true);
+      });
+      const commitsAtAck = commitPatchMock.mock.calls.length;
+      const framesAtAck = callbacks.size;
+      const positionAtAck = useKeyStore.getState().positions['4key'][0].dx;
+      if (boundary === '히스토리 후 늦은 프레임') {
+        act(() => {
+          useKeyStore.getState().setPositions({
+            '4key': [{ ...position(0), dx: 40 }, position(1)],
+          });
+          delayedCallbacks.forEach((callback) => callback(performance.now()));
+        });
+      } else {
+        await act(async () => root.render(null));
+      }
+      expect({
+        commitsAtAck,
+        framesAtAck,
+        positionAtAck,
+        commitsAfterBoundary: commitPatchMock.mock.calls.length,
+        positionAfterBoundary: useKeyStore.getState().positions['4key'][0].dx,
+      }).toEqual({
+        commitsAtAck: 1,
+        framesAtAck: 0,
+        positionAtAck: 2,
+        commitsAfterBoundary: 1,
+        positionAfterBoundary: boundary === '히스토리 후 늦은 프레임' ? 40 : 2,
+      });
+    },
+  );
+
+  it('화살표 정산이 시작한 저장 응답을 기다리고 실패하면 정산을 거절한다', async () => {
+    vi.stubGlobal('requestAnimationFrame', () => 1);
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    let reject!: (error: Error) => void;
+    const write = new Promise<void>((_resolve, no) => {
+      reject = no;
+    });
+    const move = vi.fn(() => {
+      void trackEditorWrite(write).catch(() => {});
+    });
+    const handlers = {
+      remove: vi.fn(),
+      clear: vi.fn(),
+      copy: vi.fn(),
+      paste: vi.fn(),
+      forward: vi.fn(),
+      backward: vi.fn(),
+    };
+    await act(async () =>
+      root.render(
+        <BlockingHarness
+          {...handlers}
+          move={move}
+          continuousInputStrategy="frame"
+        />,
+      ),
+    );
+    pressArrow('ArrowRight');
+    let settled = false;
+    let result!: Promise<boolean>;
+    await act(async () => {
+      result = flushFocusedEditor().then((value) => {
+        settled = true;
+        return value;
+      });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    const commitsBeforeResponse = move.mock.calls.length;
+    const settledBeforeResponse = settled;
+    await act(async () => {
+      reject(new Error('arrow save failed'));
+      await result;
+    });
+    expect(commitsBeforeResponse).toBe(1);
+    expect(settledBeforeResponse).toBe(false);
+    expect(await result).toBe(false);
+  });
+
+  it('모드 변경 cleanup은 이전 모드 콜백으로 정산하고 새 모드에 중복 전달하지 않는다', async () => {
+    vi.stubGlobal('requestAnimationFrame', () => 1);
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    const oldModeMove = vi.fn();
+    const newModeMove = vi.fn();
+    const handlers = {
+      remove: vi.fn(),
+      clear: vi.fn(),
+      copy: vi.fn(),
+      paste: vi.fn(),
+      forward: vi.fn(),
+      backward: vi.fn(),
+    };
+    await act(async () =>
+      root.render(
+        <BlockingHarness
+          {...handlers}
+          move={oldModeMove}
+          continuousInputStrategy="frame"
+        />,
+      ),
+    );
+    pressArrow('ArrowRight');
+    await act(async () => {
+      useKeyStore.setState({ selectedKeyType: '8key' });
+      root.render(
+        <BlockingHarness
+          {...handlers}
+          move={newModeMove}
+          continuousInputStrategy="frame"
+        />,
+      );
+    });
+    await act(async () => {
+      const result = flushFocusedEditor();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(await result).toBe(true);
+    });
+    act(() =>
+      window.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowRight' })),
+    );
+    expect(oldModeMove).toHaveBeenCalledExactlyOnceWith(1, 0, firstGestureId);
+    expect(newModeMove).not.toHaveBeenCalled();
+    expect(useKeyStore.getState().selectedKeyType).toBe('8key');
   });
 
   it('방향키를 떼면 대기 이동을 프레임 전에 flush한다', async () => {
