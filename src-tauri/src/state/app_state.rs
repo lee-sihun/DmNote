@@ -6315,6 +6315,15 @@ fn adjust_overlay_resize_position(
             _ => placement.position.y -= delta * scale,
         }
     }
+
+    #[cfg(target_os = "macos")]
+    {
+        // AppKit의 원점 내림 전에 이동량을 대칭 반올림해 왕복 시 위치 누적 방지
+        placement.position.x =
+            current.position.x + (placement.position.x - current.position.x).round();
+        placement.position.y =
+            current.position.y + (placement.position.y - current.position.y).round();
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -7907,6 +7916,65 @@ mod tests {
         );
 
         assert_eq!(placement.position, OverlayPosition { x: 86.0, y: 168.0 });
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_sprite_visibility_roundtrip_keeps_overlay_position() {
+        // AppKit의 원점 내림과 크기 올림을 실제 창 대조 실행과 같은 순서로 반영
+        let apply_native = |mut placement: NativePlacement| {
+            let screen_height = 1440.0;
+            let bottom = (screen_height - placement.position.y - placement.height).floor();
+            placement.position.x = placement.position.x.floor();
+            placement.width = placement.width.ceil();
+            placement.height = placement.height.ceil();
+            placement.position.y = screen_height - bottom - placement.height;
+            placement
+        };
+        for anchor in [
+            OverlayResizeAnchor::TopLeft,
+            OverlayResizeAnchor::TopRight,
+            OverlayResizeAnchor::BottomLeft,
+            OverlayResizeAnchor::BottomRight,
+            OverlayResizeAnchor::Center,
+            OverlayResizeAnchor::FixedPosition,
+        ] {
+            for origin in [100.0, -100.0] {
+                for delta in [2.5776543848328117, 0.5, -0.5, 17.125] {
+                    let original = NativePlacement {
+                        position: OverlayPosition {
+                            x: origin,
+                            y: origin,
+                        },
+                        width: 655.0,
+                        height: 505.0,
+                        target_scale: 1.0,
+                    };
+                    let mut current = original;
+                    for _ in 0..100 {
+                        for visible in [true, false] {
+                            let change = if visible { delta } else { -delta };
+                            let mut placement = NativePlacement {
+                                width: if visible { 798.0 } else { 655.0 },
+                                height: if visible { 663.0 } else { 505.0 },
+                                ..current
+                            };
+                            adjust_overlay_resize_position(
+                                &mut placement,
+                                current,
+                                &anchor,
+                                Some(change),
+                                Some(-change),
+                                Some(change),
+                                Some(change),
+                            );
+                            current = apply_native(placement);
+                        }
+                        assert_eq!(current, original, "anchor={anchor:?}, delta={delta}");
+                    }
+                }
+            }
+        }
     }
 
     impl KeyCounterEventEmitter for NoopCounterEmitter {
