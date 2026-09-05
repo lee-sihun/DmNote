@@ -50,6 +50,7 @@ const waitForPanelContent = (startedAt: number): Promise<number> => {
 benchmarkDescribe('BASE-11 패널 토글 성능', () => {
   let host: HTMLDivElement;
   let root: Root;
+  let animateDescriptor: PropertyDescriptor | undefined;
 
   beforeEach(() => {
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
@@ -59,6 +60,15 @@ benchmarkDescribe('BASE-11 패널 토글 성능', () => {
       window.clearTimeout(id),
     );
     vi.stubGlobal('matchMedia', () => ({ matches: true }));
+    // jsdom에 없는 WAAPI 보완 — 페이드 시간은 DOM commit 측정 대상에서 제외
+    animateDescriptor = Object.getOwnPropertyDescriptor(
+      Element.prototype,
+      'animate',
+    );
+    Object.defineProperty(Element.prototype, 'animate', {
+      configurable: true,
+      value: () => ({ cancel() {}, onfinish: null }),
+    });
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     host = document.createElement('div');
     document.body.appendChild(host);
@@ -68,7 +78,13 @@ benchmarkDescribe('BASE-11 패널 토글 성능', () => {
   afterEach(() => {
     act(() => root.unmount());
     host.remove();
+    if (animateDescriptor) {
+      Object.defineProperty(Element.prototype, 'animate', animateDescriptor);
+    } else {
+      Reflect.deleteProperty(Element.prototype, 'animate');
+    }
     vi.unstubAllGlobals();
+    globalThis.IS_REACT_ACT_ENVIRONMENT = false;
   });
 
   it('버튼 상태와 무거운 패널 mount 분포를 기록한다', async () => {
