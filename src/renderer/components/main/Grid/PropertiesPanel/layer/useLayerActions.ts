@@ -354,9 +354,10 @@ export function useLayerActions({
     }
 
     const selectedElements = useGridSelectionStore.getState().selectedElements;
-    const items: ListItem[] = [
-      { id: 'rename', label: t('contextMenu.rename') || 'Rename' },
-    ];
+    const items: ListItem[] =
+      contextMenuItem?.type === 'plugin'
+        ? []
+        : [{ id: 'rename', label: t('contextMenu.rename') || 'Rename' }];
 
     if (selectedElements.length >= 2 && !contextMenuItem?.groupId) {
       items.push({
@@ -439,6 +440,7 @@ export function useLayerActions({
         const groupDef = layerGroupsForMode.find(
           (g) => g.id === contextMenuGroupId,
         );
+        renameCancelledRef.current = false;
         setRenamingItemId(`group:${contextMenuGroupId}`);
         setRenameValue(groupDef?.name || '');
         setContextMenuOpen(false);
@@ -476,7 +478,8 @@ export function useLayerActions({
     }
 
     if (itemId === 'rename') {
-      if (contextMenuItem) {
+      if (contextMenuItem && contextMenuItem.type !== 'plugin') {
+        renameCancelledRef.current = false;
         setRenamingItemId(contextMenuItem.id);
         setRenameValue(contextMenuItem.name);
         setContextMenuOpen(false);

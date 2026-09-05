@@ -188,6 +188,7 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
     onCommit: commitCssEnabled,
     onError: (error) => {
       console.error('Failed to toggle tab CSS:', error);
+      showAlert?.(t('common.saveFailed'));
     },
   });
 

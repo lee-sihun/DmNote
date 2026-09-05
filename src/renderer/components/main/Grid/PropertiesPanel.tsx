@@ -991,6 +991,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // 레이어 이름 변경 시작
   const handleRenameStartImpl = useRef<() => void>(() => {});
   handleRenameStartImpl.current = () => {
+    renameCancelledRef.current = false;
     const current = getCurrentLayerName();
     setRenameValue(current || getCurrentDefaultTitle());
     setIsRenaming(true);

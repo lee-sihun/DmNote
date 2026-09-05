@@ -256,6 +256,21 @@ describe('useLayerActions visibility routing', () => {
     expect(mocks.reportSkipped).not.toHaveBeenCalled();
   });
 
+  it('플러그인 이름 변경은 직접 메뉴 액션으로도 시작하지 않는다', async () => {
+    const item: LayerItem = {
+      type: 'plugin',
+      id: 'plugin-a:one',
+      name: 'plugin',
+      zIndex: 0,
+      hidden: false,
+    };
+    await act(async () => actions.handleContextMenu(click, item, 0));
+    await act(async () => actions.handleContextMenuSelect('rename'));
+
+    expect(actions.renamingItemId).toBeNull();
+    expect(mocks.patchLayerName).not.toHaveBeenCalled();
+  });
+
   it('main stable group은 allHidden에서 계산한 absolute literal만 semantic helper에 넘긴다', async () => {
     await exposeWithItems([
       {

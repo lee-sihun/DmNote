@@ -33,7 +33,11 @@ export function useKeyManager() {
       reportElementOpSkipped('missing canonical key position id');
       return;
     }
-    void rebindKeySlotById(positionId, newSlot).catch(reportElementOpError);
+    void rebindKeySlotById(positionId, newSlot)
+      .then((applied) => {
+        if (!applied) reportElementOpSkipped('key mapping target disappeared');
+      })
+      .catch(reportElementOpError);
   };
 
   // ────────────────────────────────────────────────────────────────────────

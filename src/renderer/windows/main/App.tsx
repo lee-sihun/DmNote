@@ -807,12 +807,8 @@ export default function App() {
           settings={shownNoteSettings}
           onClose={() => setIsNoteSettingOpen(false)}
           onSave={async (normalized) => {
-            try {
-              await settingsApi.update({ noteSettings: normalized });
-              setNoteSettings(normalized);
-            } catch (error) {
-              console.error('Failed to update note settings', error);
-            }
+            await settingsApi.update({ noteSettings: normalized });
+            setNoteSettings(normalized);
           }}
         />
       )}

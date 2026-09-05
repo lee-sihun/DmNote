@@ -1,4 +1,5 @@
 import { usePressAction } from '@hooks/usePressAction';
+import { useSingleFlightAction } from '@hooks/useSingleFlightAction';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Checkbox from '@components/main/common/Checkbox';
 import TabSwitch from '@components/main/common/TabSwitch';
@@ -44,6 +45,7 @@ interface NoteSettingProps {
   onClose?: () => void;
   settings: NoteSettings | null;
   onSave?: (normalized: NoteSettings) => Promise<void> | void;
+  saveErrorMessage?: string | null;
   title?: string | null;
   /** 수명은 호출부가 presence로 소유한다 */
   motionState?: PopupMotionState;
@@ -53,12 +55,14 @@ const NoteSetting = ({
   onClose,
   settings,
   onSave,
+  saveErrorMessage,
   title = null,
   motionState,
 }: NoteSettingProps) => {
   const { t } = useTranslation();
   const initial: Partial<NoteSettings> = settings || {};
   const [activeTab, setActiveTab] = useState<TabId>(NOTE_TAB);
+  const [saveFailed, setSaveFailed] = useState(false);
 
   const [frameLimit, setFrameLimit] = useState<string>(
     String(sanitizeNumericValue(initial.frameLimit, 'frameLimit')),
@@ -188,44 +192,49 @@ const NoteSetting = ({
     }
   }, [isAnimating, disableHeightTransition]);
 
-  const handleSave = async () => {
-    const normalized = {
-      ...settings,
-      frameLimit: sanitizeNumericValue(frameLimit, 'frameLimit'),
-      speed: sanitizeNumericValue(speed, 'speed'),
-      trackHeight: sanitizeNumericValue(trackHeight, 'trackHeight'),
-      reverse,
-      fadeTopPx: sanitizeNumericValue(fadeTopPx, 'fadeTopPx'),
-      fadeBottomPx: sanitizeNumericValue(fadeBottomPx, 'fadeBottomPx'),
-      reverseFadeTopPx: sanitizeNumericValue(
-        reverseFadeTopPx,
-        'reverseFadeTopPx',
-      ),
-      reverseFadeBottomPx: sanitizeNumericValue(
-        reverseFadeBottomPx,
-        'reverseFadeBottomPx',
-      ),
-      delayedNoteEnabled,
-      shortNoteThresholdMs: sanitizeNumericValue(
-        shortNoteThresholdMs,
-        'shortNoteThresholdMs',
-      ),
-      shortNoteMinLengthPx: sanitizeNumericValue(
-        shortNoteMinLengthPx,
-        'shortNoteMinLengthPx',
-      ),
-      keyDisplayDelayMs: sanitizeNumericValue(
-        keyDisplayDelayMs,
-        'keyDisplayDelayMs',
-      ),
-    };
+  const { run: handleSave, pending: savePending } = useSingleFlightAction(
+    async () => {
+      const normalized = {
+        ...settings,
+        frameLimit: sanitizeNumericValue(frameLimit, 'frameLimit'),
+        speed: sanitizeNumericValue(speed, 'speed'),
+        trackHeight: sanitizeNumericValue(trackHeight, 'trackHeight'),
+        reverse,
+        fadeTopPx: sanitizeNumericValue(fadeTopPx, 'fadeTopPx'),
+        fadeBottomPx: sanitizeNumericValue(fadeBottomPx, 'fadeBottomPx'),
+        reverseFadeTopPx: sanitizeNumericValue(
+          reverseFadeTopPx,
+          'reverseFadeTopPx',
+        ),
+        reverseFadeBottomPx: sanitizeNumericValue(
+          reverseFadeBottomPx,
+          'reverseFadeBottomPx',
+        ),
+        delayedNoteEnabled,
+        shortNoteThresholdMs: sanitizeNumericValue(
+          shortNoteThresholdMs,
+          'shortNoteThresholdMs',
+        ),
+        shortNoteMinLengthPx: sanitizeNumericValue(
+          shortNoteMinLengthPx,
+          'shortNoteMinLengthPx',
+        ),
+        keyDisplayDelayMs: sanitizeNumericValue(
+          keyDisplayDelayMs,
+          'keyDisplayDelayMs',
+        ),
+      };
 
-    try {
-      await onSave?.(normalized as NoteSettings);
-    } finally {
-      onClose?.();
-    }
-  };
+      setSaveFailed(false);
+      try {
+        await onSave?.(normalized as NoteSettings);
+        onClose?.();
+      } catch (error) {
+        console.error('Failed to save note settings', error);
+        setSaveFailed(true);
+      }
+    },
+  );
 
   const renderNoteTab = () => (
     <div className="flex flex-col gap-[12px]">
@@ -457,12 +466,14 @@ const NoteSetting = ({
 
   // 입력 blur·IME flush와의 경합으로 첫 click이 유실되는 것을 방어
   const savePress = usePressAction(handleSave);
-  const cancelPress = usePressAction(onClose);
+  const cancelPress = usePressAction(() => {
+    if (!savePending) onClose?.();
+  });
 
   return (
     <Modal
       motionState={motionState}
-      onClick={onClose}
+      onClick={savePending ? undefined : onClose}
       ariaLabel={title ?? t('keySetting.tabNote')}
       contentMountStrategy="after-paint"
     >
@@ -504,19 +515,29 @@ const NoteSetting = ({
           }}
         >
           <div ref={tabContentRef}>
-            {activeTab === NOTE_TAB ? renderNoteTab() : renderAdvancedTab()}
+            <fieldset disabled={savePending} className="min-w-0">
+              {activeTab === NOTE_TAB ? renderNoteTab() : renderAdvancedTab()}
+            </fieldset>
           </div>
         </div>
+
+        {saveFailed && (
+          <p role="alert" className="mt-[12px] text-body text-danger-fg">
+            {saveErrorMessage ?? t('common.saveFailed')}
+          </p>
+        )}
 
         <div className="flex gap-[8px] mt-[12px]">
           <button
             {...savePress}
+            disabled={savePending}
             className="flex-[2] h-[30px] bg-accent-deep hover:bg-accent-deep-hover active:bg-accent-deep-active rounded-surface text-accent-fg text-label transition-colors duration-fast"
           >
             {t('noteSetting.save')}
           </button>
           <button
             {...cancelPress}
+            disabled={savePending}
             className="flex-1 h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-surface text-fg-muted hover:text-fg text-label transition-colors duration-fast"
           >
             {t('noteSetting.cancel')}
