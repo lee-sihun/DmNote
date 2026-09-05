@@ -8,8 +8,9 @@ import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import GradientAxisOverlay from '@components/main/Grid/handles/GradientAxisHandle';
+import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
 import { useGradientEditStore } from '@stores/grid/useGradientEditStore';
-import type { GradientSpec } from '@src/types/color';
+import { GRADIENT_STOPS_MAX, type GradientSpec } from '@src/types/color';
 
 vi.mock('@contexts/useTranslation', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -45,6 +46,9 @@ const pointerEvent = (
     clientX: number;
     clientY: number;
     button?: number;
+    buttons?: number;
+    ctrlKey?: boolean;
+    metaKey?: boolean;
   },
 ) => {
   const event = new MouseEvent(type, {
@@ -54,7 +58,11 @@ const pointerEvent = (
     clientY: init.clientY,
     button: init.button ?? 0,
     // 드래그 중 버튼 유지 — buttons 0은 stale 드래그로 간주돼 취소됨
-    buttons: type === 'pointerup' || type === 'pointercancel' ? 0 : 1,
+    buttons:
+      init.buttons ??
+      (type === 'pointerup' || type === 'pointercancel' ? 0 : 1),
+    ctrlKey: init.ctrlKey,
+    metaKey: init.metaKey,
   });
   Object.defineProperty(event, 'pointerId', { value: init.pointerId });
   return event;
@@ -352,6 +360,46 @@ describe('GradientAxisOverlay 드래그 로직', () => {
     expect(finalSpec.angle).toBe(0);
   });
 
+  it('모서리 자석은 기본 적용되고 Ctrl/Cmd 중에는 해제된다', () => {
+    const dragNearCorner = (modifier?: 'ctrlKey' | 'metaKey') => {
+      act(() => {
+        axisAnchor('end').dispatchEvent(
+          pointerEvent('pointerdown', {
+            pointerId: 30,
+            clientX: 300,
+            clientY: 150,
+          }),
+        );
+        window.dispatchEvent(
+          pointerEvent('pointermove', {
+            pointerId: 30,
+            clientX: 290,
+            clientY: 110,
+            ...(modifier ? { [modifier]: true } : {}),
+          }),
+        );
+      });
+      const preview = apply.mock.calls.at(-1)?.[0];
+      act(() => {
+        window.dispatchEvent(
+          pointerEvent('pointerup', {
+            pointerId: 30,
+            clientX: 290,
+            clientY: 110,
+            ...(modifier ? { [modifier]: true } : {}),
+          }),
+        );
+      });
+      return preview?.angle;
+    };
+
+    expect(dragNearCorner()).toBe(63);
+    apply.mockClear();
+    expect(dragNearCorner('ctrlKey')).toBe(66);
+    apply.mockClear();
+    expect(dragNearCorner('metaKey')).toBe(66);
+  });
+
   it('스톱 점을 끌면 축에 사영된 pos만 바뀌고 각도는 불변이다', () => {
     act(() => {
       stopDot(1).dispatchEvent(
@@ -508,6 +556,82 @@ describe('GradientAxisOverlay 드래그 로직', () => {
     );
   });
 
+  it('history 반영은 진행 중 드래그를 롤백·커밋 없이 종료한다', () => {
+    act(() => {
+      axisAnchor('end').dispatchEvent(
+        pointerEvent('pointerdown', {
+          pointerId: 31,
+          clientX: 300,
+          clientY: 150,
+        }),
+      );
+      window.dispatchEvent(
+        pointerEvent('pointermove', {
+          pointerId: 31,
+          clientX: 200,
+          clientY: 60,
+        }),
+      );
+    });
+    expect(apply).toHaveBeenLastCalledWith(
+      expect.objectContaining({ angle: 0 }),
+      false,
+    );
+    const callCountBeforeHistory = apply.mock.calls.length;
+
+    act(() => useCommittedApplyStore.getState().bump('historyUndo'));
+    expect(apply).toHaveBeenCalledTimes(callCountBeforeHistory);
+    expect(cancel).not.toHaveBeenCalled();
+    expect(document.documentElement.classList.contains('dmn-drag-cursor')).toBe(
+      false,
+    );
+
+    act(() => {
+      window.dispatchEvent(
+        pointerEvent('pointerup', {
+          pointerId: 31,
+          clientX: 200,
+          clientY: 60,
+        }),
+      );
+    });
+    expect(apply).toHaveBeenCalledTimes(callCountBeforeHistory);
+  });
+
+  it('buttons=0 move는 stale 드래그를 시작 spec으로 복원하고 종료한다', () => {
+    act(() => {
+      axisAnchor('end').dispatchEvent(
+        pointerEvent('pointerdown', {
+          pointerId: 32,
+          clientX: 300,
+          clientY: 150,
+        }),
+      );
+      window.dispatchEvent(
+        pointerEvent('pointermove', {
+          pointerId: 32,
+          clientX: 200,
+          clientY: 60,
+          buttons: 0,
+        }),
+      );
+    });
+
+    expect(apply).toHaveBeenLastCalledWith(SPEC, false);
+    expect(cancel).toHaveBeenCalledOnce();
+    const callCountAfterCancel = apply.mock.calls.length;
+    act(() => {
+      window.dispatchEvent(
+        pointerEvent('pointerup', {
+          pointerId: 32,
+          clientX: 200,
+          clientY: 60,
+        }),
+      );
+    });
+    expect(apply).toHaveBeenCalledTimes(callCountAfterCancel);
+  });
+
   it('축 선을 클릭하면 그 위치에 스톱이 추가된다', () => {
     act(() => {
       strip().dispatchEvent(
@@ -529,6 +653,57 @@ describe('GradientAxisOverlay 드래그 로직', () => {
     expect(finalSpec.stops[1].pos).toBeCloseTo(0.7);
     expect(finalSpec.stops[1].color).toBe('#ff0000');
     expect(selectStop).toHaveBeenCalledWith(1);
+  });
+
+  it('최소 스톱은 삭제하지 않고 최대 스톱에는 추가하지 않는다', () => {
+    act(() => {
+      stopDot(1).dispatchEvent(
+        new MouseEvent('contextmenu', { bubbles: true, cancelable: true }),
+      );
+    });
+    expect(apply).not.toHaveBeenCalled();
+
+    const maxSpec: GradientSpec = {
+      angle: 90,
+      stops: Array.from({ length: GRADIENT_STOPS_MAX }, (_, index) => ({
+        color: `#00000${index}`,
+        pos: index / (GRADIENT_STOPS_MAX - 1),
+      })),
+    };
+    act(() => {
+      useGradientEditStore
+        .getState()
+        .patchSession('key:4key:0:backgroundColor:idle', {
+          spec: maxSpec,
+          selectedIndex: 3,
+        });
+    });
+    act(() => {
+      strip().dispatchEvent(
+        pointerEvent('pointerdown', {
+          pointerId: 33,
+          clientX: 240,
+          clientY: 150,
+        }),
+      );
+      window.dispatchEvent(
+        pointerEvent('pointerup', {
+          pointerId: 33,
+          clientX: 240,
+          clientY: 150,
+        }),
+      );
+    });
+    expect(apply).not.toHaveBeenCalled();
+
+    act(() => {
+      stopDot(4).dispatchEvent(
+        new MouseEvent('contextmenu', { bubbles: true, cancelable: true }),
+      );
+    });
+    const [deletedSpec, deletedCommit] = apply.mock.calls.at(-1)!;
+    expect(deletedCommit).toBe(true);
+    expect(deletedSpec.stops).toHaveLength(GRADIENT_STOPS_MAX - 1);
   });
 
   it('키보드 화살표로 각도가 커밋된다', () => {
@@ -804,6 +979,51 @@ describe('GradientAxisOverlay 드래그 로직', () => {
     // 편집 대상은 키뿐 → 키(100,100,200x100) 중심
     expect(strip().style.left).toBe('200px');
     expect(strip().style.top).toBe('150px');
+  });
+
+  it('등록 앵커 bounds는 요소 저장 좌표 이동 델타를 추종한다', () => {
+    act(() => {
+      useGradientEditStore
+        .getState()
+        .setAnchorBounds(
+          'key:4key:0:backgroundColor:idle',
+          { x: 10, y: 20, width: 40, height: 30 },
+          { x: 100, y: 100 },
+        );
+    });
+    expect(strip().style.left).toBe('30px');
+    expect(strip().style.top).toBe('35px');
+
+    act(() => {
+      root.render(
+        <GradientAxisOverlay
+          positions={
+            {
+              '4key': [
+                {
+                  id: ELEMENT_A_ID,
+                  dx: 120,
+                  dy: 130,
+                  width: 200,
+                  height: 100,
+                },
+              ],
+            } as never
+          }
+          statPositions={{} as never}
+          graphPositions={{} as never}
+          knobPositions={{} as never}
+          selectedElements={[]}
+          selectedKeyType="4key"
+          zoom={1}
+          panX={0}
+          panY={0}
+          continuousInputStrategy="legacy"
+        />,
+      );
+    });
+    expect(strip().style.left).toBe('50px');
+    expect(strip().style.top).toBe('65px');
   });
 
   it('A→B→새 A 왕복 후 pointercancel도 새 세션에 stale 롤백을 보내지 않는다', () => {

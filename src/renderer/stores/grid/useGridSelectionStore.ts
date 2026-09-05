@@ -26,12 +26,14 @@ export interface IndexedElementArrays {
   knob: readonly CanonicalEditorDocumentV1['knobPositions'][string][number][];
 }
 
-interface NativeSelectedElement {
-  type: IndexedSelectableElementType;
-  id: string;
-  // canonical에서 파생된 locator 캐시. 신원이 아니다 - 문서 적용 시 id로 재계산된다
-  index?: number;
-}
+type NativeSelectedElement = {
+  [Type in IndexedSelectableElementType]: {
+    type: Type;
+    id: string;
+    // canonical에서 파생된 locator 캐시. 신원이 아니다 - 문서 적용 시 id로 재계산된다
+    index?: number;
+  };
+}[IndexedSelectableElementType];
 
 interface PluginSelectedElement {
   type: 'plugin';

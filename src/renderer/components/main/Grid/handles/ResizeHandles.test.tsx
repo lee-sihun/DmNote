@@ -158,6 +158,66 @@ describe('ResizeHandles frame coalescing', () => {
     act(() => document.dispatchEvent(new MouseEvent('mouseup')));
   });
 
+  it('좌측 핸들은 비그리드 위치에서도 우측 앵커를 보존한다', async () => {
+    const onResize = vi.fn();
+    const bounds = { x: 103, y: 47, width: 50, height: 30 };
+    await act(async () => {
+      root.render(<ResizeHandles bounds={bounds} onResize={onResize} />);
+    });
+    const handle = host.querySelector<HTMLElement>('[data-resize-handle="w"]')!;
+    act(() =>
+      handle.dispatchEvent(
+        new MouseEvent('mousedown', {
+          clientX: 0,
+          clientY: 0,
+          bubbles: true,
+          cancelable: true,
+        }),
+      ),
+    );
+    document.dispatchEvent(
+      new MouseEvent('mousemove', { clientX: -7, clientY: 0 }),
+    );
+    const callback = callbacks.get(1)!;
+    callbacks.clear();
+    act(() => callback(performance.now()));
+
+    const result = onResize.mock.calls[0][0];
+    expect(result).toMatchObject({ x: 100, y: 47, width: 53, height: 30 });
+    expect(result.x + result.width).toBe(bounds.x + bounds.width);
+    act(() => document.dispatchEvent(new MouseEvent('mouseup')));
+  });
+
+  it('상단 핸들은 비그리드 위치에서도 하단 앵커를 보존한다', async () => {
+    const onResize = vi.fn();
+    const bounds = { x: 103, y: 47, width: 50, height: 30 };
+    await act(async () => {
+      root.render(<ResizeHandles bounds={bounds} onResize={onResize} />);
+    });
+    const handle = host.querySelector<HTMLElement>('[data-resize-handle="n"]')!;
+    act(() =>
+      handle.dispatchEvent(
+        new MouseEvent('mousedown', {
+          clientX: 0,
+          clientY: 0,
+          bubbles: true,
+          cancelable: true,
+        }),
+      ),
+    );
+    document.dispatchEvent(
+      new MouseEvent('mousemove', { clientX: 0, clientY: -8 }),
+    );
+    const callback = callbacks.get(1)!;
+    callbacks.clear();
+    act(() => callback(performance.now()));
+
+    const result = onResize.mock.calls[0][0];
+    expect(result).toMatchObject({ x: 103, y: 35, width: 50, height: 42 });
+    expect(result.y + result.height).toBe(bounds.y + bounds.height);
+    act(() => document.dispatchEvent(new MouseEvent('mouseup')));
+  });
+
   it('mouseup은 예약된 마지막 bounds를 flush한다', async () => {
     const onResize = vi.fn();
     const onResizeEnd = vi.fn();

@@ -24,69 +24,31 @@ import type { SettingsPanelKey } from '@components/main/SettingsPanel/SettingsSi
 import ShortcutsPanelContent from '@components/main/SettingsPanel/ShortcutsPanelContent';
 import PluginsPanelContent from '@components/main/SettingsPanel/PluginsPanelContent';
 import CssPanelContent from '@components/main/SettingsPanel/CssPanelContent';
+import KeySoundOutputSettings from '@components/main/SettingsPanel/KeySoundOutputSettings';
+import { createSettingsPluginLifecycleController } from '@components/main/settingsPluginLifecycleController';
+import type { PluginToDelete } from '@components/main/settingsPluginLifecycleController';
 import {
   FILL_DISABLED_CLASS,
   FILL_INTERACTIVE_CLASS,
 } from '@components/main/SettingsPanel/panelChrome';
 import { applyCounterSnapshot } from '@stores/signals/keyCounterSignals';
-import {
-  currentPluginHealthRevision,
-  waitForPluginInjection,
-} from '@stores/plugin/usePluginHealthStore';
-import {
-  extractPluginId,
-  getPluginDisplayName,
-} from '@utils/plugin/pluginUtils';
-import { classifyPluginAddResult } from '@utils/plugin/pluginAddResult';
+import { getPluginDisplayName } from '@utils/plugin/pluginUtils';
 import { isMac } from '@utils/core/platform';
 import { useUpdateCheck } from '@hooks/app/useUpdateCheck';
+import { useObsSettingsController } from '@components/main/useObsSettingsController';
+import { useOverlayResizeAnchorController } from '@components/main/useOverlayResizeAnchorController';
 import type { OverlayResizeAnchor } from '@src/types/settings/settings';
 import type { ShortcutsState } from '@src/types/settings/shortcuts';
 import type { SupportedLocale } from '@contexts/I18nContextDef';
-import type {
-  JsLoadResult,
-  JsReloadResult,
-  JsRemoveResult,
-  JsPluginUpdateResult,
-  KeysResetAllResponse,
-} from '@src/types/plugin/api';
-import type { JsPlugin } from '@src/types/plugin/js';
+import type { KeysResetAllResponse } from '@src/types/plugin/api';
 import type { KeyCounters } from '@src/types/key/keys';
 import { settingsApi } from '@api/modules/settingsApi';
 import { overlayApi } from '@api/modules/overlayApi';
 import { cssApi } from '@api/modules/cssApi';
 import { jsApi } from '@api/modules/jsApi';
-import { pluginApi } from '@api/modules/pluginApi';
 import { keysApi } from '@api/modules/keysApi';
 import { appApi, windowApi } from '@api/modules/appApi';
-import { obsApi } from '@api/modules/obsApi';
-import { keySoundOutputApi } from '@api/modules/resourceApi';
-import type {
-  KeySoundOutputBackend,
-  KeySoundOutputDevices,
-  KeySoundOutputState,
-} from '@api/modules/resourceApi';
-import type { ObsStatus } from '@src/types/obs';
-import { DEFAULT_OBS_PORT } from '@src/types/obs';
 import { assertCanonicalEditorDocument } from '@src/types/editor';
-
-// ASIO 버퍼 크기 선택지(프레임). 게임 설정값과 맞춰야 ASIO 공존 가능.
-const ASIO_BUFFER_SIZES = [64, 128, 256, 512, 1024] as const;
-// 기본 버퍼 크기 (게임 기본값과 동일한 최저값)
-const DEFAULT_ASIO_BUFFER = 64;
-
-// 설정 패널은 열 때마다 재마운트되므로, 마지막 출력 상태를 모듈에 캐시해
-// 재진입 시 '기본 장치 → 선택 장치' 드롭다운 깜빡임을 방지한다.
-let cachedKeySoundOutput: KeySoundOutputState | null = null;
-// null이면 목록 미로딩
-let cachedOutputDevices: KeySoundOutputDevices | null = null;
-
-const KEY_SOUND_DEVICE_PREFIX = 'device:';
-const KEY_SOUND_ASIO_PREFIX = 'asio:';
-
-// 드롭다운 라벨용 축약
-const truncateDeviceName = (name: string) =>
-  name.length > 16 ? `${name.slice(0, 16)}…` : name;
 
 interface SettingsProps {
   showAlert: (msg: string, confirmText?: string) => void;
@@ -100,17 +62,6 @@ interface SettingsProps {
       danger?: boolean;
     },
   ) => void;
-}
-
-interface PluginError {
-  path?: string;
-  error: string;
-}
-
-interface PluginToDelete {
-  id: string;
-  name: string;
-  namespace: string;
 }
 
 const Settings = ({
@@ -178,143 +129,11 @@ const Settings = ({
   const pendingPluginRef = useRef<string | null>(null);
   const removingPluginRef = useRef<string | null>(null);
   const resetAllRef = useRef(false);
-  const regeneratingObsTokenRef = useRef(false);
   const angleModeChangeRef = useRef(false);
-  const pendingResizeAnchorRef = useRef<OverlayResizeAnchor | null>(null);
-  const applyingResizeAnchorRef = useRef(false);
-  const confirmedResizeAnchorRef = useRef(overlayResizeAnchor);
-
-  // OBS 모드
-  const [obsStatus, setObsStatus] = useState<ObsStatus>({
-    running: false,
-    port: DEFAULT_OBS_PORT,
-    clientCount: 0,
+  const enqueueResizeAnchor = useOverlayResizeAnchorController({
+    overlayResizeAnchor,
+    setOverlayResizeAnchor,
   });
-  const obsTogglingRef = useRef(false);
-
-  // 키음 출력 백엔드 (기본 장치 / 시스템 장치 / ASIO) — 캐시로 초기화해 재진입 깜빡임 방지
-  const [keySoundOutput, setKeySoundOutputRaw] =
-    useState<KeySoundOutputState | null>(cachedKeySoundOutput);
-  // 목록 로딩 완료(null 아님) 전에는 드롭다운을 잠그지 않음 (첫 마운트 비활성 깜빡임 방지)
-  const [outputDevices, setOutputDevices] =
-    useState<KeySoundOutputDevices | null>(cachedOutputDevices);
-  const pendingKeySoundOutputRef = useRef<KeySoundOutputBackend | null>(null);
-  const applyingKeySoundOutputRef = useRef(false);
-
-  const setKeySoundOutput = (state: KeySoundOutputState) => {
-    cachedKeySoundOutput = state;
-    setKeySoundOutputRaw(state);
-  };
-
-  useEffect(() => {
-    if (!applyingResizeAnchorRef.current) {
-      confirmedResizeAnchorRef.current = overlayResizeAnchor;
-    }
-  }, [overlayResizeAnchor]);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const [devices, state] = await Promise.all([
-          keySoundOutputApi.listDevices(),
-          keySoundOutputApi.getState(),
-        ]);
-        if (cancelled) return;
-        cachedOutputDevices = devices;
-        setOutputDevices(devices);
-        if (
-          !applyingKeySoundOutputRef.current &&
-          !pendingKeySoundOutputRef.current
-        ) {
-          setKeySoundOutput(state);
-        }
-      } catch (error) {
-        console.error('Failed to load key sound output state', error);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const enqueueKeySoundOutput = (backend: KeySoundOutputBackend) => {
-    pendingKeySoundOutputRef.current = backend;
-    setKeySoundOutputRaw((current) => {
-      if (!current) return current;
-      const optimistic = {
-        ...current,
-        requested: backend,
-        error: null,
-        errorCode: null,
-      };
-      cachedKeySoundOutput = optimistic;
-      return optimistic;
-    });
-    if (applyingKeySoundOutputRef.current) return;
-
-    applyingKeySoundOutputRef.current = true;
-    void (async () => {
-      while (pendingKeySoundOutputRef.current) {
-        const requested = pendingKeySoundOutputRef.current;
-        pendingKeySoundOutputRef.current = null;
-        try {
-          const result = await keySoundOutputApi.setBackend(requested);
-          if (!pendingKeySoundOutputRef.current) setKeySoundOutput(result);
-        } catch (error) {
-          console.error('Failed to set key sound output backend', error);
-          if (!pendingKeySoundOutputRef.current) {
-            try {
-              const authoritative = await keySoundOutputApi.getState();
-              if (!pendingKeySoundOutputRef.current) {
-                setKeySoundOutput(authoritative);
-              }
-            } catch (syncError) {
-              console.error('Failed to resync key sound output', syncError);
-            }
-          }
-        }
-      }
-      applyingKeySoundOutputRef.current = false;
-    })();
-  };
-
-  const handleKeySoundOutputChange = (val: string) => {
-    if (val.startsWith(KEY_SOUND_ASIO_PREFIX)) {
-      enqueueKeySoundOutput({
-        kind: 'asio',
-        driverName: val.slice(KEY_SOUND_ASIO_PREFIX.length),
-        // ASIO 선택 시 기본 버퍼 64 (게임과 동일하게 맞춰야 공존 가능)
-        bufferSize: DEFAULT_ASIO_BUFFER,
-      });
-      return;
-    }
-    if (val.startsWith(KEY_SOUND_DEVICE_PREFIX)) {
-      const id = val.slice(KEY_SOUND_DEVICE_PREFIX.length);
-      const requested = keySoundOutput?.requested;
-      // 목록에 없는 장치는 저장된(분리된) 선택 항목뿐
-      const name =
-        outputDevices?.system.find((item) => item.id === id)?.name ??
-        (requested?.kind === 'device' && requested.id === id
-          ? requested.name
-          : null);
-      if (name === null) return;
-      enqueueKeySoundOutput({ kind: 'device', id, name });
-      return;
-    }
-    enqueueKeySoundOutput({ kind: 'defaultDevice' });
-  };
-
-  // ASIO 버퍼 크기 변경 (게임과 동일 버퍼로 맞춰야 ASIO 공존 가능)
-  const handleAsioBufferChange = (val: string) => {
-    const requested = keySoundOutput?.requested;
-    if (requested?.kind !== 'asio') return;
-    enqueueKeySoundOutput({
-      kind: 'asio',
-      driverName: requested.driverName,
-      bufferSize: Number(val),
-    });
-  };
 
   // Lenis smooth scroll 적용 (전역 설정 사용)
   const { scrollContainerRef } = useLenis();
@@ -346,39 +165,12 @@ const Settings = ({
     }
   }, [isMacOS, angleMode, setAngleMode]);
 
-  // OBS 상태 이벤트 구독 + clientCount 폴링
-  useEffect(() => {
-    let mounted = true;
-    obsApi
-      .status()
-      .then((status) => {
-        if (mounted) setObsStatus(status);
-      })
-      .catch(() => undefined);
-
-    // start/stop 이벤트 구독
-    const unsubscribe = obsApi.onStatus((status) => {
-      if (mounted) setObsStatus(status);
-    });
-
-    // clientCount는 connect/disconnect 이벤트가 없으므로 폴링 유지
-    const interval = setInterval(async () => {
-      try {
-        const status = await obsApi.status();
-        if (mounted) {
-          setObsStatus((prev) =>
-            prev.clientCount === status.clientCount ? prev : status,
-          );
-        }
-      } catch {}
-    }, 5000);
-
-    return () => {
-      mounted = false;
-      unsubscribe();
-      clearInterval(interval);
-    };
-  }, []);
+  const {
+    obsStatus,
+    handleObsToggle,
+    handleObsCopyUrl,
+    handleObsRegenerateToken,
+  } = useObsSettingsController({ t, showAlert, showConfirm });
 
   const LANGUAGE_OPTIONS: { value: string; label: string }[] = [
     { value: 'ko', label: '한국어' },
@@ -452,280 +244,28 @@ const Settings = ({
     }
   };
 
-  const formatPluginErrors = (errors: PluginError[] = []): string =>
-    errors.map((item) => `${item.path ?? 'unknown'}: ${item.error}`).join('\n');
-
-  // 파일을 읽는 데 성공해도 브라우저가 평가하지 못하면 실패다.
-  // 주입 결과가 정산될 때까지 기다렸다가 실제로 죽은 플러그인을 오류로 합류시킨다
-  const collectInjectionErrors = async (
-    candidates: JsPlugin[],
-    revision: number,
-  ): Promise<PluginError[]> => {
-    const injected: JsPlugin[] = candidates.filter(
-      (plugin) => plugin.enabled && plugin.content,
-    );
-    if (!injected.length) return [];
-
-    const { outcome, health } = await waitForPluginInjection(
-      revision,
-      injected.map((plugin) => plugin.id),
-    );
-
-    // 전역 JS가 꺼져 있으면 주입 대상이 아니다. 실패로 셀 일이 아니다
-    if (outcome === 'skipped') return [];
-
-    // 주입이 아예 못 돌았으면 결과가 비어 있다. 이걸 '오류 없음'으로 읽으면
-    // 실행되지 않은 플러그인을 성공으로 표시하게 된다
-    if (outcome !== 'settled') {
-      return injected.map((plugin) => ({
-        path: plugin.path ?? plugin.name,
-        error: t('settings.jsNotApplied'),
-      }));
-    }
-
-    return injected
-      .filter((plugin) => health[plugin.id]?.status === 'failed')
-      .map((plugin) => ({
-        path: plugin.path ?? plugin.name,
-        // 빈 메시지(throw '')는 nullish가 아니라 그대로 렌더되므로 ||
-        error: health[plugin.id]?.message || t('settings.jsRuntimeError'),
-      }));
-  };
-
-  const canReloadPlugins: boolean = jsPlugins.some(
-    (plugin: JsPlugin) => plugin.path,
-  );
-
-  const handleReloadPlugins = async (): Promise<void> => {
-    if (reloadingPluginsRef.current) return;
-    if (jsPlugins.length === 0) {
-      showAlert?.(t('settings.jsReloadNoPlugins'));
-      return;
-    }
-    const startTime: number = performance.now();
-    reloadingPluginsRef.current = true;
-    setIsReloadingPlugins(true);
-    try {
-      // 요청 전에 회차를 잡는다 - 응답보다 주입 정산이 먼저 끝나도 놓치지 않는다
-      const healthRevision: number = currentPluginHealthRevision();
-      const result: JsReloadResult = await jsApi.reload();
-      const updated: JsPlugin[] = result.updated ?? [];
-      const injectionErrors: PluginError[] = await collectInjectionErrors(
-        updated,
-        healthRevision,
-      );
-      const errors: PluginError[] = [
-        ...(result.errors ?? []),
-        ...injectionErrors,
-      ];
-
-      const succeeded: number = updated.length - injectionErrors.length;
-
-      if (errors.length && succeeded) {
-        showAlert?.(
-          `${t('settings.jsReloadPartial', {
-            count: succeeded,
-          })}\n${formatPluginErrors(errors)}`,
-        );
-      } else if (errors.length) {
-        showAlert?.(
-          `${t('settings.jsReloadFailed')}\n${formatPluginErrors(errors)}`,
-        );
-      } else if (succeeded) {
-        showAlert?.(t('settings.jsReloadSuccess', { count: succeeded }));
-      } else {
-        showAlert?.(t('settings.jsReloadNoChanges'));
-      }
-    } catch (error) {
-      console.error('Failed to reload JS plugins', error);
-      showAlert?.(`${t('settings.jsReloadFailed')}${error}`);
-    } finally {
-      reloadingPluginsRef.current = false;
-      const elapsed: number = performance.now() - startTime;
-      const MIN_SPINNER_MS = 250;
-      if (elapsed < MIN_SPINNER_MS) {
-        setTimeout(
-          () => setIsReloadingPlugins(false),
-          MIN_SPINNER_MS - elapsed,
-        );
-      } else {
-        setIsReloadingPlugins(false);
-      }
-    }
-  };
-
-  const handleAddPlugins = async (): Promise<void> => {
-    if (addingPluginsRef.current) return;
-    addingPluginsRef.current = true;
-    setIsAddingPlugins(true);
-    try {
-      const healthRevision: number = currentPluginHealthRevision();
-      const result: JsLoadResult = await jsApi.load();
-      if (!result) return;
-      const added: JsPlugin[] = result.added ?? [];
-      const injectionErrors: PluginError[] = await collectInjectionErrors(
-        added,
-        healthRevision,
-      );
-      const errors: PluginError[] = [
-        ...(result.errors ?? []),
-        ...injectionErrors,
-      ];
-      const alertKind = classifyPluginAddResult(added.length, errors.length);
-
-      if (alertKind === 'partial') {
-        showAlert?.(
-          `${t('settings.jsAddPartial', {
-            count: added.length,
-          })}\n${formatPluginErrors(errors)}`,
-        );
-      } else if (alertKind === 'failed') {
-        showAlert?.(
-          `${t('settings.jsAddFailed')}\n${formatPluginErrors(errors)}`,
-        );
-      } else if (alertKind === 'success') {
-        showAlert?.(t('settings.jsAddSuccess', { count: added.length }));
-      }
-    } catch (error) {
-      console.error('Failed to add JS plugins', error);
-      showAlert?.(`${t('settings.jsAddFailed')}${error}`);
-    } finally {
-      addingPluginsRef.current = false;
-      setIsAddingPlugins(false);
-    }
-  };
-
-  const handlePluginToggle = async (
-    pluginId: string,
-    nextState: boolean,
-  ): Promise<void> => {
-    if (pendingPluginRef.current) return;
-    pendingPluginRef.current = pluginId;
-    setPendingPluginId(pluginId);
-    try {
-      const result: JsPluginUpdateResult = await jsApi.setPluginEnabled(
-        pluginId,
-        nextState,
-      );
-      if (!result.success) {
-        showAlert?.(t('settings.jsPluginToggleFailed'));
-      }
-    } catch (error) {
-      console.error('Failed to toggle JS plugin', error);
-      showAlert?.(t('settings.jsPluginToggleFailed'));
-    } finally {
-      pendingPluginRef.current = null;
-      setPendingPluginId(null);
-    }
-  };
-
-  const handlePluginRemove = async (pluginId: string): Promise<void> => {
-    const plugin: JsPlugin | undefined = jsPlugins.find(
-      (candidate: JsPlugin) => candidate.id === pluginId,
-    );
-    if (!plugin) return;
-    if (removingPluginRef.current || pendingPluginRef.current) return;
-    removingPluginRef.current = pluginId;
-    setPendingPluginId(pluginId);
-
-    try {
-      // 실제 플러그인 네임스페이스 추출 (@id 또는 파일명 기반)
-      const pluginNamespace: string = extractPluginId(
-        plugin.content,
-        plugin.name,
-      );
-      const pluginStorageNamespace = `${pluginNamespace}/`;
-
-      // 네임스페이스를 prefix로 사용하는 데이터가 있는지 확인
-      // 백엔드에서 자동으로 "plugin_data_" 를 붙이므로 순수 네임스페이스만 전달
-      const hasData: boolean = await pluginApi.storage.hasData(
-        pluginStorageNamespace,
-      );
-      console.warn(
-        '[PluginRemove] namespace=',
-        pluginNamespace,
-        'hasData=',
-        hasData,
-      );
-
-      if (hasData) {
-        setPluginToDelete({
-          id: pluginId,
-          name: plugin.name,
-          namespace: pluginNamespace,
-        });
-        setDataDeleteModalOpen(true);
-      } else {
-        removingPluginRef.current = null;
-        setPendingPluginId(null);
-        await removePluginOnly(pluginId);
-      }
-    } catch (error) {
-      console.error('Failed to check plugin data', error);
-      showAlert?.(t('settings.jsPluginRemoveFailed'));
-    } finally {
-      removingPluginRef.current = null;
-      setPendingPluginId(null);
-    }
-  };
-
-  const removePluginOnly = async (pluginId: string): Promise<void> => {
-    if (removingPluginRef.current) return;
-    removingPluginRef.current = pluginId;
-    setPendingPluginId(pluginId);
-    try {
-      const result: JsRemoveResult = await jsApi.remove(pluginId);
-      if (!result.success) {
-        showAlert?.(t('settings.jsPluginRemoveFailed'));
-      }
-    } catch (error) {
-      console.error('Failed to remove JS plugin', error);
-      showAlert?.(t('settings.jsPluginRemoveFailed'));
-    } finally {
-      removingPluginRef.current = null;
-      setPendingPluginId(null);
-      setDataDeleteModalOpen(false);
-      setPluginToDelete(null);
-    }
-  };
-
-  const removePluginWithData = async (pluginId: string): Promise<void> => {
-    if (removingPluginRef.current) return;
-    removingPluginRef.current = pluginId;
-    setPendingPluginId(pluginId);
-    try {
-      const plugin: JsPlugin | undefined = jsPlugins.find(
-        (p: JsPlugin) => p.id === pluginId,
-      );
-      if (!plugin) {
-        throw new Error('Plugin not found');
-      }
-
-      // 실제 네임스페이스를 다시 추출
-      const pluginNamespace: string = extractPluginId(
-        plugin.content,
-        plugin.name,
-      );
-      const pluginStorageNamespace = `${pluginNamespace}/`;
-
-      // 1) 먼저 플러그인 제거 → 클린업이 실행되며 일부 플러그인은 저장을 시도할 수 있음
-      const result: JsRemoveResult = await jsApi.remove(pluginId);
-      if (!result.success) {
-        showAlert?.(t('settings.jsPluginRemoveFailed'));
-      }
-
-      // 2) 그 다음 스토리지 정리 → 클린업 중 재생성된 값까지 함께 제거
-      await pluginApi.storage.clearByPrefix(pluginStorageNamespace);
-    } catch (error) {
-      console.error('Failed to remove JS plugin with data', error);
-      showAlert?.(t('settings.jsPluginRemoveFailed'));
-    } finally {
-      removingPluginRef.current = null;
-      setPendingPluginId(null);
-      setDataDeleteModalOpen(false);
-      setPluginToDelete(null);
-    }
-  };
+  const {
+    canReloadPlugins,
+    handleReloadPlugins,
+    handleAddPlugins,
+    handlePluginToggle,
+    handlePluginRemove,
+    removePluginOnly,
+    removePluginWithData,
+  } = createSettingsPluginLifecycleController({
+    t,
+    showAlert,
+    jsPlugins,
+    setPluginToDelete,
+    setDataDeleteModalOpen,
+    setIsReloadingPlugins,
+    setIsAddingPlugins,
+    setPendingPluginId,
+    reloadingPluginsRef,
+    addingPluginsRef,
+    pendingPluginRef,
+    removingPluginRef,
+  });
 
   const actionButtonClass = (enabled: boolean): string =>
     'inline-flex items-center h-[23px] px-[10px] rounded-md text-body transition-colors duration-fast ' +
@@ -791,30 +331,6 @@ const Settings = ({
     }
   };
 
-  const enqueueResizeAnchor = (anchor: OverlayResizeAnchor): void => {
-    pendingResizeAnchorRef.current = anchor;
-    setOverlayResizeAnchor(anchor);
-    if (applyingResizeAnchorRef.current) return;
-
-    applyingResizeAnchorRef.current = true;
-    void (async () => {
-      while (pendingResizeAnchorRef.current) {
-        const requested = pendingResizeAnchorRef.current;
-        pendingResizeAnchorRef.current = null;
-        try {
-          await overlayApi.setAnchor(requested);
-          confirmedResizeAnchorRef.current = requested;
-        } catch (error) {
-          console.error('Failed to set overlay anchor', error);
-          if (!pendingResizeAnchorRef.current) {
-            setOverlayResizeAnchor(confirmedResizeAnchorRef.current);
-          }
-        }
-      }
-      applyingResizeAnchorRef.current = false;
-    })();
-  };
-
   const handleTrayToggle = async (): Promise<void> => {
     const next: boolean = !trayEnabled;
     setTrayEnabled(next);
@@ -835,62 +351,6 @@ const Settings = ({
       setAutoUpdateEnabled(!next);
       console.error('Failed to toggle auto update', error);
     }
-  };
-
-  const handleObsToggle = async (): Promise<void> => {
-    if (obsTogglingRef.current) return;
-    const next = !obsStatus.running;
-    setObsStatus((prev) => ({ ...prev, running: next }));
-    obsTogglingRef.current = true;
-    try {
-      const status = next ? await obsApi.start() : await obsApi.stop();
-      setObsStatus(status);
-      await settingsApi.update({ obsModeEnabled: next });
-    } catch (error) {
-      console.error('Failed to toggle OBS mode', error);
-      setObsStatus((prev) => ({ ...prev, running: !next }));
-      showAlert?.(
-        next ? t('settings.obsStartFailed') : t('settings.obsStopFailed'),
-      );
-    } finally {
-      obsTogglingRef.current = false;
-    }
-  };
-
-  const handleObsCopyUrl = async (): Promise<void> => {
-    const tokenParam = obsStatus.token ? `?token=${obsStatus.token}` : '';
-    const host = obsStatus.localIp || 'localhost';
-    const url = `http://${host}:${obsStatus.port}${tokenParam}`;
-    try {
-      await navigator.clipboard.writeText(url);
-      showAlert?.(t('settings.obsCopied'));
-    } catch {
-      showAlert?.(url);
-    }
-  };
-
-  const handleObsRegenerateToken = (): void => {
-    if (regeneratingObsTokenRef.current) return;
-    regeneratingObsTokenRef.current = true;
-    showConfirm(
-      t('settings.obsTokenRegenMessage'),
-      async () => {
-        try {
-          const status = await obsApi.regenerateToken();
-          setObsStatus(status);
-        } catch (error) {
-          console.error('Failed to regenerate OBS token', error);
-        } finally {
-          regeneratingObsTokenRef.current = false;
-        }
-      },
-      {
-        confirmText: t('settings.obsTokenRegenConfirm'),
-        onCancel: () => {
-          regeneratingObsTokenRef.current = false;
-        },
-      },
-    );
   };
 
   const handleDeveloperModeToggle = async (): Promise<void> => {
@@ -1008,50 +468,6 @@ const Settings = ({
       void i18n.changeLanguage(val as SupportedLocale);
     });
   };
-
-  const requestedBackend = keySoundOutput?.requested;
-  const requestedAsioDriver =
-    requestedBackend?.kind === 'asio' ? requestedBackend.driverName : null;
-  const asioDrivers = outputDevices?.asio ?? [];
-  const visibleAsioDrivers =
-    requestedAsioDriver && !asioDrivers.includes(requestedAsioDriver)
-      ? [...asioDrivers, requestedAsioDriver]
-      : asioDrivers;
-  // 저장된 장치가 현재 목록에 없어도(분리됨) 선택 상태가 보이도록 병합
-  const requestedDevice =
-    requestedBackend?.kind === 'device' ? requestedBackend : null;
-  const systemDevices = outputDevices?.system ?? [];
-  const visibleSystemDevices =
-    requestedDevice && !systemDevices.some((d) => d.id === requestedDevice.id)
-      ? [
-          ...systemDevices,
-          { id: requestedDevice.id, name: requestedDevice.name },
-        ]
-      : systemDevices;
-  // 같은 이름 장치는 순번으로 구분, 순번은 축약 밖에 붙여 항상 보이게
-  const systemDeviceLabels = new Map<string, string>();
-  const nameCounts = new Map<string, number>();
-  for (const device of visibleSystemDevices) {
-    const seen = (nameCounts.get(device.name) ?? 0) + 1;
-    nameCounts.set(device.name, seen);
-    const base = truncateDeviceName(device.name);
-    systemDeviceLabels.set(device.id, seen > 1 ? `${base} (${seen})` : base);
-  }
-  const keySoundOutputValue =
-    requestedBackend?.kind === 'asio'
-      ? `${KEY_SOUND_ASIO_PREFIX}${requestedBackend.driverName}`
-      : requestedBackend?.kind === 'device'
-      ? `${KEY_SOUND_DEVICE_PREFIX}${requestedBackend.id}`
-      : 'defaultDevice';
-  const requestedAsioBuffer =
-    keySoundOutput?.requested.kind === 'asio'
-      ? keySoundOutput.requested.bufferSize || DEFAULT_ASIO_BUFFER
-      : DEFAULT_ASIO_BUFFER;
-  const visibleAsioBuffers = ASIO_BUFFER_SIZES.some(
-    (size) => size === requestedAsioBuffer,
-  )
-    ? ASIO_BUFFER_SIZES
-    : [...ASIO_BUFFER_SIZES, requestedAsioBuffer].sort((a, b) => a - b);
 
   return (
     <div className="relative w-full h-full">
@@ -1215,76 +631,10 @@ const Settings = ({
               </SettingRow>
             </SettingCard>
             {/* 키음 출력 설정 */}
-            <SettingCard>
-              <SettingRow
-                label={
-                  <p className="text-label text-fg flex-1 min-w-0 truncate pr-[10px]">
-                    {t('settings.keySoundOutput') || '키 사운드 출력'}
-                  </p>
-                }
-                onMouseEnter={() => hoverPreview('keySoundOutput')}
-                onMouseLeave={() => hoverPreview(null)}
-              >
-                <Dropdown
-                  options={[
-                    {
-                      value: 'defaultDevice',
-                      label:
-                        t('settings.keySoundOutputDefault') || '기본 재생 장치',
-                    },
-                    // 이름이 길면 …로 축약 (기본 항목 라벨은 안 잘리게 max-w 여유)
-                    // 장치를 못 열면 백엔드가 선택을 기본 장치로 되돌리므로 경고 라벨 없음
-                    ...visibleSystemDevices.map((device) => ({
-                      value: `${KEY_SOUND_DEVICE_PREFIX}${device.id}`,
-                      label:
-                        systemDeviceLabels.get(device.id) ??
-                        truncateDeviceName(device.name),
-                    })),
-                    ...visibleAsioDrivers.map((name) => ({
-                      value: `${KEY_SOUND_ASIO_PREFIX}${name}`,
-                      label: `ASIO: ${truncateDeviceName(name)}`,
-                    })),
-                  ]}
-                  value={keySoundOutputValue}
-                  onChange={handleKeySoundOutputChange}
-                  placeholder={
-                    t('settings.keySoundOutputDefault') || '기본 재생 장치'
-                  }
-                  align="right"
-                  widthClass="max-w-[160px]"
-                  disabled={
-                    outputDevices !== null &&
-                    visibleSystemDevices.length + visibleAsioDrivers.length ===
-                      0
-                  }
-                />
-              </SettingRow>
-              <SettingRow
-                label={
-                  <p
-                    className={`text-label ${
-                      keySoundOutput?.requested.kind === 'asio'
-                        ? 'text-fg'
-                        : 'text-fg-disabled'
-                    }`}
-                  >
-                    {t('settings.keySoundOutputBuffer') || 'ASIO 버퍼 크기'}
-                  </p>
-                }
-              >
-                <Dropdown
-                  options={visibleAsioBuffers.map((size) => ({
-                    value: String(size),
-                    label: String(size),
-                  }))}
-                  value={String(requestedAsioBuffer)}
-                  onChange={handleAsioBufferChange}
-                  placeholder={String(DEFAULT_ASIO_BUFFER)}
-                  align="right"
-                  disabled={keySoundOutput?.requested.kind !== 'asio'}
-                />
-              </SettingRow>
-            </SettingCard>
+            <KeySoundOutputSettings
+              onMouseEnter={() => hoverPreview('keySoundOutput')}
+              onMouseLeave={() => hoverPreview(null)}
+            />
             {/* 기타 설정 */}
             <SettingCard>
               <SettingRow label={t('settings.language')}>
