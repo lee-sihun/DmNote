@@ -1,6 +1,6 @@
 # 코드 품질 리팩터링 결과와 후속 계획
 
-> 아래 최초 완료 기록은 2026-08-31 기준이다. 2026-09-05 병합 재검토에서 이전 main 통합의 탭 정규화 누락을 발견해 수정했다. 최신 기준선과 재현·수정·검증 결과는 문서 끝의 「2026-09-05 병합 재검토」를 따른다.
+> 현재 상태: PR #154 병합은 `d2b9f9ab`로 되돌렸다. main의 파일 트리는 병합 직전 `92645496`과 동일하다. 후보 변경은 `review/pr154-recheck-20260905`에만 복원했으며 재병합하지 않았다. 아래 최초 완료 기록은 2026-08-31 당시의 기록이고, 현재 검토 범위와 한계는 문서 끝의 「2026-09-05 병합 취소 후 추가 검토」를 따른다.
 
 ## 목표와 판정 원칙
 
@@ -214,7 +214,7 @@ cargo test --lib --features asio-backend audio::engine
 - main에서 추가된 프론트엔드 callback은 구문 트리 비교와 변경 내역 검토를 함께 사용했다. 탭 메타데이터 generation guard, counter resync 순서, pointer focus 예외, pending/active popup drag의 닫힘 구분, overlay 메뉴의 탭 순서를 확인했다.
 - Windows panel drag와 overlay 배치의 main 대비 차이는 모듈 경로·가시성·Clippy 보정이었다. 좌표 단위, native position 신뢰 판정, terminal outcome 로직의 추가 누락은 발견하지 못했다.
 - 자산 참조 수집, 30일 trash 격리, 복구 세션 sweep 생략, 인덱스 결합 배열 복구, editor/plugin 트랜잭션의 저장·rollback 경계를 대조했다.
-- Tauri command 150개의 이름과 등록 순서가 main과 동일하다. permissions, 생성 schema, 공개 타입·API 구현, `docs/content`의 계약 변경은 없다. OBS allowlist와 이벤트 forwarding도 유지된다.
+- Tauri command 150개의 이름과 등록 순서가 main과 동일하다. permissions, 생성 schema, 공개 타입과 API 계약, `docs/content`의 계약 변경은 없다. OBS allowlist와 이벤트 forwarding도 유지된다.
 
 ### 통합 결과의 로컬 검증
 
@@ -227,4 +227,58 @@ cargo test --lib --features asio-backend audio::engine
 - `asio-backend` feature의 all-target check·Clippy 통과, 오디오 정책 테스트 18개 통과
 - `cargo fmt --all` 실행 및 `cargo fmt --all -- --check`, `git diff --check` 통과
 
-Vitest의 기존 React `act(...)`·mock DOM prop·CSS parser stderr와 Vite의 700 kB 초과 chunk 경고는 남아 있다. Windows ASIO CI는 이 보정까지 포함한 PR 커밋에서 별도로 확인해야 한다. 실제 ASIO 장치, Windows 혼합 DPI 창 조작, Tauri WebView timing과 GPU 수명에 대한 기존 실기 검증 한계는 유지한다.
+Vitest의 기존 React `act(...)`·mock DOM prop·CSS parser stderr와 Vite의 700 kB 초과 chunk 경고는 남아 있다. ESLint는 종료 코드 0이었지만 `SoundTrimModal.tsx`의 ResizeObserver effect에 `redrawWaveformStatic` 의존성 경고 1개가 있었다. 이 로그를 경고 0으로 해석하면 안 된다. Windows ASIO CI는 보정 커밋 `f333fb1f`에서 [run 33930837019](https://github.com/DmNote-App/DmNote/actions/runs/33930837019)의 성공을 확인했다. 실제 ASIO 장치, Windows 혼합 DPI 창 조작, Tauri WebView timing과 GPU 수명에 대한 실기 검증 한계는 유지한다.
+
+## 2026-09-05 병합 취소 후 추가 검토
+
+### main 복구와 검토 기준
+
+사용자 요청에 따라 병합 커밋 `f6e351d1`을 `git revert -m 1` 방식으로 되돌린 `d2b9f9ab07d87a661e2a313239bee5c81b5d59a6`을 main에 반영했다. 기존 커밋 기록은 유지했다. main의 tree `9d13c039ba6fe60dc117b760375d385a1d103a6c`가 병합 전 `92645496`의 tree와 같음을 확인했다.
+
+별도 브랜치 `review/pr154-recheck-20260905`에서 취소 커밋만 다시 되돌린 `da2c8f42`를 만들었다. 이 후보의 tree는 첫 검토 보정까지 포함한 `f333fb1f`와 같다. 따라서 탭 정규화 수정도 검토 후보에만 있으며, main에는 PR 변경 전체가 빠져 있다. 이후 추가 변경은 아래 계약 테스트와 이 검토 기록이다. 재병합은 사용자의 명시적 승인 전까지 보류한다.
+
+첫 검토의 중심은 분기 후 main 변경 보존과 후보의 자동 테스트였다. 그것만으로 대규모 리팩터링의 모든 실행 경로를 확인했다고 판단할 수 없으므로, 이번에는 원본 main과 후보를 별도 worktree에 두고 테스트 기대값과 mock 변경까지 대조했다.
+
+### 같은 기존 테스트를 양쪽 구현에 적용
+
+- `92645496`의 프론트엔드 테스트 335개 파일을 추출했다. 원본 main에서는 3,150개 통과, 18개 skip이었다.
+- 같은 테스트 파일을 후보에 복사해 실행했다. 처음에는 3,141개 통과, 6개 실패, 18개 skip이었으며, 이동된 `stableHandlerSlots` import 때문에 테스트 3개를 수집하지 못했다.
+- 차이는 4개 파일의 경로 의존성이었다. `elementShadowContract`의 Knob 표면 파일 경로, `statItems`의 Rust enum 파일 경로, `stableHandlerSlots` import, `PropertiesPanel.detachedContracts`의 `useBatchHandlers` mock import가 이동했다. PR의 해당 테스트 diff를 확인했고, 기대값·assertion·입력을 바꾸지 않고 경로만 보정했다. 관련 50개 테스트가 모두 통과해 기존 3,150개 테스트의 계약을 후보에서도 확인했다.
+- PR이 추가한 공개 컴포넌트 테스트도 원본 main에 적용했다. 이 과정에서 새로 추출한 `soundTrimModel`과 `pluginDomInteractions`를 mock하는 일부 테스트는 원본의 인라인 구현에 적용되지 않음을 확인했다. 이를 제품 회귀나 검증 성공으로 계산하지 않고, 아래 브라우저 API·실제 DOM 테스트로 보완했다.
+
+### 추가한 비교 계약 6개
+
+아래 테스트는 원본 main과 후보에 같은 파일을 적용해 모두 통과했다. 새 내부 헬퍼를 mock하지 않고 공개 진입점과 브라우저·전송 API 경계를 검사한다.
+
+1. `editorCoordinator.test.ts`: 외부 편집 이벤트를 0·1·4 microtask 뒤에 전달하는 3개 경우. 의미 기반 커밋의 revision conflict, 새 mutation ID로 rebase, I/O 결과 미상의 동일 envelope 재전송, 뒤에서 대기하는 플러그인 커밋을 연달아 실행한다. 외부 geometry와 플러그인 key 값의 동시 보존, `onEnrolled` 1회, flush 후 추가 저장 없음, in-flight 해제를 검사한다.
+2. `SoundTrimModal.browserApi.test.tsx`: 실제 컴포넌트에서 Web Audio 디코딩 context 해제, 재생·일시정지·재개·닫힘과 볼륨 상한을 검사한다. 별도 테스트에서는 RAF 대기 중인 트림 입력을 pointerup으로 확정한 후 실제 WAV 인코더를 거쳐 저장 API에 전달한다. 원본 바이트, 트림 비율, WAV sample rate·data 길이·PCM sample과 저장 후 입력 초기화를 검사한다.
+3. `PluginElement.runtime.test.tsx`: 실제 일반 DOM과 shadow DOM에서 같은 플러그인 클릭을 전달한다. scoped 전환 후 중복 실행이 없고 unmount 후 보관한 DOM 노드에서 클릭해도 호출되지 않는지 검사한다.
+
+### React Compiler와 소스 대조
+
+일반 `vitest.config.ts`에는 React Compiler가 없었다. 제품 `vite.config.ts`와 같은 `babel-plugin-react-compiler` 설정과 signals 제외 조건을 임시 Vitest 설정에 적용했다. 테스트 파일 자체는 변환에서 제외하고, 동일한 공개 UI 테스트 94개를 원본과 후보에서 각각 실행해 모두 통과했다. NumberInput, 분리 패널, PluginElement, 요소 DOM 표면, 오버레이 App, 사운드 트림을 포함한다. 이는 jsdom 검증이며 실제 WebView 렌더링 측정을 대신하지 않는다.
+
+TypeScript 구문 트리로 변경된 원본 파일의 함수·callback 3,266개를 수집했다. 출력된 함수 본문 2,614개가 후보의 함수 본문과 같았고, 652개는 차이가 있었다. 본문이 같아도 매개변수가 다른 50개를 별도로 추출했다. 이는 이동 후보를 찾는 인덱스이며, 같은 이름이나 본문만으로 closure·import binding이 같다고 판정하지 않았다. 아래 주요 연결부는 호출 인자, ref 소유자, effect 순서와 기존 계약 테스트를 함께 확인했다.
+
+| 영역 | 확인한 연결부와 근거 |
+| --- | --- |
+| Grid·선택·패널 | `NativeGridElements`의 stable ID/인덱스 전달, 참조 노드 등록, Shift 범위 선택 입력, mixed drag 세션 시작·종료, batch 선택 집계와 정규 문서의 분리. 기존 패널·드래그·선택 테스트 및 컴포넌트 prop 대조 |
+| editor 저장 | `SerialTaskQueue`의 선행 실패 격리와 wait, semantic commit의 상태 갱신·재시도 횟수·mutation ID·canonical 복구, property projection. 원본 coordinator 테스트와 추가 복합 오류 테스트 |
+| 플러그인 | 설정 form 값 변환·visibility callback 인자, modal handler 정리, overlay onMount·key/rawKey/locale/OBS resync 구독, 측정 ref와 앵커/줌 처리. 기존 API 테스트와 실제 DOM 전환 테스트 |
+| 사운드·팝업·입력 | 오디오 context/source/RAF 정리, 원본 보존·WAV 저장, 입력 미리보기/commit, 닫힘·재개입 계약. 기존 main 테스트, 브라우저 API 테스트, Compiler 적용 UI 테스트 |
+| Rust editor·store | 함수 본문 외 signature·attribute 대조, 75개 property patch arm의 처리 보존, 탭·프리셋 history 정규화, 자산 quarantine·복구와 rollback. 기존 실패 재현 및 Rust 계약 테스트의 assertion 변경 대조 |
+| OBS·네이티브 창 | WebSocket seq/ack/snapshot/RPC 처리 순서, allowlist·media 토큰/경로 검증, Windows 절대 crate 경로와 `unsafe extern "system"` signature, macOS/Windows/fallback 모듈의 cfg 조건 보존 |
+
+Rust 선언의 signature/attribute 대조에서 나타난 production 차이는 trailing comma, `RpcSender` 타입 별칭, `::windows` 경로, 플랫폼 cfg의 상위 모듈 이동이었다. `overlay_hit.rs`의 `#[cfg]`와 `#[path]`까지 추적했다. 테스트 변경은 fixture 경로·포맷 차이가 대부분이었고, OBS 오류 우선순위와 사운드 복구 오류 문자열은 assertion을 강화한 변경이었다. 첫 검토에서 복원한 탭 테스트 외에 추가로 약화되거나 빠진 기존 Rust assertion은 발견하지 못했다.
+
+### 판정과 남은 한계
+
+이번 추가 검토 범위에서는 첫 검토에서 수정한 탭 정규화 누락 외에 새로운 병합 차단 회귀를 재현하지 못했다. 제품 코드는 추가로 변경하지 않았다. 위의 독립된 비교 검증과 새 계약 테스트를 근거로 삼으며, 전체 함수의 모든 입력과 모든 비동기 스케줄이 동일하다는 증명으로 해석하지 않는다.
+
+추가 테스트 반영 후 `npx tsc --noEmit` 통과, ESLint 오류 0·경고 1개, 전체 Vitest 3,602개 통과·18개 skip을 확인했다. `npm run format` 적용 후 변경 범위가 테스트에 한정됨을 확인하고 `format:check`·`git diff --check`를 통과했다. Rust와 제품 빌드 코드는 `f333fb1f` 이후 변경하지 않았으므로 앞서 통과한 Rust 1,046개 테스트, check/Clippy/fmt, ASIO 및 Windows CI, Vite build 결과를 같은 코드에 대한 근거로 유지한다. 이를 이번 검토에서 다시 실행했다고 계산하지 않는다.
+
+- `SoundTrimModal.tsx`의 ResizeObserver effect에 ESLint 의존성 경고 1개가 남아 있다. `redrawWaveformStatic`은 현재 값 ref만 읽는 함수여서 오래된 값 캡처에 따른 회귀는 확인되지 않았다. 경고를 없애려고 의존성을 늘려 observer 재등록 빈도를 바꾸지는 않았다.
+- 실제 Windows ASIO 장치 열기·점유·재시작 복원, 혼합 DPI 드래그, Tauri WebView·GPU 자원 수명은 실기 검증이 남아 있다. 기존 Windows CI 성공은 fmt/컴파일/Clippy/하드웨어 독립 오디오 테스트의 근거다.
+- 문서의 「의도적으로 보존한 기존 결함」은 여전히 별도 범위다. 이번 비교에서 통과했다는 이유로 해당 결함이 해결됐다고 판단하지 않는다.
+
+추가 검토 로그와 원본/후보 비교 산출물은 로컬 `/tmp/dmnote-pr154-recheck/`, 첫 검토의 Rust·main 보존 비교 및 Windows CI 로그는 `/tmp/dmnote-pr154-review/`에 보관했다. 지속 보존되는 근거는 커밋한 테스트와 이 문서이며, 임시 파일은 별도 아카이브 없이는 장기 보존되지 않는다.

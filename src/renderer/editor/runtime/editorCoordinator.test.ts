@@ -769,6 +769,85 @@ describe('editor document helpers', () => {
 });
 
 describe('EditorSaveCoordinator', () => {
+  it.each([0, 1, 4])(
+    '외부 이벤트를 %i microtask 뒤에 받아도 conflict·IO 재전송 뒤 대기 중인 플러그인 쓰기를 보존한다',
+    async (eventDelay) => {
+      const harness = createHarness(makeDocument());
+      await harness.coordinator.start();
+      const originalCommit =
+        harness.transport.commitMock.getMockImplementation()!;
+      let semanticAttempt = 0;
+      harness.transport.commitMock.mockImplementation(async (request) => {
+        if (request.ops && ++semanticAttempt === 1) {
+          const before = structuredClone(harness.transport.canonical.document);
+          const external = structuredClone(before);
+          Object.assign(external.keyPositions['4key'][0], {
+            dy: 77,
+            width: 123,
+          });
+          harness.transport.canonical = { revision: 1, document: external };
+          for (let index = 0; index < eventDelay; index += 1) {
+            await Promise.resolve();
+          }
+          harness.transport.emit(
+            eventFor(1, 'external-edit', before, external),
+          );
+          throw revisionConflict();
+        }
+        if (request.ops && semanticAttempt === 2) throw ioError();
+        return originalCommit(request);
+      });
+      const onEnrolled = vi.fn();
+      const semantic = harness.coordinator.commitGeneratedSemanticOpsInternal(
+        (document) => {
+          const position = document.keyPositions['4key'][0];
+          return [
+            {
+              kind: 'setBounds',
+              elementType: 'key',
+              id: DEFAULT_KEY_ID,
+              bounds: {
+                dx: 50,
+                dy: position.dy,
+                width: position.width,
+                height: position.height,
+              },
+            },
+          ];
+        },
+        { onEnrolled, gestureId: 'recheck-geometry' },
+      );
+      const plugin = harness.coordinator.commitIsolatedPluginPatch(
+        { schemaVersion: 1, keys: { '4key': ['B'] } },
+        { multiKey: false },
+      );
+      await Promise.all([semantic, plugin]);
+      const requests = harness.transport.commitMock.mock.calls.map(
+        ([request]) => request,
+      );
+      expect(requests).toHaveLength(4);
+      expect(requests[0].mutationId).not.toBe(requests[1].mutationId);
+      expect(requests[1]).toEqual(requests[2]);
+      expect(requests[3].baseRevision).toBe(2);
+      expect(onEnrolled).toHaveBeenCalledOnce();
+      expect(harness.getLocal()).toEqual(harness.transport.canonical.document);
+      expect(harness.getLocal().keyPositions['4key'][0]).toMatchObject({
+        dx: 50,
+        dy: 77,
+        width: 123,
+      });
+      expect(harness.getLocal().keys['4key']).toEqual(['B']);
+      await harness.coordinator.flush();
+      expect(harness.transport.commitMock).toHaveBeenCalledTimes(4);
+      expect(harness.coordinator.getState()).toMatchObject({
+        phase: 'idle',
+        dirty: false,
+        inFlightMutationId: null,
+      });
+      harness.coordinator.stop();
+    },
+  );
+
   it('settles same-tick gesture and isolated plugin commits without deadlock', async () => {
     const base = makeDocument('A');
     const harness = createHarness(base);

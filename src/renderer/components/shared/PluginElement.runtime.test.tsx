@@ -118,6 +118,7 @@ let isMounted: boolean;
 const renderElement = (
   element: PluginDisplayElementInternal,
   definitions: PluginDefinitionInternal[],
+  windowType: 'main' | 'overlay' = 'overlay',
 ) => {
   usePluginDisplayElementStore.setState({
     elements: [element],
@@ -130,7 +131,7 @@ const renderElement = (
       <I18nContext.Provider
         value={{ locale: 'ko', setLocale: () => {}, t: (key) => key }}
       >
-        <PluginElement element={element} windowType="overlay" />
+        <PluginElement element={element} windowType={windowType} />
       </I18nContext.Provider>,
     );
   });
@@ -219,6 +220,36 @@ afterEach(() => {
 });
 
 describe('PluginElement overlay runtime 계약', () => {
+  it('일반 DOM에서 shadow DOM으로 전환한 뒤에도 클릭은 한 번만 전달되고 unmount에서 해제된다', () => {
+    window.__dmn_window_type = 'main';
+    const click = vi.fn();
+    vi.stubGlobal('__dmn_recheck_click', click);
+    const definition = makeDefinition({
+      template: () =>
+        '<button data-plugin-handler="__dmn_recheck_click">run</button>',
+    });
+    renderElement(makeElement({ scoped: false }), [definition], 'main');
+    const lightButton = container.querySelector<HTMLButtonElement>(
+      '[data-plugin-handler]',
+    )!;
+    act(() => lightButton.click());
+    expect(click).toHaveBeenCalledTimes(1);
+
+    renderElement(makeElement({ scoped: true }), [definition], 'main');
+    const element = container.querySelector<HTMLElement>(
+      '[data-plugin-element]',
+    )!;
+    const shadowButton = element.shadowRoot!.querySelector<HTMLButtonElement>(
+      '[data-plugin-handler]',
+    )!;
+    act(() => shadowButton.click());
+    expect(click).toHaveBeenCalledTimes(2);
+
+    unmountRoot();
+    act(() => shadowButton.click());
+    expect(click).toHaveBeenCalledTimes(2);
+  });
+
   it('노출 액션을 등록하고 언마운트에서 액션과 onMount 자원을 정리한다', () => {
     const play = vi.fn();
     const mountCleanup = vi.fn();
