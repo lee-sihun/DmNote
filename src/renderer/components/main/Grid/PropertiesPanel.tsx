@@ -1387,11 +1387,18 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       pluginSettingsPanel.resolve(true);
     } catch (error) {
       console.error('[Plugin Settings] Failed to apply settings:', error);
-      pluginSettingsPanel.resolve(false);
+      void window.api.ui.dialog
+        .alert(t('common.saveFailed'), { confirmText: t('common.ok') })
+        .catch(() => {});
     } finally {
       pluginSettingsSavingRef.current = false;
       setIsPluginSettingsSaving(false);
-      closePluginSettingsPanel();
+      if (
+        usePropertiesPanelStore.getState().pluginSettingsPanel ===
+        pluginSettingsPanel
+      ) {
+        closePluginSettingsPanel();
+      }
     }
   };
 

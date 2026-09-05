@@ -211,10 +211,18 @@
     "acceptExternal": "Accept External Change"
   },
   "editorSave": {
+    "transientFailure": "A problem occurred while saving your edits.\nCheck the current values and try again.",
+    "lifecycleCancelled": "Quitting or restarting was cancelled because saving failed.\nCheck your changes and try again.",
+    "pendingFailure": "Your changes have not been saved yet.",
+    "retrySave": "Save again",
+    "retrying": "Saving…",
+    "historyCancelled": "Undo or redo was cancelled because saving failed.\nCheck your changes and try again.",
     "permanentFailure": "Couldn't save this edit, so it was undone.\nCheck the value you just changed.",
     "capacityFailure": "This edit exceeded the save limit and was undone.\nRemove some elements and try again."
   },
   "common": {
+    "actionFailed": "The action could not be completed.",
+    "restartFailed": "The app could not be restarted.",
     "confirm": "Confirm",
     "cancel": "Cancel",
     "close": "Close",
@@ -224,7 +232,9 @@
     "save": "Save",
     "more": "More",
     "copySuffix": "Copy",
-    "dialog": "Dialog"
+    "dialog": "Dialog",
+    "saveFailed": "Could not save the settings. Please try again.",
+    "editTargetMissing": "The item being edited was deleted and cannot be saved."
   },
   "numberInput": {
     "expressionHint": "Expressions supported: + - * / ( )"

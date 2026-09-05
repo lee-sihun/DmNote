@@ -66,7 +66,11 @@ const current = pluginSettings.get();
 console.log("API Key:", current.apiKey);
 
 // Change settings values
-await pluginSettings.set({ theme: "light" });
+try {
+  await pluginSettings.set({ theme: "light" });
+} catch (error) {
+  console.error("Failed to save settings:", error);
+}
 
 // Open settings panel (default: property panel)
 const confirmed = await pluginSettings.open();
@@ -112,6 +116,12 @@ interface PluginSettingsDefinition {
 | `open()`              | Open settings panel (default: property panel) |
 | `reset()`             | Reset to defaults                             |
 | `subscribe(listener)` | Subscribe to settings changes                 |
+
+`set()` and `reset()` reject their promises if saving fails. The failed edit is
+restored from saved settings without overwriting a newer edit started during
+recovery. Change callbacks and subscriber notifications run only after a successful
+save. A property panel save failure shows an error and resolves `open()` to `false`;
+a modal save failure rejects `open()`.
 
 ## onChange vs subscribe()
 

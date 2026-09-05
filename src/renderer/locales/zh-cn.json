@@ -211,10 +211,18 @@
     "acceptExternal": "接受外部更改"
   },
   "editorSave": {
+    "transientFailure": "保存编辑内容时出现问题。\n请确认当前值后重试。",
+    "lifecycleCancelled": "保存失败，已中止退出或重新启动。\n请确认更改后重试。",
+    "pendingFailure": "更改尚未保存。",
+    "retrySave": "重新保存",
+    "retrying": "保存中…",
+    "historyCancelled": "保存失败，已中止撤销或重做。\n请确认更改后重试。",
     "permanentFailure": "无法保存，已撤销这次更改。\n请检查刚才更改的值。",
     "capacityFailure": "超出保存上限，已撤销这次更改。\n请删除部分元素后重试。"
   },
   "common": {
+    "actionFailed": "无法完成此操作。",
+    "restartFailed": "无法重新启动应用程序。",
     "confirm": "确认",
     "cancel": "取消",
     "close": "关闭",
@@ -224,7 +232,9 @@
     "save": "保存",
     "more": "更多",
     "copySuffix": "拷贝",
-    "dialog": "对话框"
+    "dialog": "对话框",
+    "saveFailed": "无法保存设置，请重试。",
+    "editTargetMissing": "正在编辑的对象已被删除，无法保存。"
   },
   "numberInput": {
     "expressionHint": "支持算式：+ - * / ( )"

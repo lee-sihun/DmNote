@@ -211,10 +211,18 @@
     "acceptExternal": "接受外部變更"
   },
   "editorSave": {
+    "transientFailure": "儲存編輯內容時發生問題。\n請確認目前的值後再試一次。",
+    "lifecycleCancelled": "儲存失敗，已中止結束或重新啟動。\n請確認變更後再試一次。",
+    "pendingFailure": "變更尚未儲存。",
+    "retrySave": "重新儲存",
+    "retrying": "儲存中…",
+    "historyCancelled": "儲存失敗，已中止復原或重做。\n請確認變更後再試一次。",
     "permanentFailure": "無法儲存，已復原這次變更。\n請檢查剛才變更的值。",
     "capacityFailure": "超過儲存上限，已復原這次變更。\n請刪除部分元素後再試。"
   },
   "common": {
+    "actionFailed": "無法完成此操作。",
+    "restartFailed": "無法重新啟動應用程式。",
     "confirm": "確認",
     "cancel": "取消",
     "close": "關閉",
@@ -224,7 +232,9 @@
     "save": "儲存",
     "more": "更多",
     "copySuffix": "拷貝",
-    "dialog": "對話框"
+    "dialog": "對話框",
+    "saveFailed": "無法儲存設定，請再試一次。",
+    "editTargetMissing": "正在編輯的項目已遭刪除，無法儲存。"
   },
   "numberInput": {
     "expressionHint": "支援算式：+ - * / ( )"

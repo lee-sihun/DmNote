@@ -211,10 +211,18 @@
     "acceptExternal": "외부 변경 수용"
   },
   "editorSave": {
+    "transientFailure": "편집 저장 중 문제가 생겼습니다.\n현재 값을 확인하고 다시 시도해 주세요.",
+    "lifecycleCancelled": "저장에 실패해 종료·재시작을 중단했습니다.\n변경 내용을 확인하고 다시 시도해 주세요.",
+    "pendingFailure": "변경 내용을 아직 저장하지 못했습니다.",
+    "retrySave": "다시 저장",
+    "retrying": "저장 중…",
+    "historyCancelled": "저장에 실패해 실행 취소·다시 실행을 중단했습니다.\n변경 내용을 확인하고 다시 시도해 주세요.",
     "permanentFailure": "저장하지 못해 변경 내용을 되돌렸습니다.\n방금 바꾼 값을 확인해 주세요.",
     "capacityFailure": "저장 한도를 넘어 변경을 되돌렸습니다.\n일부 요소를 줄이고 다시 시도해 주세요."
   },
   "common": {
+    "actionFailed": "작업을 완료하지 못했습니다.",
+    "restartFailed": "앱을 다시 시작하지 못했습니다.",
     "confirm": "확인",
     "cancel": "취소",
     "close": "닫기",
@@ -224,7 +232,9 @@
     "save": "저장",
     "more": "더보기",
     "copySuffix": "복제",
-    "dialog": "대화상자"
+    "dialog": "대화상자",
+    "saveFailed": "설정을 저장하지 못했습니다. 다시 시도해 주세요.",
+    "editTargetMissing": "편집하던 대상이 삭제되어 저장할 수 없습니다."
   },
   "numberInput": {
     "expressionHint": "수식 사용 가능: + - * / ( )"

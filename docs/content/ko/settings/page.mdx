@@ -66,7 +66,11 @@ const current = pluginSettings.get();
 console.log("API Key:", current.apiKey);
 
 // 설정값 변경
-await pluginSettings.set({ theme: "light" });
+try {
+  await pluginSettings.set({ theme: "light" });
+} catch (error) {
+  console.error("설정 저장 실패:", error);
+}
 
 // 설정 패널 열기 (기본: 속성 패널)
 const confirmed = await pluginSettings.open();
@@ -111,6 +115,11 @@ interface PluginSettingsDefinition {
 | `open()`              | 설정 패널 열기 (기본: 속성 패널) |
 | `reset()`             | 기본값으로 초기화       |
 | `subscribe(listener)` | 설정 변경 구독          |
+
+`set()`과 `reset()`은 저장이 실패하면 Promise를 거부합니다. 실패한 편집은 저장된
+설정으로 복원하며, 복원 중 시작한 새 편집은 덮지 않습니다. 변경 콜백과 구독 알림은
+저장 성공 후에만 전달됩니다. 속성 패널의 저장 실패는 안내 후 `open()`이 `false`로
+끝나며, 모달 방식의 저장 실패는 `open()` 호출자에게 오류로 전달됩니다.
 
 ## onChange vs subscribe()
 
