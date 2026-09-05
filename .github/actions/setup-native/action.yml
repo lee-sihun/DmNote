@@ -16,7 +16,7 @@ runs:
       with:
         workspaces: ${{ inputs.workspace }}/src-tauri -> target
         prefix-key: ci-native-v1
-        key: ${{ inputs.cache-key }}
+        key: ${{ inputs.cache-key }}-${{ runner.os == 'Windows' && hashFiles(format('{0}/src-tauri/vendor/asio-sdk/**', inputs.workspace)) || 'no-asio-sdk' }}
         cache-on-failure: false
     - if: runner.os == 'Windows'
       shell: pwsh
