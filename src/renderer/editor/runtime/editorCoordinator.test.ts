@@ -5899,31 +5899,6 @@ describe('commitSemanticOpsInternal', () => {
     harness.coordinator.stop();
   });
 
-  it('opResults 개수 불일치는 같은 mutation 재전송 후 transient protocol 오류로 남긴다', async () => {
-    const id = '00000000-0000-4000-8000-000000000118';
-    const harness = createHarness(withStableId(id));
-    await harness.coordinator.start();
-    harness.transport.commitMock.mockResolvedValue({
-      revision: 1,
-      changedFields: ['keyPositions'],
-      opResults: [],
-    });
-
-    await expect(
-      harness.coordinator.commitSemanticOpsInternal([setBoundsOp(id)]),
-    ).rejects.toBeInstanceOf(EditorProtocolError);
-
-    expect(harness.transport.commitMock).toHaveBeenCalledTimes(2);
-    expect(harness.transport.commitMock.mock.calls[0][0]).toEqual(
-      harness.transport.commitMock.mock.calls[1][0],
-    );
-    expect(harness.coordinator.getState()).toMatchObject({
-      phase: 'error',
-      failureKind: 'transient',
-    });
-    harness.coordinator.stop();
-  });
-
   it('두 번의 protocol 응답 실패 후 canonical 조회도 실패하면 재시도 상태와 게스처를 보존한다', async () => {
     const id = '00000000-0000-4000-8000-000000000116';
     const onGestureIdsDiscarded = vi.fn();

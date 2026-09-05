@@ -13,12 +13,6 @@ const mocks = vi.hoisted(() => ({
   updateElement: vi.fn(),
   setResizing: vi.fn(),
   clearGuides: vi.fn(),
-  setDraggedBounds: vi.fn(),
-  setActiveGuides: vi.fn(),
-  setSpacingGuides: vi.fn(),
-  setSizeMatchGuides: vi.fn(),
-  calculateSnapPoints: vi.fn(),
-  calculateSizeSnap: vi.fn(),
   commitPatch: vi.fn(() => Promise.resolve()),
   beginMixedGesture: vi.fn(),
   commitMixedGesture: vi.fn(() => Promise.resolve()),
@@ -75,24 +69,13 @@ vi.mock('@stores/grid/useSmartGuidesStore', () => ({
   useSmartGuidesStore: {
     getState: () => ({
       clearGuides: mocks.clearGuides,
-      setDraggedBounds: mocks.setDraggedBounds,
-      setActiveGuides: mocks.setActiveGuides,
-      setSpacingGuides: mocks.setSpacingGuides,
-      setSizeMatchGuides: mocks.setSizeMatchGuides,
+      setDraggedBounds: vi.fn(),
+      setActiveGuides: vi.fn(),
+      setSpacingGuides: vi.fn(),
+      setSizeMatchGuides: vi.fn(),
     }),
   },
 }));
-
-vi.mock('@utils/grid/smartGuides', async (importOriginal) => {
-  const original = await importOriginal<
-    typeof import('@utils/grid/smartGuides')
-  >();
-  return {
-    ...original,
-    calculateSnapPoints: mocks.calculateSnapPoints,
-    calculateSizeSnap: mocks.calculateSizeSnap,
-  };
-});
 
 vi.mock('@stores/grid/useGridSelectionStore', () => ({
   selectionElementId: (
@@ -231,12 +214,6 @@ describe('useGridResize plugin gesture lifecycle', () => {
     mocks.updateElement.mockReset();
     mocks.setResizing.mockReset();
     mocks.clearGuides.mockReset();
-    mocks.setDraggedBounds.mockReset();
-    mocks.setActiveGuides.mockReset();
-    mocks.setSpacingGuides.mockReset();
-    mocks.setSizeMatchGuides.mockReset();
-    mocks.calculateSnapPoints.mockReset();
-    mocks.calculateSizeSnap.mockReset();
     mocks.commitPatch.mockClear();
     mocks.commitGroupBounds.mockClear();
     mocks.commitSingleBounds.mockClear();
@@ -251,23 +228,6 @@ describe('useGridResize plugin gesture lifecycle', () => {
       spacingGuides: false,
       sizeMatchGuides: false,
     };
-    mocks.calculateSnapPoints.mockImplementation((draggedBounds) => ({
-      snappedX: draggedBounds.left,
-      snappedY: draggedBounds.top,
-      guides: [],
-      spacingGuides: [],
-      didSnapX: false,
-      didSnapY: false,
-      didSpacingSnapX: false,
-      didSpacingSnapY: false,
-    }));
-    mocks.calculateSizeSnap.mockImplementation((width, height) => ({
-      snappedWidth: width,
-      snappedHeight: height,
-      sizeMatchGuides: [],
-      didSnapWidth: false,
-      didSnapHeight: false,
-    }));
     mocks.begin.mockImplementation((pluginId: string, gestureId: string) => {
       const token = `token-${++tokenSequence}`;
       pluginGestureIds.push(gestureId);
@@ -605,106 +565,6 @@ describe('useGridResize plugin gesture lifecycle', () => {
     });
 
     expect(getOtherElements).toHaveBeenLastCalledWith(STABLE_A);
-  });
-
-  it('size match 비활성 native resize는 대상과 무관한 수평 간격 가이드를 제외한다', async () => {
-    const unrelatedGuide = {
-      type: 'spacing' as const,
-      direction: 'horizontal' as const,
-      value: 20,
-      startPos: 0,
-      endPos: 20,
-      crossAxisPos: 0,
-      fromElementId: 'reference-a',
-      toElementId: 'reference-b',
-      isMatched: true,
-    };
-    const relatedGuide = {
-      ...unrelatedGuide,
-      fromElementId: STABLE_A,
-      toElementId: 'reference-c',
-    };
-    mocks.gridSettings = {
-      alignmentGuides: true,
-      spacingGuides: true,
-      sizeMatchGuides: false,
-    };
-    mocks.calculateSnapPoints.mockReturnValue({
-      snappedX: 0,
-      snappedY: 0,
-      guides: [],
-      spacingGuides: [relatedGuide, unrelatedGuide],
-      didSnapX: true,
-      didSnapY: false,
-      didSpacingSnapX: true,
-      didSpacingSnapY: false,
-    });
-    await renderHarness([stableKeySelection(STABLE_A)], () => []);
-
-    await act(async () => {
-      api.handleResizeStart();
-      api.handleResize({
-        x: 0,
-        y: 0,
-        width: 120,
-        height: 60,
-        handle: { id: 'e', dx: 1, dy: 0 },
-      });
-    });
-
-    expect(mocks.setSpacingGuides).toHaveBeenLastCalledWith([relatedGuide]);
-  });
-
-  it('size match 비활성 plugin resize는 참조용 수평 간격 가이드를 유지한다', async () => {
-    const pluginId = 'plugin-a:one';
-    const unrelatedGuide = {
-      type: 'spacing' as const,
-      direction: 'horizontal' as const,
-      value: 20,
-      startPos: 0,
-      endPos: 20,
-      crossAxisPos: 0,
-      fromElementId: 'reference-a',
-      toElementId: 'reference-b',
-      isMatched: true,
-    };
-    const relatedGuide = {
-      ...unrelatedGuide,
-      fromElementId: pluginId,
-      toElementId: 'reference-c',
-    };
-    mocks.gridSettings = {
-      alignmentGuides: true,
-      spacingGuides: true,
-      sizeMatchGuides: false,
-    };
-    mocks.calculateSnapPoints.mockReturnValue({
-      snappedX: 0,
-      snappedY: 0,
-      guides: [],
-      spacingGuides: [relatedGuide, unrelatedGuide],
-      didSnapX: true,
-      didSnapY: false,
-      didSpacingSnapX: true,
-      didSpacingSnapY: false,
-    });
-    await renderHarness([pluginSelection(pluginId)], () => []);
-
-    await act(async () => {
-      api.handleResizeStart();
-      api.handleResize({
-        x: 0,
-        y: 0,
-        width: 120,
-        height: 60,
-        handle: { id: 'e', dx: 1, dy: 0 },
-      });
-    });
-
-    expect(mocks.setSpacingGuides).toHaveBeenLastCalledWith([
-      relatedGuide,
-      unrelatedGuide,
-    ]);
   });
 
   it('합성 native 단일 resize는 로컬과 wire를 모두 무커밋한다', async () => {

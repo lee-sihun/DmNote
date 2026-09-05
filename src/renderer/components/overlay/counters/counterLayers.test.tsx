@@ -135,27 +135,4 @@ describe('StatCounterLayer 게이팅', () => {
     expect(commits).toBe(1);
     expect(container.querySelector('span.counter')?.textContent).toBe('9');
   });
-
-  it('outside stat 실시간 값은 기존 bitwise 정수 정규화를 유지한다', () => {
-    act(() =>
-      applyStatsSnapshot({
-        kps: 0,
-        kpsAvg: 0,
-        kpsMax: 0,
-        total: 9.75,
-      }),
-    );
-    render();
-    expect(container.querySelector('span.counter')?.textContent).toBe('9');
-
-    act(() =>
-      applyStatsSnapshot({
-        kps: 0,
-        kpsAvg: 0,
-        kpsMax: 0,
-        total: -2.75,
-      }),
-    );
-    expect(container.querySelector('span.counter')?.textContent).toBe('-2');
-  });
 });

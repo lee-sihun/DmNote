@@ -184,7 +184,8 @@ describe('기본 요소 눌림 섀도 계약', () => {
 
   it('background 축약 속성을 쓰는 표면도 padding-box 클립을 명시한다', () => {
     const files = [
-      'src/renderer/components/shared/KnobFace.tsx',
+      'src/renderer/components/main/Grid/layers/KnobItem.tsx',
+      'src/renderer/components/overlay/counters/OverlayKnobItem.tsx',
       'src/renderer/components/shared/GraphPanel.tsx',
     ];
 
@@ -193,10 +194,7 @@ describe('기본 요소 눌림 섀도 계약', () => {
       expect(source).toContain("backgroundClip: 'padding-box'");
     }
 
-    for (const file of [
-      'src/renderer/components/main/Grid/layers/KnobItem.tsx',
-      'src/renderer/components/overlay/counters/OverlayKnobItem.tsx',
-    ]) {
+    for (const file of files.slice(0, 2)) {
       const source = readFileSync(resolve(process.cwd(), file), 'utf8');
       expect(source).not.toContain("contain: 'layout style paint'");
     }

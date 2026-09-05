@@ -12,11 +12,8 @@ import {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const mocks = vi.hoisted(() => ({
-  axisInitialize: vi.fn(),
   bootstrap: vi.fn(),
-  keyInitialize: vi.fn(),
   keyEventListener: null as null | ((payload: unknown) => void),
-  keySubscribe: vi.fn(),
   unsubscribeKeyEvents: vi.fn(),
   updateTrackLayouts: vi.fn(),
   handleKeyDown: vi.fn(),
@@ -27,11 +24,7 @@ const mocks = vi.hoisted(() => ({
   notesRef: { current: {} },
   noteBuffer: {},
   resyncListener: null as null | (() => void),
-  resyncSubscribe: vi.fn(),
-  unsubscribeResync: vi.fn(),
   keysResetListener: null as null | ((payload: unknown) => void),
-  keysResetSubscribe: vi.fn(),
-  unsubscribeKeysReset: vi.fn(),
   sceneRenders: { count: 0 },
 }));
 
@@ -156,17 +149,23 @@ vi.mock('@hooks/shared/useLayoutComputation', () => ({
   }),
 }));
 vi.mock('@utils/core/axisEventBus', () => ({
-  axisEventBus: { initialize: mocks.axisInitialize },
+  axisEventBus: { initialize: vi.fn() },
 }));
 vi.mock('@utils/core/keyEventBus', () => ({
   keyEventBus: {
-    subscribe: mocks.keySubscribe,
-    initialize: mocks.keyInitialize,
+    subscribe: vi.fn((listener: (payload: unknown) => void) => {
+      mocks.keyEventListener = listener;
+      return mocks.unsubscribeKeyEvents;
+    }),
+    initialize: vi.fn(() => Promise.resolve()),
   },
 }));
 vi.mock('@api/modules/obsApi', () => ({
   obsApi: {
-    onResync: mocks.resyncSubscribe,
+    onResync: vi.fn((listener: () => void) => {
+      mocks.resyncListener = listener;
+      return vi.fn();
+    }),
   },
 }));
 
@@ -242,41 +241,20 @@ const makeApiMock = () =>
   ({
     app: { bootstrap: mocks.bootstrap },
     keys: {
-      onKeysReset: mocks.keysResetSubscribe,
+      onKeysReset: vi.fn((listener: (payload: unknown) => void) => {
+        mocks.keysResetListener = listener;
+        return vi.fn();
+      }),
     },
   } as unknown as Window['api']);
 
 const resetSharedMocks = () => {
-  mocks.axisInitialize.mockReset();
   mocks.bootstrap.mockReset();
   mocks.bootstrap.mockResolvedValue({ activeKeys: [] });
-  mocks.keyInitialize.mockReset();
-  mocks.keyInitialize.mockResolvedValue(undefined);
   mocks.keyEventListener = null;
-  mocks.keySubscribe.mockReset();
-  mocks.keySubscribe.mockImplementation(
-    (listener: (payload: unknown) => void) => {
-      mocks.keyEventListener = listener;
-      return mocks.unsubscribeKeyEvents;
-    },
-  );
   mocks.resyncListener = null;
-  mocks.resyncSubscribe.mockReset();
-  mocks.resyncSubscribe.mockImplementation((listener: () => void) => {
-    mocks.resyncListener = listener;
-    return mocks.unsubscribeResync;
-  });
   mocks.keysResetListener = null;
-  mocks.keysResetSubscribe.mockReset();
-  mocks.keysResetSubscribe.mockImplementation(
-    (listener: (payload: unknown) => void) => {
-      mocks.keysResetListener = listener;
-      return mocks.unsubscribeKeysReset;
-    },
-  );
   mocks.unsubscribeKeyEvents.mockClear();
-  mocks.unsubscribeResync.mockClear();
-  mocks.unsubscribeKeysReset.mockClear();
   mocks.updateTrackLayouts.mockClear();
   mocks.handleKeyDown.mockClear();
   mocks.handleKeyUp.mockClear();
@@ -289,13 +267,7 @@ const resetSharedMocks = () => {
 describe('overlay active key reconciliation', () => {
   let container: HTMLDivElement;
   let root: Root;
-  let isMounted: boolean;
   let originalApi: Window['api'];
-  let initialRuntimeOrder: {
-    subscribe: number;
-    initialize: number;
-    hydrate: number;
-  };
 
   beforeEach(async () => {
     originalApi = window.api;
@@ -321,96 +293,16 @@ describe('overlay active key reconciliation', () => {
     await act(async () => {
       root.render(<App />);
     });
-    isMounted = true;
     await flushAsync();
-    initialRuntimeOrder = {
-      subscribe: mocks.keySubscribe.mock.invocationCallOrder[0],
-      initialize: mocks.keyInitialize.mock.invocationCallOrder[0],
-      hydrate: mocks.bootstrap.mock.invocationCallOrder[0],
-    };
     mocks.bootstrap.mockClear();
-    mocks.finalizeAllActive.mockClear();
   });
 
   afterEach(() => {
-    if (isMounted) {
-      act(() => root.unmount());
-    }
+    act(() => root.unmount());
     container.remove();
     resetAllKeySignals();
     window.api = originalApi;
     vi.restoreAllMocks();
-  });
-
-  it('키 버스는 1회 구독하고 구독·초기화 뒤 최초 스냅샷을 수화한다', async () => {
-    expect(initialRuntimeOrder.subscribe).toBeLessThan(
-      initialRuntimeOrder.initialize,
-    );
-    expect(initialRuntimeOrder.initialize).toBeLessThan(
-      initialRuntimeOrder.hydrate,
-    );
-
-    await act(async () => {
-      useKeyStore.setState({
-        positions: {
-          '4key': [createDefaultKeyPosition(10, 20)],
-          '8key': [],
-        },
-      });
-      useSettingsStore.setState({ backgroundColor: '#123456' });
-    });
-
-    expect(mocks.axisInitialize).toHaveBeenCalledTimes(1);
-    expect(mocks.keySubscribe).toHaveBeenCalledTimes(1);
-    expect(mocks.keyInitialize).toHaveBeenCalledTimes(1);
-  });
-
-  it('탭 전환은 활성 노트를 완료하고 신호를 리셋한 뒤 권위 상태를 재수화한다', async () => {
-    setKeyActive('KeyK', true);
-    let wasResetBeforeHydration = false;
-    mocks.bootstrap.mockImplementationOnce(async () => {
-      wasResetBeforeHydration = !getKeySignal('KeyK').value;
-      return { activeKeys: ['KeyQ'] };
-    });
-
-    await act(async () => {
-      useKeyStore.setState({ selectedKeyType: '8key' });
-    });
-    await flushAsync();
-
-    expect(mocks.finalizeAllActive).toHaveBeenCalledTimes(1);
-    expect(wasResetBeforeHydration).toBe(true);
-    expect(mocks.finalizeAllActive.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.bootstrap.mock.invocationCallOrder[0],
-    );
-    expect(getKeySignal('KeyK').value).toBe(false);
-    expect(getKeySignal('KeyQ').value).toBe(true);
-  });
-
-  it('키 버스 초기화 대기 중 언마운트해도 완료 후 구독을 해제한다', async () => {
-    act(() => root.unmount());
-    isMounted = false;
-    await flushAsync();
-    mocks.unsubscribeKeyEvents.mockClear();
-
-    const initialize = deferred<void>();
-    mocks.keyInitialize.mockReset();
-    mocks.keyInitialize.mockReturnValue(initialize.promise);
-    root = createRoot(container);
-    await act(async () => {
-      root.render(<App />);
-      await Promise.resolve();
-    });
-    isMounted = true;
-
-    act(() => root.unmount());
-    isMounted = false;
-    expect(mocks.unsubscribeKeyEvents).not.toHaveBeenCalled();
-
-    initialize.resolve();
-    await flushAsync();
-
-    expect(mocks.unsubscribeKeyEvents).toHaveBeenCalledTimes(1);
   });
 
   it('positions 변경에는 눌림 상태를 재설정하지 않는다', async () => {

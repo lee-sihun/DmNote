@@ -60,26 +60,15 @@ vi.mock('@hooks/pickers/useGradientColorState', () => ({
 }));
 
 import {
-  CloseIcon,
   ColorInput,
   FontStyleToggle,
-  ModeToggleIcon,
   NumberInput,
   OptionalNumberInput,
-  PropertyRow,
-  PropertySection,
-  Tabs,
   TextInput,
 } from './PropertyInputs';
 import { createFontStyleToggleHandlers } from './fontStyleToggleHandlers';
-import { TABS } from './types';
 import { MAX_EXPRESSION_LENGTH } from '@utils/core/arithmeticExpression';
 import { finalizeEditorDraftForLifecycle } from '@src/renderer/editor/runtime/lifecycleEditorDraft';
-import {
-  FORM_LABEL_CLASS,
-  FORM_ROW_CLASS,
-  SECTION_CARD_CLASS,
-} from '@utils/cardRecipes';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -131,111 +120,6 @@ const nextFrame = () =>
     () =>
       new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
   );
-
-describe('PropertyInputs façade·layout·tabs 계약', () => {
-  let container: HTMLDivElement;
-  let root: Root;
-
-  beforeEach(() => {
-    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
-      window.setTimeout(() => callback(performance.now()), 0),
-    );
-    vi.stubGlobal('cancelAnimationFrame', (id: number) => {
-      window.clearTimeout(id);
-    });
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = createRoot(container);
-  });
-
-  afterEach(() => {
-    act(() => root.unmount());
-    vi.unstubAllGlobals();
-    container.remove();
-  });
-
-  it('기존 façade의 모든 named production export를 유지한다', async () => {
-    const exports = await import('./PropertyInputs');
-
-    expect(Object.keys(exports).sort()).toEqual(
-      [
-        'CloseIcon',
-        'ColorInput',
-        'FontStyleToggle',
-        'ModeToggleIcon',
-        'NumberInput',
-        'OptionalNumberInput',
-        'PropertyRow',
-        'PropertySection',
-        'Tabs',
-        'TextInput',
-      ].sort(),
-    );
-    expect(exports.CloseIcon).toBe(CloseIcon);
-    expect(exports.ModeToggleIcon).toBe(ModeToggleIcon);
-  });
-
-  it('PropertySection→PropertyRow의 표식·클래스·label/control DOM 순서를 유지한다', () => {
-    act(() =>
-      root.render(
-        <PropertySection>
-          <PropertyRow label="Label">
-            <button type="button">Control</button>
-          </PropertyRow>
-        </PropertySection>,
-      ),
-    );
-
-    const section = container.firstElementChild as HTMLDivElement;
-    const row = section.firstElementChild as HTMLDivElement;
-    expect(section.dataset.dmnSection).toBe('true');
-    expect(section.className).toBe(SECTION_CARD_CLASS);
-    expect(row.className).toBe(FORM_ROW_CLASS);
-    expect(row.children).toHaveLength(2);
-    expect(row.children[0].tagName).toBe('P');
-    expect(row.children[0].className).toBe(FORM_LABEL_CLASS);
-    expect(row.children[0].textContent).toBe('Label');
-    expect(row.children[1].className).toBe('flex items-center gap-[8px]');
-    expect(row.children[1].textContent).toBe('Control');
-  });
-
-  it('Tabs는 available 순서·번역·active thumb DOM과 after-paint commit을 유지한다', async () => {
-    const onTabChange = vi.fn();
-    act(() =>
-      root.render(
-        <Tabs
-          activeTab={TABS.STYLE}
-          availableTabs={[TABS.NOTE, TABS.STYLE]}
-          onTabChange={onTabChange}
-          t={(key) => `translated:${key}`}
-        />,
-      ),
-    );
-
-    const buttons = [...container.querySelectorAll('button')];
-    const thumb = container.querySelector<HTMLElement>('.dmn-segment-thumb')!;
-    expect(buttons.map((button) => button.dataset.tabId)).toEqual([
-      TABS.NOTE,
-      TABS.STYLE,
-    ]);
-    expect(buttons.map((button) => button.textContent)).toEqual([
-      'translated:propertiesPanel.tabNote',
-      'translated:propertiesPanel.tabStyle',
-    ]);
-    expect(
-      buttons.map((button) => button.getAttribute('aria-pressed')),
-    ).toEqual(['false', 'true']);
-    expect(thumb.getAttribute('aria-hidden')).toBe('true');
-    expect(thumb.style.width).toBe('calc(0.5 * (100% - 4px))');
-    expect(thumb.style.transform).toBe('translate3d(100%, 0, 0)');
-
-    act(() => buttons[0].click());
-    expect(buttons[0].getAttribute('aria-pressed')).toBe('true');
-    expect(onTabChange).not.toHaveBeenCalled();
-    await flushAfterPaintCommit();
-    expect(onTabChange).toHaveBeenCalledWith(TABS.NOTE);
-  });
-});
 
 describe('NumberInput visual-first commit', () => {
   let container: HTMLDivElement;

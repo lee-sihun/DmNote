@@ -1,10 +1,15 @@
 import React from 'react';
 import {
   gradientToCss,
+  gradientRingStyle,
   resolveStatePair,
   type GradientSpec,
 } from '@src/types/color';
-import KnobFace from '@components/shared/KnobFace';
+import { isMac } from '@utils/core/platform';
+import { useDraggable, useSmartGuidesElements } from '@hooks/Grid';
+import { useSelectionDrag } from '@hooks/Grid/useSelectionDrag';
+import { useSettingsStore } from '@stores/useSettingsStore';
+import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useGradientPreviewSession } from '@stores/grid/useGradientEditStore';
 import { useEditStatePreviewActive } from '@stores/grid/useEditStatePreviewStore';
 import { resolveImageSource } from '@utils/core/imageSource';
@@ -22,10 +27,6 @@ import {
   resolveElementShadow,
   type ElementShadowSpec,
 } from '@src/types/key/shadows';
-import {
-  useGridElementInteraction,
-  type GridElementInteractionProps,
-} from '@hooks/Grid/useGridElementInteraction';
 
 interface KnobPosition {
   hidden?: boolean;
@@ -57,9 +58,40 @@ interface KnobPosition {
   zIndex?: number;
 }
 
-interface KnobItemProps extends GridElementInteractionProps {
+interface SelectedElement {
+  id: string;
+  type?: string;
+  index?: number;
+}
+
+interface KnobItemProps {
+  index: number;
+  elementId: string;
   position: KnobPosition;
+  onPositionChange: (
+    index: number,
+    dx: number,
+    dy: number,
+    elementId: string,
+  ) => void;
+  onClick?: (e: React.MouseEvent) => void;
+  onDoubleClick?: (e: React.MouseEvent) => void;
+  onCtrlClick?: (e: React.MouseEvent) => void;
+  onShiftClick?: (e: React.MouseEvent) => void;
+  isSelected?: boolean;
+  selectedElements?: SelectedElement[];
+  onMultiDrag?: (dx: number, dy: number) => void;
+  onMultiDragStart?: () => void | (() => void);
+  onMultiDragEnd?: () => void;
+  activeTool?: string;
+  onEraserClick?: () => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
+  setReferenceRef?: (node: HTMLElement | null) => void;
+  zoom?: number;
+  panX?: number;
+  panY?: number;
   zIndex?: number;
+  isViewportTransforming?: boolean;
 }
 
 const KnobItem = ({
@@ -86,6 +118,7 @@ const KnobItem = ({
   zIndex = 0,
   isViewportTransforming = false,
 }: KnobItemProps) => {
+  const macOS = isMac();
   const {
     dx = 0,
     dy = 0,
@@ -178,6 +211,18 @@ const KnobItem = ({
     !showBorderRing && gradientRingWidth > 0
       ? `${gradientRingWidth}px solid ${resolvedKnobBorder.color}`
       : 'none';
+  const { getOtherElements } = useSmartGuidesElements();
+  const gridSnapSize = useSettingsStore(
+    (state: { gridSettings?: { gridSnapSize?: number } }) =>
+      state.gridSettings?.gridSnapSize ?? 5,
+  );
+  const isDraggingOrResizing = useGridSelectionStore(
+    (state: { isDraggingOrResizing: boolean }) => state.isDraggingOrResizing,
+  );
+
+  const isSelectionMode = isSelected;
+  const effectiveElementId = elementId;
+
   const inactiveImageSrc = resolveImageSource(inactiveImage);
   const activeImageSrc = resolveImageSource(activeImage);
   const imageSrc =
@@ -206,45 +251,122 @@ const KnobItem = ({
       : idleImageFit || imageFit || 'cover'
   ) as React.CSSProperties['objectFit'];
 
-  const {
-    attachRef,
-    dx: renderDx,
-    dy: renderDy,
-    handleClick,
-    handleContextMenu,
-    handleDoubleClick,
-    handleSelectionDragPointerDown,
-    isDraggingOrResizing,
-    isSelectionMode,
-  } = useGridElementInteraction({
-    index,
-    elementId,
+  const draggable = useDraggable({
+    gridSize: gridSnapSize,
     initialX: dx,
     initialY: dy,
-    elementWidth: width || 60,
-    elementHeight: height || 60,
-    onPositionChange,
-    onClick,
-    onDoubleClick,
-    onCtrlClick,
-    onShiftClick,
-    isSelected,
-    selectedElements,
-    onMultiDrag,
-    onMultiDragStart,
-    onMultiDragEnd,
-    activeTool,
-    onEraserClick,
-    onContextMenu,
-    setReferenceRef,
+    onPositionChange: (newDx: number, newDy: number) => {
+      if (!isSelectionMode) {
+        // 프리즈된 index의 재해석은 수신 측이 elementId로 수행
+        onPositionChange(index, newDx, newDy, elementId);
+      }
+    },
     zoom,
     panX,
     panY,
-    isViewportTransforming,
+    elementId: effectiveElementId,
+    elementWidth: width || 60,
+    elementHeight: height || 60,
+    getOtherElements,
+    disabled: isSelectionMode,
+  });
+
+  const {
+    handlePointerDown: handleSelectionDragPointerDown,
+    movedDuringPressRef,
+    pressMovedRef,
+  } = useSelectionDrag({
+    enabled: isSelectionMode,
+    zoom,
+    startX: dx,
+    startY: dy,
+    elementId: effectiveElementId,
+    elementWidth: width || 60,
+    elementHeight: height || 60,
+    selectedElements,
+    getOtherElements,
+    onMultiDragStart,
+    onMultiDrag,
+    onMultiDragEnd,
   });
 
   if (position?.hidden) return null;
-  const transform = `translate(calc(${renderDx}px + var(--key-offset-x, 0px)), calc(${renderDy}px + var(--key-offset-y, 0px)))`;
+
+  const handleClick = (e: React.MouseEvent) => {
+    // macOS ctrl+클릭은 우클릭 제스처 — Chromium이 contextmenu 뒤에 click도 발화하므로
+    // 이 클릭이 선택·패널 오픈으로 이어져 방금 연 메뉴를 닫는 것을 차단
+    if (macOS && e.ctrlKey) return;
+    // 드래그로 끝난 press의 trailing click은 클릭이 아니다 - 수식키 토글·
+    // 범위 선택·지우개로 새지 않게 흡수. 개별 드래그는 wasMoved,
+    // 선택 모드 다중 드래그는 pressMovedRef가 판별 (선택 모드에서는
+    // 개별 draggable이 disabled라 wasMoved가 항상 false)
+    if (draggable.wasMoved || pressMovedRef.current) {
+      e.stopPropagation();
+      return;
+    }
+    const isPrimaryModifierPressed = macOS ? e.metaKey : e.ctrlKey;
+    const isShiftPressed = e.shiftKey;
+
+    if (isSelectionMode && isPrimaryModifierPressed && onCtrlClick) {
+      e.stopPropagation();
+      onCtrlClick(e);
+      return;
+    }
+
+    if (isSelectionMode) {
+      e.stopPropagation();
+      return;
+    }
+
+    if (activeTool === 'eraser') {
+      onEraserClick?.();
+      return;
+    }
+
+    if (!draggable.wasMoved) {
+      if (isShiftPressed && onShiftClick) {
+        e.stopPropagation();
+        onShiftClick(e);
+        return;
+      }
+      if (isPrimaryModifierPressed && onCtrlClick) {
+        e.stopPropagation();
+        onCtrlClick(e);
+        return;
+      }
+      onClick?.(e);
+    }
+  };
+
+  // 더블클릭 편집 진입 — 순수 더블클릭만 통과 (드래그·수식키·지우개·뷰포트 변환 제외)
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    if (!onDoubleClick) return;
+    if (macOS && e.ctrlKey) return;
+    if (e.shiftKey || e.metaKey || e.ctrlKey) return;
+    if (activeTool === 'eraser') return;
+    if (isViewportTransforming) return;
+    if (draggable.recentPressMovedRef.current || movedDuringPressRef.current)
+      return;
+    e.stopPropagation();
+    onDoubleClick(e);
+  };
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onContextMenu?.(e);
+  };
+
+  const attachRef = (node: HTMLElement | null) => {
+    if (!isSelectionMode) {
+      draggable.ref(node);
+    }
+    if (typeof setReferenceRef === 'function') {
+      setReferenceRef(node);
+    }
+  };
+
+  const transform = `translate(calc(${draggable.dx}px + var(--key-offset-x, 0px)), calc(${draggable.dy}px + var(--key-offset-y, 0px)))`;
 
   return (
     <div
@@ -269,24 +391,85 @@ const KnobItem = ({
       onContextMenu={handleContextMenu}
       onDragStart={(e: React.DragEvent) => e.preventDefault()}
     >
-      <KnobFace
-        active={previewActive}
-        useInlineStyles={useInline}
-        background={
-          effectiveBgGradient
-            ? gradientToCss(effectiveBgGradient)
-            : stateBackgroundColor
+      <div
+        style={
+          {
+            width: '100%',
+            height: '100%',
+            overflow: 'hidden',
+            position: 'relative',
+            ...(useInline
+              ? {
+                  borderRadius: resolvedRadius,
+                  background: effectiveBgGradient
+                    ? gradientToCss(effectiveBgGradient)
+                    : stateBackgroundColor,
+                  backgroundClip: 'padding-box',
+                  border: resolvedBorder,
+                  padding: showBorderRing
+                    ? `${gradientRingWidth}px`
+                    : undefined,
+                  boxShadow: resolvedShadow,
+                }
+              : {
+                  '--dmn-knob-bg-default': effectiveBgGradient
+                    ? gradientToCss(effectiveBgGradient)
+                    : stateBackgroundColor,
+                  '--dmn-knob-border-default': resolvedBorder,
+                  '--dmn-knob-radius-default': resolvedRadius,
+                  '--dmn-knob-padding-default': showBorderRing
+                    ? `${gradientRingWidth}px`
+                    : '0px',
+                  '--dmn-knob-shadow-default': resolvedShadow,
+                  '--dmn-knob-indicator-default': stateBorderColor,
+                }),
+            boxSizing: 'border-box',
+          } as React.CSSProperties
         }
-        border={resolvedBorder}
-        borderRadius={resolvedRadius}
-        shadow={resolvedShadow}
-        indicatorColor={stateBorderColor}
-        borderGradient={effectiveBorderGradient}
-        borderWidth={gradientRingWidth}
-        showBorderRing={showBorderRing}
-        imageSrc={imageSrc}
-        imageFit={resolvedFit}
-      />
+        data-knob-element="true"
+        data-knob-state={previewActive ? 'active' : 'inactive'}
+      >
+        {showBorderRing && effectiveBorderGradient && (
+          <span
+            aria-hidden="true"
+            data-gradient-border-ring="true"
+            style={{
+              ...gradientRingStyle(effectiveBorderGradient, gradientRingWidth),
+              ...(useInline
+                ? { background: gradientToCss(effectiveBorderGradient) }
+                : {}),
+            }}
+          />
+        )}
+        {imageSrc ? (
+          <img
+            src={imageSrc}
+            alt=""
+            draggable={false}
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: resolvedFit,
+              pointerEvents: 'none',
+              userSelect: 'none',
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              position: 'absolute',
+              top: '12%',
+              left: '50%',
+              width: '8%',
+              height: '76%',
+              transform: 'translateX(-50%)',
+              background: useInline ? stateBorderColor : undefined,
+              borderRadius: '4px',
+            }}
+            data-knob-indicator="true"
+          />
+        )}
+      </div>
     </div>
   );
 };

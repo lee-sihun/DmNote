@@ -343,21 +343,19 @@ vi.mock('./PropertiesPanel/index', () => {
       return <div />;
     },
     PluginSettingsPanelView: () => <ScopeProbe id="plugin-settings" />,
+    useBatchHandlers: (props: Record<string, unknown>) => {
+      batchPropsMock(props);
+      return {
+        handleBatchStyleChangeComplete: legacyBatchStyleCommitMock,
+        handleBatchCounterUpdate: legacyBatchCounterUpdateMock,
+      };
+    },
     usePanelScroll: () => ({
       batchScrollRefFor: () => vi.fn(),
       singleScrollRefFor: () => vi.fn(),
     }),
   };
 });
-vi.mock('./PropertiesPanel/batch/useBatchHandlers', () => ({
-  useBatchHandlers: (props: Record<string, unknown>) => {
-    batchPropsMock(props);
-    return {
-      handleBatchStyleChangeComplete: legacyBatchStyleCommitMock,
-      handleBatchCounterUpdate: legacyBatchCounterUpdateMock,
-    };
-  },
-}));
 vi.mock('./PropertiesPanel/PanelNavContext', () => ({
   PanelNavProvider: ({ children }: { children: React.ReactNode }) => children,
 }));

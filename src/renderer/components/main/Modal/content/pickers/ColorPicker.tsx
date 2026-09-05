@@ -1,4 +1,6 @@
-import React, { useRef, useState } from 'react';
+/* eslint-disable react-hooks/set-state-in-effect */
+import React, { useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { useTranslation } from '@contexts/useTranslation';
 import {
   SaturationArea,
@@ -6,6 +8,8 @@ import {
   AlphaSlider,
 } from './colorPickerPrimitives';
 import PickerSurface from '@components/main/Grid/PropertiesPanel/PickerSurface';
+import TabSwitch from '@components/main/common/TabSwitch';
+import { NumberInput } from '@components/main/common/NumberInput';
 import {
   MODES,
   isGradientColor,
@@ -22,30 +26,24 @@ import {
   addToPalette,
   isGradientSpecColor,
   gradientSpecPaletteEntry,
+  type GradientSpecColor,
 } from '@utils/color/colorPaletteStorage';
-import { toCanonicalGradient, type GradientSpec } from '@src/types/color';
+import {
+  gradientToCss,
+  toCanonicalGradient,
+  type GradientSpec,
+} from '@src/types/color';
+import { ColorSwatchButton, ColorSwatchSurface } from './ColorSwatch';
 import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
-import {
-  ColorInput as Input,
-  GradientInputs,
-  type GradientSide,
-  type PercentInputProps,
-} from './ColorPickerInputs';
-import {
-  ColorPaletteSection,
-  ModeSwitch,
-  StateSwitch,
-  type PaletteValue,
-} from './ColorPickerControls';
-import {
-  useColorPickerInputSession,
-  type ColorPickerOpacityTarget as OpacityTarget,
-  type ColorPickerValue as ColorValue,
-} from './useColorPickerInputSession';
+
+type ColorValue = string | GradientColor;
+type PaletteValue = ColorValue | GradientSpecColor;
 
 // normalizeColorInput 기본색과 동일
 const DEFAULT_PICKER_COLOR: ColorObject =
   parseHexColor('#561ecb') ?? hsvToColorObject({ h: 0, s: 0, v: 100, a: 1 });
+type GradientSide = 'top' | 'bottom';
+type OpacityTarget = 'solid' | 'top' | 'bottom';
 
 interface ResolvedOpacity {
   solid: number;
@@ -302,62 +300,487 @@ const ColorPickerWrapper = ({
     }
   };
 
+  // onClose를 래핑하여 팔레트 저장 후 호출
+  const handleClose = () => {
+    const ownerDocument = referenceRef.current?.ownerDocument ?? document;
+    const active = ownerDocument.activeElement;
+    if (
+      active?.matches('input, textarea') &&
+      active.closest('[role="dialog"]')
+    ) {
+      flushSync(() => (active as HTMLElement).blur());
+    }
+    saveCurrentColorToPalette();
+    onClose?.();
+  };
+
   // undo/redo 반영은 진행 중 드래그를 프리미티브가 커밋 없이 끊는다 - complete가
   // 오지 않으므로 여기서 드래그 잠금을 풀어 아래 동기화가 canonical을 따르게
   const historyTick = useCommittedApplyStore((state) => state.historyTick);
-  const {
-    inputValue,
-    setAlphaWithSync,
-    handleChange,
-    handleChangeComplete,
-    startSolidInputEdit,
-    handleInputChange,
-    commitSolidInput,
-    cancelSolidInput,
-    startAlphaEdit,
-    previewAlphaPercent,
-    commitAlphaPercent,
-    cancelAlphaPercent,
-    startGradientInputEdit,
-    handleGradientInputChange,
-    commitGradientInput,
-    cancelGradientInput,
-    selectGradient,
-    handleModeSwitch,
-    flushActiveInput,
-  } = useColorPickerInputSession({
-    referenceRef,
-    color,
-    solidOnly,
-    hexMixed,
-    mode,
-    setMode,
-    selectedColor,
-    setSelectedColor,
-    alpha,
-    setAlpha,
-    gradientTop,
-    setGradientTop,
-    gradientBottom,
-    setGradientBottom,
-    gradientSelected,
-    setGradientSelected,
-    suppressGradientResetRef,
-    isDraggingRef,
-    hasSeededGradientFromSolidRef,
-    userSwitchedModeRef,
-    prevColorRef,
-    historyTick,
-    onColorChange,
-    onColorChangeComplete,
-    onInputCancel,
-    onOpacityPercentCancel,
-  });
+  const historyTickRef = useRef(historyTick);
+  useEffect(() => {
+    if (historyTickRef.current !== historyTick) {
+      historyTickRef.current = historyTick;
+      isDraggingRef.current = false;
+    }
+    // 드래그 중에는 외부 color prop 동기화 건너뜀
+    if (isDraggingRef.current) {
+      return;
+    }
 
-  const handleClose = () => {
-    flushActiveInput();
-    saveCurrentColorToPalette();
-    onClose?.();
+    const wasGradient = isGradientColor(prevColorRef.current);
+    const isGradientNow = isGradientColor(color);
+
+    // 사용자가 수동으로 모드를 전환한 직후에는 prop 기반 모드 전환 무시
+    if (userSwitchedModeRef.current) {
+      userSwitchedModeRef.current = false;
+    } else {
+      setMode(isGradientNow ? MODES.gradient : MODES.solid);
+    }
+
+    if (isGradientNow) {
+      const topHex = color.top.replace('#', '').toUpperCase();
+      const bottomHex = color.bottom.replace('#', '').toUpperCase();
+      setGradientTop(topHex);
+      setGradientBottom(bottomHex);
+      hasSeededGradientFromSolidRef.current = true;
+
+      const targetHex = gradientSelected === 'bottom' ? bottomHex : topHex;
+      const parsedTarget = parseHexColor(targetHex);
+      if (parsedTarget) {
+        // 같은 색이면 유지 — hex 왕복으로 hue(360°, s=0 등)가 소실되지 않도록
+        setSelectedColor((prev) =>
+          prev.hex === parsedTarget.hex ? prev : parsedTarget,
+        );
+      }
+
+      if (!wasGradient) {
+        setGradientSelected('top');
+      } else if (gradientSelected !== 'top' && gradientSelected !== 'bottom') {
+        setGradientSelected('top');
+      }
+    } else if (typeof color === 'string') {
+      const normalized = normalizeColorInput(color);
+      const parsed = toColorObject(normalized);
+      if (parsed) {
+        // 같은 색이면 hsv 유지(hex 왕복의 hue 소실 방지)하되 alpha는 병합 —
+        // alpha만 바뀐 외부 변경이 슬라이더 노브에 반영되도록
+        setSelectedColor((prev) => {
+          if (prev.hex !== parsed.hex) return parsed;
+          const nextAlpha = parsed.rgb.a ?? 1;
+          if (prev.rgb.a === nextAlpha) return prev;
+          return {
+            ...prev,
+            rgb: { ...prev.rgb, a: nextAlpha },
+            hsv: { ...prev.hsv, a: nextAlpha },
+          };
+        });
+        // RGBA에서 alpha 추출하여 설정
+        const newAlpha = extractAlphaFromColor(color);
+        setAlpha(newAlpha);
+
+        if (
+          !suppressGradientResetRef.current &&
+          !hasSeededGradientFromSolidRef.current
+        ) {
+          setGradientTop(parsed.hex.replace('#', ''));
+          setGradientBottom('FFFFFF');
+        }
+      }
+      setGradientSelected('top');
+      // 한 번만 억제 플래그를 사용
+      suppressGradientResetRef.current = false;
+    }
+
+    prevColorRef.current = color;
+  }, [color, gradientSelected, setSelectedColor, historyTick]);
+
+  const [inputValue, setInputValue] = useState<string>(() =>
+    selectedColor.hex
+      .replace('#', '')
+      .toUpperCase()
+      .slice(0, solidOnly ? 6 : 8),
+  );
+
+  // 이번 편집에서 hex를 실제로 쳤는지. Mixed 상태에서 손대지 않은 blur가
+  // 대표값을 선택 전체에 확정해 항목별 값을 지우는 일을 막는다
+  const hexDirtyRef = useRef(false);
+  const solidInputEditRef = useRef<{
+    inputValue: string;
+    color: ColorValue;
+    selectedColor: ColorObject;
+    alpha: number;
+    previewed: boolean;
+  } | null>(null);
+  const gradientInputEditRef = useRef<{
+    side: GradientSide;
+    top: string;
+    bottom: string;
+    color: GradientColor;
+    selectedColor: ColorObject;
+    dirty: boolean;
+    previewed: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    if (solidInputEditRef.current) return;
+    setInputValue(
+      selectedColor.hex
+        .replace('#', '')
+        .toUpperCase()
+        .slice(0, solidOnly ? 6 : 8),
+    );
+  }, [selectedColor.hex, solidOnly]);
+
+  // solidOnly 모드에서 Alpha 값 변경 반영 - useEffect 제거하여 무한 루프 방지
+  // Alpha 슬라이더는 onChangeComplete에서 처리
+
+  const buildRgbaFromHexAndAlpha = (hex: string, nextAlpha: number): string => {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${nextAlpha})`;
+  };
+
+  const setAlphaWithSync = (nextAlpha: number, isComplete: boolean = false) => {
+    const clamped = Math.min(Math.max(Number(nextAlpha) || 0, 0), 1);
+    setAlpha(clamped);
+    setSelectedColor((prev: ColorObject) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        rgb: { ...prev.rgb, a: clamped },
+        hsv: { ...prev.hsv, a: clamped },
+      };
+    });
+
+    if (!solidOnly) return;
+    const rgbaValue = buildRgbaFromHexAndAlpha(selectedColor.hex, clamped);
+    onColorChange?.(rgbaValue);
+    if (isComplete) {
+      onColorChangeComplete?.(rgbaValue);
+    }
+  };
+
+  const applyColor = (
+    next: string | Partial<ColorObject>,
+    isComplete: boolean = false,
+  ) => {
+    const parsed = toColorObject(next);
+    if (!parsed) return;
+    setSelectedColor(parsed);
+    if (!solidOnly && mode === MODES.gradient) {
+      // 그라디언트 모드에서 Saturation/Hue 편집 시 선택된 stop 업데이트
+      const newHex = parsed.hex.replace('#', '').toUpperCase();
+
+      if (gradientSelected === 'top') {
+        setGradientTop(newHex);
+        const gradient = buildGradient(parsed.hex, `#${gradientBottom}`);
+        onColorChange?.(gradient);
+        if (isComplete) onColorChangeComplete?.(gradient);
+      } else {
+        setGradientBottom(newHex);
+        const gradient = buildGradient(`#${gradientTop}`, parsed.hex);
+        onColorChange?.(gradient);
+        if (isComplete) onColorChangeComplete?.(gradient);
+      }
+      return;
+    }
+    if (solidOnly) {
+      // solidOnly 모드에서는 현재 alpha 값을 유지
+      const rgbaValue = `rgba(${parseInt(
+        parsed.hex.slice(1, 3),
+        16,
+      )}, ${parseInt(parsed.hex.slice(3, 5), 16)}, ${parseInt(
+        parsed.hex.slice(5, 7),
+        16,
+      )}, ${alpha})`;
+      onColorChange?.(rgbaValue);
+      if (isComplete) onColorChangeComplete?.(rgbaValue);
+    } else {
+      onColorChange?.(parsed.hex);
+      if (isComplete) onColorChangeComplete?.(parsed.hex);
+    }
+  };
+
+  const handleChange = (nextColor: ColorObject) => {
+    isDraggingRef.current = true;
+    applyColor(nextColor, false);
+  };
+
+  const handleChangeComplete = (nextColor: ColorObject) => {
+    applyColor(nextColor, true);
+    isDraggingRef.current = false;
+  };
+
+  const validHexDraft = (value: string, allowAlpha: boolean): boolean =>
+    value.length === 6 || (allowAlpha && value.length === 8);
+
+  const solidOutput = (parsed: ColorObject, draft: string): string =>
+    solidOnly
+      ? buildRgbaFromHexAndAlpha(parsed.hex, alpha)
+      : draft.length === 8
+      ? `#${draft}`
+      : parsed.hex;
+
+  const startSolidInputEdit = () => {
+    const baseColor = solidOnly
+      ? buildRgbaFromHexAndAlpha(selectedColor.hex, alpha)
+      : inputValue.length === 8
+      ? `#${inputValue}`
+      : selectedColor.hex;
+    solidInputEditRef.current = {
+      inputValue,
+      color: baseColor,
+      selectedColor,
+      alpha,
+      previewed: false,
+    };
+    hexDirtyRef.current = false;
+    // Mixed 필드는 빈 칸에서 시작한다. 대표값을 띄우면 공통값처럼 읽힌다
+    if (hexMixed) setInputValue('');
+  };
+
+  const handleInputChange = (raw: string) => {
+    const sanitized = raw
+      .replace(/[^0-9a-fA-F]/g, '')
+      .slice(0, solidOnly ? 6 : 8)
+      .toUpperCase();
+    if (!solidInputEditRef.current) startSolidInputEdit();
+    hexDirtyRef.current = true;
+    setInputValue(sanitized);
+    if (!validHexDraft(sanitized, !solidOnly)) return;
+    const parsed = parseHexColor(sanitized);
+    if (!parsed) return;
+    const nextSelected = solidOnly
+      ? {
+          ...parsed,
+          rgb: { ...parsed.rgb, a: alpha },
+          hsv: { ...parsed.hsv, a: alpha },
+        }
+      : parsed;
+    setSelectedColor(nextSelected);
+    if (solidInputEditRef.current) {
+      solidInputEditRef.current.previewed = true;
+    }
+    onColorChange?.(solidOutput(parsed, sanitized));
+  };
+
+  const restoreSolidInput = () => {
+    const edit = solidInputEditRef.current;
+    if (!edit) return;
+    setInputValue(edit.inputValue);
+    setSelectedColor(edit.selectedColor);
+    setAlpha(edit.alpha);
+    hexDirtyRef.current = false;
+    solidInputEditRef.current = null;
+    if (!edit.previewed) return;
+    if (onInputCancel) {
+      onInputCancel('solid', edit.color);
+    } else if (!hexMixed) {
+      onColorChange?.(edit.color);
+    }
+  };
+
+  const commitSolidInput = () => {
+    if (!hexDirtyRef.current) {
+      const edit = solidInputEditRef.current;
+      if (edit) setInputValue(edit.inputValue);
+      solidInputEditRef.current = null;
+      return;
+    }
+    if (!validHexDraft(inputValue, !solidOnly)) {
+      restoreSolidInput();
+      return;
+    }
+    const parsed = parseHexColor(inputValue);
+    if (!parsed) {
+      restoreSolidInput();
+      return;
+    }
+    hexDirtyRef.current = false;
+    solidInputEditRef.current = null;
+    onColorChangeComplete?.(solidOutput(parsed, inputValue));
+  };
+
+  const cancelSolidInput = (): boolean => {
+    if (!hexDirtyRef.current) return false;
+    restoreSolidInput();
+    return true;
+  };
+
+  // 입력은 NumberInput이 0~100으로 재운 값만 넘긴다
+  const previewAlphaPercent = (percent: number) => {
+    setAlphaWithSync(percent / 100, false);
+  };
+
+  const commitAlphaPercent = (percent: number) => {
+    setAlphaWithSync(percent / 100, true);
+  };
+
+  // Escape 원복 기준. Mixed에서는 NumberInput이 대표값을 다시 발행하지 않으므로
+  // 편집 전 alpha를 여기서 기억해 두었다가 되돌린다
+  const alphaEditBaseRef = useRef(alpha);
+
+  const startAlphaEdit = () => {
+    alphaEditBaseRef.current = alpha;
+  };
+
+  const cancelAlphaPercent = () => {
+    const base = alphaEditBaseRef.current;
+    const restoredColor = buildRgbaFromHexAndAlpha(selectedColor.hex, base);
+    if (onInputCancel) {
+      setAlpha(base);
+      setSelectedColor((prev) => ({
+        ...prev,
+        rgb: { ...prev.rgb, a: base },
+        hsv: { ...prev.hsv, a: base },
+      }));
+      onInputCancel('solid', restoredColor);
+      return;
+    }
+    if (onOpacityPercentCancel) {
+      // 호출부가 게스처를 가지면 preview를 내지 않고 조용히 되돌린 뒤 맡긴다.
+      // 대표값 preview는 선택 전체를 평탄화한다
+      setAlpha(base);
+      setSelectedColor((prev) => ({
+        ...prev,
+        rgb: { ...prev.rgb, a: base },
+        hsv: { ...prev.hsv, a: base },
+      }));
+      onOpacityPercentCancel('solid');
+      return;
+    }
+    setAlphaWithSync(base, false);
+  };
+
+  const commitGradient = () => {
+    const parsedTop = parseHexColor(gradientTop);
+    const parsedBottom = parseHexColor(gradientBottom);
+    if (!parsedTop || !parsedBottom) {
+      return;
+    }
+    setSelectedColor(parsedTop);
+    const gradient = buildGradient(`#${gradientTop}`, `#${gradientBottom}`);
+    onColorChange?.(gradient);
+    onColorChangeComplete?.(gradient);
+  };
+
+  const startGradientInputEdit = (side: GradientSide) => {
+    const selectedValue = side === 'top' ? gradientTop : gradientBottom;
+    const parsed = parseHexColor(selectedValue) ?? selectedColor;
+    setGradientSelected(side);
+    setSelectedColor(parsed);
+    gradientInputEditRef.current = {
+      side,
+      top: gradientTop,
+      bottom: gradientBottom,
+      color: buildGradient(`#${gradientTop}`, `#${gradientBottom}`),
+      selectedColor: parsed,
+      dirty: false,
+      previewed: false,
+    };
+  };
+
+  const handleGradientInputChange = (side: GradientSide, raw: string) => {
+    const sanitized = raw
+      .replace(/[^0-9a-fA-F]/g, '')
+      .slice(0, 8)
+      .toUpperCase();
+    if (gradientInputEditRef.current?.side !== side) {
+      startGradientInputEdit(side);
+    }
+    const edit = gradientInputEditRef.current;
+    if (edit) edit.dirty = true;
+    if (side === 'top') setGradientTop(sanitized);
+    else setGradientBottom(sanitized);
+    if (!validHexDraft(sanitized, true)) return;
+    const parsed = parseHexColor(sanitized);
+    const other = parseHexColor(side === 'top' ? gradientBottom : gradientTop);
+    if (!parsed || !other) return;
+    setSelectedColor(parsed);
+    if (edit) edit.previewed = true;
+    onColorChange?.(
+      side === 'top'
+        ? buildGradient(`#${sanitized}`, `#${gradientBottom}`)
+        : buildGradient(`#${gradientTop}`, `#${sanitized}`),
+    );
+  };
+
+  const restoreGradientInput = () => {
+    const edit = gradientInputEditRef.current;
+    if (!edit) return;
+    setGradientTop(edit.top);
+    setGradientBottom(edit.bottom);
+    setSelectedColor(edit.selectedColor);
+    setGradientSelected(edit.side);
+    gradientInputEditRef.current = null;
+    if (!edit.previewed) return;
+    if (onInputCancel) onInputCancel(edit.side, edit.color);
+    else onColorChange?.(edit.color);
+  };
+
+  const commitGradientInput = (side: GradientSide) => {
+    const edit = gradientInputEditRef.current;
+    if (!edit?.dirty) {
+      gradientInputEditRef.current = null;
+      return;
+    }
+    if (
+      !validHexDraft(gradientTop, true) ||
+      !validHexDraft(gradientBottom, true)
+    ) {
+      restoreGradientInput();
+      return;
+    }
+    const parsedTop = parseHexColor(gradientTop);
+    const parsedBottom = parseHexColor(gradientBottom);
+    if (!parsedTop || !parsedBottom) {
+      restoreGradientInput();
+      return;
+    }
+    setGradientSelected(side);
+    setSelectedColor(side === 'top' ? parsedTop : parsedBottom);
+    gradientInputEditRef.current = null;
+    onColorChangeComplete?.(
+      buildGradient(`#${gradientTop}`, `#${gradientBottom}`),
+    );
+  };
+
+  const cancelGradientInput = (side: GradientSide): boolean => {
+    const edit = gradientInputEditRef.current;
+    if (!edit || edit.side !== side || !edit.dirty) return false;
+    restoreGradientInput();
+    return true;
+  };
+
+  const selectGradient = (side: GradientSide) => {
+    setGradientSelected(side);
+    const hex = `#${side === 'top' ? gradientTop : gradientBottom}`;
+    const parsed = parseHexColor(hex);
+    if (parsed) setSelectedColor(parsed);
+  };
+
+  const handleModeSwitch = (nextMode: string) => {
+    if (nextMode === mode) return;
+    userSwitchedModeRef.current = true;
+    setMode(nextMode);
+    if (nextMode === MODES.solid) {
+      // 그라디언트 -> 솔리드 전환 시, 부모로 전달되는 단색 변경에 따라
+      // 내부 그라디언트 상태가 초기화되지 않도록 억제 플래그 설정
+      suppressGradientResetRef.current = true;
+      const parsed = parseHexColor(gradientTop || inputValue);
+      if (parsed) {
+        setSelectedColor(parsed);
+        onColorChange?.(parsed.hex);
+        onColorChangeComplete?.(parsed.hex);
+      }
+    } else {
+      // 그라디언트 모드에 진입함을 표시(이후부터는 시드 금지)
+      hasSeededGradientFromSolidRef.current = true;
+      setGradientSelected('top');
+      commitGradient();
+    }
   };
 
   const showStateSwitch =
@@ -609,3 +1032,482 @@ const ColorPickerWrapper = ({
 };
 
 export default ColorPickerWrapper;
+
+// ============================================================================
+// 팔레트 컴포넌트
+// ============================================================================
+
+interface ColorPaletteSectionProps {
+  solidPalette: PaletteValue[];
+  gradientPalette: PaletteValue[];
+  onPaletteClick: (color: PaletteValue, type: string) => void;
+  showGradient: boolean;
+  /** 반대 축 잠금 중 - 솔리드 슬롯은 hex·알파를 함께 쓰므로 컨트롤과 같은 정책을 따른다 */
+  solidLocked?: boolean;
+}
+
+function ColorPaletteSection({
+  solidPalette,
+  gradientPalette,
+  onPaletteClick,
+  showGradient,
+  solidLocked = false,
+}: ColorPaletteSectionProps) {
+  const PALETTE_SIZE = 7;
+
+  // 빈 슬롯 채우기
+  const filledSolid: (PaletteValue | null)[] = [...solidPalette];
+  while (filledSolid.length < PALETTE_SIZE) {
+    filledSolid.push(null);
+  }
+
+  const filledGradient: (PaletteValue | null)[] = [...gradientPalette];
+  while (filledGradient.length < PALETTE_SIZE) {
+    filledGradient.push(null);
+  }
+
+  return (
+    <div className="flex flex-col gap-[6px]">
+      {/* 솔리드 팔레트 */}
+      <div className="flex gap-[6px] justify-between">
+        {filledSolid.map((color, index) => (
+          <PaletteSlot
+            key={`solid-${index}`}
+            color={color}
+            type="solid"
+            disabled={solidLocked}
+            onClick={() => color && onPaletteClick(color, 'solid')}
+          />
+        ))}
+      </div>
+
+      {/* 그라디언트 팔레트 (solidOnly가 아닐 때만 표시) */}
+      {showGradient && (
+        <div className="flex gap-[6px] justify-between">
+          {filledGradient.map((color, index) => (
+            <PaletteSlot
+              key={`gradient-${index}`}
+              color={color}
+              type="gradient"
+              onClick={() => color && onPaletteClick(color, 'gradient')}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface PaletteSlotProps {
+  color: PaletteValue | null;
+  type: string;
+  onClick?: () => void;
+  disabled?: boolean;
+}
+
+function PaletteSlot({
+  color,
+  type,
+  onClick,
+  disabled = false,
+}: PaletteSlotProps) {
+  const isEmpty = !color;
+  const inert = isEmpty || disabled;
+  const specImage = isGradientSpecColor(color)
+    ? gradientToCss(toCanonicalGradient(color))
+    : undefined;
+  const gradient =
+    type === 'gradient' &&
+    color &&
+    typeof color === 'object' &&
+    (color as GradientColor).type === 'gradient'
+      ? (color as GradientColor)
+      : undefined;
+  const solidColor =
+    typeof color === 'string'
+      ? color.startsWith('#') || color.startsWith('rgb')
+        ? color
+        : `#${color}`
+      : isEmpty
+      ? 'var(--ui-fill-faint)'
+      : undefined;
+
+  // 툴팁 텍스트 생성
+  const getTitle = (): string => {
+    if (isEmpty) return '';
+    if (isGradientSpecColor(color)) {
+      const canonical = toCanonicalGradient(color);
+      const stops = canonical.stops
+        .map((s) => s.color.replace('#', '').toUpperCase())
+        .join('\n');
+      return `${stops}\n${canonical.angle}°`;
+    }
+    if (
+      type === 'gradient' &&
+      color &&
+      typeof color === 'object' &&
+      (color as GradientColor).type === 'gradient'
+    ) {
+      const gradientColor = color as GradientColor;
+      const topHex = gradientColor.top.replace('#', '').toUpperCase();
+      const bottomHex = gradientColor.bottom.replace('#', '').toUpperCase();
+      return `${topHex}\n${bottomHex}`;
+    }
+    // 솔리드 색상 툴팁 - 통일된 형식으로 표시
+    if (typeof color === 'string') {
+      // RGBA 형식인 경우 hex로 변환
+      if (color.startsWith('rgba(')) {
+        const match = color.match(
+          /rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/,
+        );
+        if (match) {
+          const [, r, g, b, a] = match;
+          const hexColor = `${parseInt(r)
+            .toString(16)
+            .padStart(2, '0')}${parseInt(g)
+            .toString(16)
+            .padStart(2, '0')}${parseInt(b)
+            .toString(16)
+            .padStart(2, '0')}${Math.round(parseFloat(a) * 255)
+            .toString(16)
+            .padStart(2, '0')}`.toUpperCase();
+          return hexColor;
+        }
+      }
+      // Hex 형식 - # 제거하고 대문자로
+      return color.replace('#', '').toUpperCase();
+    }
+    return '';
+  };
+
+  return (
+    <ColorSwatchButton
+      type="button"
+      className={`w-[16px] h-[16px] rounded transition-colors ${
+        inert ? 'cursor-default' : 'cursor-pointer'
+      }`}
+      surfaceClassName="rounded"
+      color={solidColor}
+      gradient={gradient}
+      image={specImage}
+      onClick={inert ? undefined : onClick}
+      disabled={inert}
+      data-palette-slot={type}
+      title={getTitle()}
+    />
+  );
+}
+
+interface StateSwitchProps {
+  state?: string;
+  onChange?: (mode: string) => void;
+}
+
+function StateSwitch({ state, onChange }: StateSwitchProps) {
+  const { t } = useTranslation();
+  const idleLabel = t('colorPicker.idle') || '대기';
+  const activeLabel = t('colorPicker.active') || '입력';
+
+  return (
+    <TabSwitch
+      commitStrategy="after-paint"
+      tabs={[
+        { id: 'idle', label: idleLabel },
+        { id: 'active', label: activeLabel },
+      ]}
+      activeTab={state ?? 'idle'}
+      onTabChange={(id) => onChange?.(id)}
+    />
+  );
+}
+
+interface ModeSwitchProps {
+  mode: string;
+  onChange: (mode: string) => void;
+}
+
+function ModeSwitch({ mode, onChange }: ModeSwitchProps) {
+  const { t } = useTranslation();
+  const solidLabel = t('colorPicker.solid');
+  const gradientLabel = t('colorPicker.gradient');
+  return (
+    <TabSwitch
+      commitStrategy="after-paint"
+      tabs={[
+        { id: MODES.solid, label: solidLabel },
+        { id: MODES.gradient, label: gradientLabel },
+      ]}
+      activeTab={mode}
+      onTabChange={onChange}
+    />
+  );
+}
+
+interface PercentInputProps {
+  value: number;
+  label?: string;
+  isMixed?: boolean;
+  disabled?: boolean;
+  /** 포커스 진입. Escape 원복 기준을 잡는 시점 */
+  onEditStart?: () => void;
+  onPreview: (value: number) => void;
+  onCommit: (value: number) => void;
+  onCancel?: () => void;
+}
+
+// 0~100 정수 입력. 속성 패널 숫자 입력과 같은 수식·방향키·자릿수 재생을 갖는다.
+// 폭은 Mixed placeholder가 잘리지 않는 최소값
+const PercentInput = ({
+  value,
+  label,
+  isMixed,
+  disabled,
+  onEditStart,
+  onPreview,
+  onCommit,
+  onCancel,
+}: PercentInputProps) => (
+  <div className="w-[48px] flex-shrink-0" onFocusCapture={onEditStart}>
+    <NumberInput
+      value={value}
+      min={0}
+      max={100}
+      width="48px"
+      isMixed={isMixed}
+      disabled={disabled}
+      ariaLabel={label}
+      onPreview={onPreview}
+      onChange={onCommit}
+      onCancel={onCancel}
+    />
+  </div>
+);
+
+interface InputProps {
+  value?: string;
+  ariaLabel?: string;
+  /** 배치 선택의 hex가 갈리면 편집 전까지 Mixed placeholder */
+  mixed?: boolean;
+  disabled?: boolean;
+  onValueChange?: (value: string) => void;
+  onValueFocus?: () => void;
+  onValueCommit?: () => void;
+  onValueCancel?: () => boolean;
+  previewColor?: string;
+  alpha?: number;
+  alphaPercent?: PercentInputProps;
+}
+
+const Input = ({
+  value = '',
+  ariaLabel,
+  mixed = false,
+  disabled = false,
+  onValueChange,
+  onValueFocus,
+  onValueCommit,
+  onValueCancel,
+  previewColor,
+  alpha,
+  alphaPercent,
+}: InputProps) => {
+  const [editing, setEditing] = useState(false);
+  const cancelledRef = useRef(false);
+  const showMixed = mixed && !editing;
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    onValueChange?.(e.target.value);
+  };
+
+  return (
+    <div className="flex items-center gap-[6px] w-full">
+      <div className="relative flex-1 min-w-0">
+        <ColorSwatchSurface
+          className="absolute left-[6px] top-1/2 -translate-y-1/2 w-[11px] h-[11px] rounded-[2px]"
+          color={previewColor}
+          opacity={alpha}
+        />
+        <input
+          type="text"
+          disabled={disabled}
+          aria-label={ariaLabel}
+          value={showMixed ? '' : value}
+          placeholder={showMixed ? 'Mixed' : undefined}
+          onChange={handleChange}
+          onFocus={() => {
+            cancelledRef.current = false;
+            setEditing(true);
+            onValueFocus?.();
+          }}
+          onBlur={() => {
+            setEditing(false);
+            if (cancelledRef.current) {
+              cancelledRef.current = false;
+              return;
+            }
+            onValueCommit?.();
+          }}
+          onKeyDown={(event: React.KeyboardEvent<HTMLInputElement>) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              event.currentTarget.blur();
+            } else if (event.key === 'Escape' && onValueCancel?.()) {
+              event.preventDefault();
+              cancelledRef.current = true;
+              event.currentTarget.blur();
+            }
+          }}
+          className="block pl-[23px] text-left w-full h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-body text-fg uppercase placeholder:text-fg-faint placeholder:italic placeholder:normal-case disabled:cursor-not-allowed disabled:opacity-50"
+        />
+      </div>
+
+      {alphaPercent && <PercentInput {...alphaPercent} />}
+    </div>
+  );
+};
+
+interface GradientInputsProps {
+  topValue: string;
+  bottomValue: string;
+  colorLabel: string;
+  onTopChange: (value: string) => void;
+  onBottomChange: (value: string) => void;
+  onTopFocus: () => void;
+  onBottomFocus: () => void;
+  onTopCommit: () => void;
+  onBottomCommit: () => void;
+  onTopCancel: () => boolean;
+  onBottomCancel: () => boolean;
+  selected: GradientSide;
+  onSelect?: (side: GradientSide) => void;
+  rightTopPercent?: PercentInputProps;
+  rightBottomPercent?: PercentInputProps;
+}
+
+function GradientInputs({
+  topValue,
+  bottomValue,
+  colorLabel,
+  onTopChange,
+  onBottomChange,
+  onTopFocus,
+  onBottomFocus,
+  onTopCommit,
+  onBottomCommit,
+  onTopCancel,
+  onBottomCancel,
+  selected,
+  onSelect,
+  rightTopPercent,
+  rightBottomPercent,
+}: GradientInputsProps) {
+  return (
+    <div className="flex flex-col gap-[6px]">
+      <GradientInput
+        label="Top"
+        ariaLabel={`${colorLabel} Top`}
+        value={topValue}
+        onChange={onTopChange}
+        onFocus={onTopFocus}
+        onCommit={onTopCommit}
+        onCancel={onTopCancel}
+        selected={selected === 'top'}
+        onSelect={() => onSelect?.('top')}
+        rightPercent={rightTopPercent}
+      />
+      <GradientInput
+        label="Bottom"
+        ariaLabel={`${colorLabel} Bottom`}
+        value={bottomValue}
+        onChange={onBottomChange}
+        onFocus={onBottomFocus}
+        onCommit={onBottomCommit}
+        onCancel={onBottomCancel}
+        selected={selected === 'bottom'}
+        onSelect={() => onSelect?.('bottom')}
+        rightPercent={rightBottomPercent}
+      />
+    </div>
+  );
+}
+
+interface GradientInputProps {
+  label: string;
+  ariaLabel: string;
+  value: string;
+  onChange?: (value: string) => void;
+  onFocus?: () => void;
+  onCommit?: () => void;
+  onCancel?: () => boolean;
+  selected: boolean;
+  onSelect?: () => void;
+  rightPercent?: PercentInputProps;
+}
+
+function GradientInput({
+  label,
+  ariaLabel,
+  value,
+  onChange,
+  onFocus,
+  onCommit,
+  onCancel,
+  selected,
+  onSelect,
+  rightPercent,
+}: GradientInputProps) {
+  const cancelledRef = useRef(false);
+  return (
+    <div className="flex items-center gap-[6px] w-full">
+      <div className="relative flex-1 min-w-0">
+        <ColorSwatchSurface
+          role="button"
+          tabIndex={0}
+          onClick={() => onSelect?.()}
+          onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onSelect?.();
+            }
+          }}
+          className="absolute left-[6px] top-1/2 -translate-y-1/2 w-[11px] h-[11px] rounded-[2px]"
+          color={value ? `#${value}` : '#561ecb'}
+        />
+        <input
+          type="text"
+          aria-label={ariaLabel}
+          value={value}
+          onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
+            onChange?.(event.target.value)
+          }
+          onFocus={() => {
+            cancelledRef.current = false;
+            onSelect?.();
+            onFocus?.();
+          }}
+          onBlur={() => {
+            if (cancelledRef.current) {
+              cancelledRef.current = false;
+              return;
+            }
+            onCommit?.();
+          }}
+          onKeyDown={(event: React.KeyboardEvent<HTMLInputElement>) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              event.currentTarget.blur();
+            } else if (event.key === 'Escape' && onCancel?.()) {
+              event.preventDefault();
+              cancelledRef.current = true;
+              event.currentTarget.blur();
+            }
+          }}
+          placeholder={label}
+          className={`block pl-[23px] text-left w-full h-[23px] bg-inset rounded-md text-body text-fg uppercase ${
+            selected ? 'shadow-focus-ring' : 'focus:shadow-focus-ring'
+          }`}
+        />
+      </div>
+      {rightPercent && <PercentInput {...rightPercent} />}
+    </div>
+  );
+}
