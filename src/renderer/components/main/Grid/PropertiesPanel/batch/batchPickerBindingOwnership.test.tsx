@@ -49,6 +49,10 @@ const captured = vi.hoisted(() => ({
     ) => void;
     onOpacityPercentChange?: (value: number) => void;
     onOpacityPercentChangeComplete?: (value: number) => void;
+    onOpacityPercentCancel?: () => void;
+    opacityPercent?: number;
+    opacityPercentLabel?: string;
+    hideColorAlpha?: boolean;
   },
   checkboxes: [] as Array<{ checked: boolean; onChange: () => void }>,
   dropdowns: [] as Array<{
@@ -133,6 +137,10 @@ const gestures = vi.hoisted(() => ({
   activeGestureId: vi.fn(() => 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'),
 }));
 
+const errors = vi.hoisted(() => ({
+  reportElementOpError: vi.fn(),
+}));
+
 vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchElementPropertyByTargetsViaAuthority:
     patches.patchElementPropertyByTargetsViaAuthority,
@@ -183,7 +191,7 @@ vi.mock('@plugins/runtime/displayElement/pluginElementActions', () => ({
   patchStylePropertyViaAuthority: patches.patchDisplayTextViaAuthority,
 }));
 vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
-  reportElementOpError: vi.fn(),
+  reportElementOpError: errors.reportElementOpError,
   reportElementOpSkipped: vi.fn(),
 }));
 vi.mock('@contexts/useTranslation', () => ({
@@ -711,6 +719,153 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       { gestureId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' },
     );
     expect(captured.color?.color).toBe('#112233');
+  });
+
+  it('배치 노트 커밋 뒤 선택 교체 시 옛 실패가 로컬 상태를 옛 canonical로 덮지 않는다', async () => {
+    let rejectPersisted: ((reason: unknown) => void) | undefined;
+    patches.patchNotePaintByIds.mockImplementationOnce(
+      () =>
+        new Promise<boolean>((_resolve, reject) => {
+          rejectPersisted = reject;
+        }),
+    );
+    gestures.settleCommit.mockImplementationOnce(
+      (persisted: Promise<unknown>) => {
+        gestures.activeGestureId.mockReturnValue(null);
+        void persisted.catch(() => {});
+      },
+    );
+    const canonicalA = { ...keyAt(ID_A), noteColor: '#112233' };
+    const propsA = panelProps();
+    propsA.activeTab = 'note';
+    propsA.batchPickerFor = 'noteColor';
+    propsA.getSelectedKeyOnlyPositions = () => [
+      { index: 0, position: canonicalA },
+    ];
+    propsA.getMixedValueCanonical = ((
+      getter: (position: never) => unknown,
+    ) => ({
+      isMixed: false,
+      value: getter(canonicalA as never),
+    })) as PanelProps['getMixedValueCanonical'];
+
+    act(() => {
+      root.render(
+        <PanelNavProvider
+          value={{
+            activePageKey: null,
+            renderPageKey: null,
+            openPage: vi.fn(),
+            closePage: vi.fn(),
+            pageHost,
+          }}
+        >
+          <BatchKeyLikePanel {...propsA} />
+        </PanelNavProvider>,
+      );
+    });
+    act(() => captured.color?.onColorChangeComplete('#abcdef'));
+
+    const canonicalB = { ...keyAt(ID_B), noteColor: '#445566' };
+    act(() => selectKey(ID_B));
+    const propsB = panelProps();
+    propsB.activeTab = 'note';
+    propsB.batchPickerFor = 'noteColor';
+    propsB.getSelectedKeyOnlyPositions = () => [
+      { index: 0, position: canonicalB },
+    ];
+    propsB.getMixedValueCanonical = ((
+      getter: (position: never) => unknown,
+    ) => ({
+      isMixed: false,
+      value: getter(canonicalB as never),
+    })) as PanelProps['getMixedValueCanonical'];
+    act(() => {
+      root.render(
+        <PanelNavProvider
+          value={{
+            activePageKey: null,
+            renderPageKey: null,
+            openPage: vi.fn(),
+            closePage: vi.fn(),
+            pageHost,
+          }}
+        >
+          <BatchKeyLikePanel {...propsB} />
+        </PanelNavProvider>,
+      );
+    });
+    expect(captured.color?.color).toBe('#ABCDEF');
+
+    await act(async () => {
+      rejectPersisted?.(new Error('old selection failure'));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(captured.color?.color).toBe('#ABCDEF');
+    expect(errors.reportElementOpError).toHaveBeenCalledOnce();
+  });
+
+  it('배치 단색 노트 피커는 투명도 preview·commit·Escape 복원을 정식 채널로 전달한다', () => {
+    const canonical = {
+      ...keyAt(ID_A),
+      noteColor: '#112233',
+      noteOpacity: 42,
+    };
+    const props = panelProps();
+    props.activeTab = 'note';
+    props.batchPickerFor = 'noteColor';
+    props.getSelectedKeyOnlyPositions = () => [
+      { index: 0, position: canonical },
+    ];
+    props.getMixedValueCanonical = ((getter: (position: never) => unknown) => ({
+      isMixed: false,
+      value: getter(canonical as never),
+    })) as PanelProps['getMixedValueCanonical'];
+
+    act(() => {
+      root.render(
+        <PanelNavProvider
+          value={{
+            activePageKey: null,
+            renderPageKey: null,
+            openPage: vi.fn(),
+            closePage: vi.fn(),
+            pageHost,
+          }}
+        >
+          <BatchKeyLikePanel {...props} />
+        </PanelNavProvider>,
+      );
+    });
+
+    expect(captured.color).toMatchObject({
+      color: '#112233',
+      hideColorAlpha: true,
+      opacityPercent: 42,
+      opacityPercentLabel: 'keySetting.noteOpacity',
+    });
+
+    act(() => captured.color?.onOpacityPercentChange?.(55));
+    expect(gestures.preview).toHaveBeenLastCalledWith(
+      '4key',
+      [{ id: ID_A, patch: { noteOpacity: 55 } }],
+      { domain: 'keyPosition' },
+    );
+
+    act(() => captured.color?.onOpacityPercentChangeComplete?.(60));
+    expect(patches.patchNotePaintByIds).toHaveBeenLastCalledWith(
+      [ID_A],
+      { property: 'notePaint', value: { opacity: 60 } },
+      { gestureId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' },
+    );
+
+    gestures.cancel.mockClear();
+    act(() => captured.color?.onOpacityPercentChange?.(70));
+    act(() => captured.color?.onOpacityPercentCancel?.());
+    expect(gestures.cancel).toHaveBeenCalledOnce();
+    expect(captured.color?.opacityPercent).toBe(42);
   });
 
   it.each(['main'] as const)(
