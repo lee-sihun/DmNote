@@ -55,9 +55,10 @@ const result = await dmn.presets.saveTab();
 ### `dmn.presets.loadTab(): Promise<PresetOperationResult>`
 
 Loads a tab preset file into the currently selected tab. Opens a file picker
-dialog. Element collections stored in the file (keys, stats, graphs, knobs,
-sprites) replace the tab's contents wholesale, so elements missing from the
-file's tab are removed. Older presets that lack a collection entirely leave
+dialog. Tab presets carry no `tabOrder` or `barCount`, so they never change the
+global tab order. Element collections stored in the file (keys, stats, graphs,
+knobs, sprites) replace the tab's contents wholesale, so elements missing from
+the file's tab are removed. Older presets that lack a collection entirely leave
 those elements untouched.
 
 ```javascript
@@ -84,6 +85,8 @@ interface PresetSnapshot {
   knobPositions: KnobItemPositions;
   spritePositions: SpritePositions;
   customTabs: CustomTab[];
+  tabOrder: string[];
+  barCount: number;
   selectedKeyType: string;
   tabNoteOverrides: TabNoteOverrides;
 }

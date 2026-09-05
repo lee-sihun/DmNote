@@ -31,7 +31,13 @@ export type PluginSettingValue = string | number | boolean;
 export type ModeChangePayload = { mode: string };
 export type CustomTabsChangePayload = {
   customTabs: CustomTab[];
+  /** 내장 모드와 커스텀 탭을 합친 표시 순서. 탭 id가 정확히 한 번씩 들어간다 */
+  tabOrder: string[];
+  /** 툴바 바에 내놓는 개수. 1~4 */
+  barCount: number;
   selectedKeyType: string;
+  /** 이 이벤트가 selectedKeyType 변경을 소유하는지 여부 */
+  selectionAuthoritative: boolean;
 };
 export type KeyStatePayload = {
   key: string;
@@ -314,9 +320,36 @@ export type KeysResetAllResponse = {
   keys: KeyMappings;
   positions: KeyPositions;
   customTabs: CustomTab[];
+  tabOrder: string[];
+  barCount: number;
   selectedKeyType: string;
 };
 export type CustomTabResult = { result?: CustomTab; error?: string };
+/** 탭 메타데이터의 authoritative 스냅샷. 실패 응답에도 실려 온다 */
+export type TabMetadataSnapshot = {
+  customTabs: CustomTab[];
+  tabOrder: string[];
+  barCount: number;
+  selectedKeyType: string;
+};
+export type TabMetadataErrorCode =
+  | 'invalid-name'
+  | 'name-too-long'
+  | 'reserved-name'
+  | 'duplicate-name'
+  /** 이름 변경 대상이 없거나, 교체하려는 두 탭 중 하나가 사라졌다 */
+  | 'unknown-tab';
+/**
+ * 탭 배치 연산
+ *
+ * 결과 배열이 아니라 연산을 보내서 백엔드가 최신 순서 위에 얹게 한다.
+ * 무관한 탭이 생기거나 사라졌다는 이유로 거절되지 않는다
+ */
+export type TabOrderOp = { kind: 'swap'; a: string; b: string };
+export type TabMetadataResult = {
+  result?: TabMetadataSnapshot;
+  error?: TabMetadataErrorCode;
+};
 export type CustomTabDeleteResult = {
   success: boolean;
   selected: string;
@@ -340,6 +373,8 @@ export type PresetSnapshot = {
   knobPositions: KnobItemPositions;
   spritePositions: SpritePositions;
   customTabs: CustomTab[];
+  tabOrder: string[];
+  barCount: number;
   selectedKeyType: string;
   tabNoteOverrides: import('@src/types/settings/noteSettings').TabNoteOverrides;
 };

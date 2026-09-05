@@ -3,10 +3,7 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from '@contexts/useTranslation';
 import { usePopupPresence } from '@hooks/ui/usePopupPresence';
 import { useRetainedWhileOpen } from '@hooks/ui/useRetainedValue';
-import {
-  useGridSelectionStore,
-  type SelectedElement,
-} from '@stores/grid/useGridSelectionStore';
+import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
@@ -25,11 +22,7 @@ import CloseEyeIcon from '@assets/svgs/close_eye.svg';
 import OpenEyeIcon from '@assets/svgs/open_eye.svg';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import type { LayerItem } from '../types';
-import {
-  buildLayerItems,
-  buildDisplayItems,
-  layerItemToSelectedElement,
-} from './layerPanelModel';
+import { buildLayerItems, buildDisplayItems } from './layerPanelModel';
 import {
   FolderIcon,
   ChevronIcon,
@@ -42,7 +35,14 @@ import {
 } from './LayerIcons';
 import { useLayerActions } from './useLayerActions';
 import { useLayerDnD } from './useLayerDnD';
+import LayerRenameInput from './LayerRenameInput';
 import { useOptimisticBooleanCommit } from '@hooks/useOptimisticBooleanCommit';
+import {
+  layerItemToSelectedElement,
+  resolveLayerGroupSelectionIntent,
+  resolveLayerItemSelectionIntent,
+  type LayerSelectionIntent,
+} from './layerSelectionIntent';
 
 interface LayerGroupDisclosureProps {
   collapsed: boolean;
@@ -331,6 +331,41 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
   const isGroupHeaderSelected = (groupId: string) =>
     selectedGroupIdSet.has(groupId);
 
+  const applySelectionIntent = (intent: LayerSelectionIntent) => {
+    switch (intent.type) {
+      case 'set-full':
+        setFullSelection(intent.elements, intent.groupIds);
+        return;
+      case 'set-elements':
+        setSelectedElements(intent.elements);
+        return;
+      case 'replace':
+        clearSelection();
+        toggleSelection(intent.element);
+        return;
+      case 'delay-single':
+        pendingDeselectTimerRef.current = (hostWindow ?? window).setTimeout(
+          () => {
+            setFullSelection([intent.element], []);
+            pendingDeselectTimerRef.current = null;
+          },
+          50,
+        );
+        return;
+      case 'delay-clear':
+        pendingDeselectTimerRef.current = (hostWindow ?? window).setTimeout(
+          () => {
+            clearSelection();
+            pendingDeselectTimerRef.current = null;
+          },
+          50,
+        );
+        return;
+      case 'none':
+        return;
+    }
+  };
+
   // ──────────────────────────────────────────────────────────────────────────
   // 더블클릭 핸들러
   // ──────────────────────────────────────────────────────────────────────────
@@ -384,134 +419,24 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
     const isPrimaryModifierPressed = isMac() ? e.metaKey : e.ctrlKey;
     const isShiftPressed = e.shiftKey;
+    const resolution = resolveLayerItemSelectionIntent({
+      item,
+      index,
+      primary: isPrimaryModifierPressed,
+      shift: isShiftPressed,
+      lastClickedIndex,
+      lastClickedDisplayIndex,
+      layerItems: layerItemsRef.current,
+      displayItems: displayItemsRef.current,
+      selectedElements,
+      selectedGroupIds,
+    });
 
-    // Shift+클릭: 범위 선택
-    if (
-      isShiftPressed &&
-      (lastClickedDisplayIndex !== null || lastClickedIndex !== null)
-    ) {
-      const thisDisplayIdx = displayItemsRef.current.findIndex(
-        (di) => di.displayType === 'layer' && di.item.id === item.id,
-      );
-
-      if (lastClickedDisplayIndex !== null && thisDisplayIdx !== -1) {
-        const startIdx = Math.min(lastClickedDisplayIndex, thisDisplayIdx);
-        const endIdx = Math.max(lastClickedDisplayIndex, thisDisplayIdx);
-        const currentDisplay = displayItemsRef.current;
-
-        const rangeElements: SelectedElement[] = [];
-        const rangeGroupIds: string[] = [];
-
-        for (let i = startIdx; i <= endIdx; i++) {
-          const di = currentDisplay[i];
-          if (!di) continue;
-          if (di.displayType === 'group-header') {
-            rangeGroupIds.push(di.groupId);
-            const groupChildren = layerItemsRef.current.filter(
-              (it) => it.groupId === di.groupId,
-            );
-            groupChildren.forEach((child) => {
-              rangeElements.push(layerItemToSelectedElement(child));
-            });
-          } else {
-            rangeElements.push(layerItemToSelectedElement(di.item));
-          }
-        }
-
-        const seen = new Set<string>();
-        const deduped = rangeElements.filter((el) => {
-          if (seen.has(el.id)) return false;
-          seen.add(el.id);
-          return true;
-        });
-
-        if (isPrimaryModifierPressed) {
-          const existingIds = new Set(selectedElements.map((el) => el.id));
-          const newEls = deduped.filter((el) => !existingIds.has(el.id));
-          const mergedElements = [...selectedElements, ...newEls];
-          const existingGroupIds = new Set(selectedGroupIds);
-          const newGroupIds = rangeGroupIds.filter(
-            (id) => !existingGroupIds.has(id),
-          );
-          setFullSelection(mergedElements, [
-            ...selectedGroupIds,
-            ...newGroupIds,
-          ]);
-        } else {
-          setFullSelection(deduped, rangeGroupIds);
-        }
-        return;
-      }
-
-      // fallback: layerItems 인덱스 기반
-      if (lastClickedIndex !== null) {
-        const startIdx = Math.min(lastClickedIndex, index);
-        const endIdx = Math.max(lastClickedIndex, index);
-        const currentItems = layerItemsRef.current;
-
-        const rangeElements: SelectedElement[] = [];
-        for (let i = startIdx; i <= endIdx; i++) {
-          const rangeItem = currentItems[i];
-          if (rangeItem) {
-            rangeElements.push(layerItemToSelectedElement(rangeItem));
-          }
-        }
-
-        if (isPrimaryModifierPressed) {
-          const existingIds = new Set(selectedElements.map((el) => el.id));
-          const newElements = rangeElements.filter(
-            (el) => !existingIds.has(el.id),
-          );
-          setSelectedElements([...selectedElements, ...newElements]);
-        } else {
-          setSelectedElements(rangeElements);
-        }
-        return;
-      }
+    applySelectionIntent(resolution.intent);
+    if (resolution.anchor) {
+      setLastClickedIndex(resolution.anchor.index);
+      setLastClickedDisplayIndex(resolution.anchor.displayIndex);
     }
-
-    // Ctrl+클릭 또는 일반 클릭
-    const isAlreadySelected = selectedElements.some((el) => el.id === item.id);
-    const element = layerItemToSelectedElement(item);
-
-    if (isPrimaryModifierPressed) {
-      const exists = selectedElements.some((el) => el.id === element.id);
-      if (exists) {
-        setFullSelection(
-          selectedElements.filter((el) => el.id !== element.id),
-          selectedGroupIds,
-        );
-      } else {
-        setFullSelection([...selectedElements, element], selectedGroupIds);
-      }
-    } else {
-      if (isAlreadySelected && selectedElements.length > 1) {
-        pendingDeselectTimerRef.current = (hostWindow ?? window).setTimeout(
-          () => {
-            setFullSelection([element], []);
-            pendingDeselectTimerRef.current = null;
-          },
-          50,
-        );
-      } else if (isAlreadySelected) {
-        pendingDeselectTimerRef.current = (hostWindow ?? window).setTimeout(
-          () => {
-            clearSelection();
-            pendingDeselectTimerRef.current = null;
-          },
-          50,
-        );
-      } else {
-        clearSelection();
-        toggleSelection(element);
-      }
-    }
-
-    setLastClickedIndex(index);
-    const displayIdx = displayItemsRef.current.findIndex(
-      (di) => di.displayType === 'layer' && di.item.id === item.id,
-    );
-    setLastClickedDisplayIndex(displayIdx !== -1 ? displayIdx : null);
   };
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -533,82 +458,23 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
     const isPrimaryModifierPressed = isMac() ? e.metaKey : e.ctrlKey;
     const isShiftPressed = e.shiftKey;
+    const resolution = resolveLayerGroupSelectionIntent({
+      groupId,
+      primary: isPrimaryModifierPressed,
+      shift: isShiftPressed,
+      lastClickedDisplayIndex,
+      layerItems,
+      rangeLayerItems: layerItemsRef.current,
+      displayItems: displayItemsRef.current,
+      selectedElements,
+      selectedGroupIds,
+    });
 
-    const children = layerItems.filter((item) => item.groupId === groupId);
-    const childElements = children.map(layerItemToSelectedElement);
-
-    const thisDisplayIdx = displayItemsRef.current.findIndex(
-      (di) => di.displayType === 'group-header' && di.groupId === groupId,
-    );
-    if (thisDisplayIdx < 0) return;
-
-    if (isShiftPressed && lastClickedDisplayIndex !== null) {
-      const startIdx = Math.min(lastClickedDisplayIndex, thisDisplayIdx);
-      const endIdx = Math.max(lastClickedDisplayIndex, thisDisplayIdx);
-      const currentDisplay = displayItemsRef.current;
-
-      const rangeElements: SelectedElement[] = [];
-      const rangeGroupIds: string[] = [];
-
-      for (let i = startIdx; i <= endIdx; i++) {
-        const di = currentDisplay[i];
-        if (!di) continue;
-        if (di.displayType === 'group-header') {
-          rangeGroupIds.push(di.groupId);
-          const groupChildren = layerItemsRef.current.filter(
-            (item) => item.groupId === di.groupId,
-          );
-          groupChildren.forEach((child) => {
-            rangeElements.push(layerItemToSelectedElement(child));
-          });
-        } else {
-          rangeElements.push(layerItemToSelectedElement(di.item));
-        }
-      }
-
-      const seen = new Set<string>();
-      const deduped = rangeElements.filter((el) => {
-        if (seen.has(el.id)) return false;
-        seen.add(el.id);
-        return true;
-      });
-
-      if (isPrimaryModifierPressed) {
-        const existingIds = new Set(selectedElements.map((el) => el.id));
-        const newEls = deduped.filter((el) => !existingIds.has(el.id));
-        const mergedElements = [...selectedElements, ...newEls];
-        const existingGroupIds = new Set(selectedGroupIds);
-        const newGroupIds = rangeGroupIds.filter(
-          (id) => !existingGroupIds.has(id),
-        );
-        const mergedGroupIds = [...selectedGroupIds, ...newGroupIds];
-        setFullSelection(mergedElements, mergedGroupIds);
-      } else {
-        setFullSelection(deduped, rangeGroupIds);
-      }
-      return;
+    applySelectionIntent(resolution.intent);
+    if (resolution.anchor) {
+      setLastClickedDisplayIndex(resolution.anchor.displayIndex);
+      setLastClickedIndex(resolution.anchor.index);
     }
-
-    if (isPrimaryModifierPressed) {
-      const isCurrentlySelected = selectedGroupIdSet.has(groupId);
-      if (isCurrentlySelected) {
-        const childIds = new Set(children.map((c) => c.id));
-        const remaining = selectedElements.filter((el) => !childIds.has(el.id));
-        const remainingGroups = selectedGroupIds.filter((id) => id !== groupId);
-        setFullSelection(remaining, remainingGroups);
-      } else {
-        const existingIds = new Set(selectedElements.map((el) => el.id));
-        const newEls = childElements.filter((el) => !existingIds.has(el.id));
-        const mergedElements = [...selectedElements, ...newEls];
-        const mergedGroupIds = [...selectedGroupIds, groupId];
-        setFullSelection(mergedElements, mergedGroupIds);
-      }
-    } else {
-      setFullSelection(childElements, [groupId]);
-    }
-
-    setLastClickedDisplayIndex(thisDisplayIdx);
-    setLastClickedIndex(null);
   };
 
   // 빈 공간 클릭 시 선택 해제
@@ -703,34 +569,15 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
                     {/* 그룹 이름 */}
                     {isRenamingGroup ? (
-                      <input
-                        ref={actions.renameInputRef}
-                        type="text"
-                        className="flex-1 text-body bg-transparent border-none p-0 outline-none text-fg min-w-0 caret-accent"
+                      <LayerRenameInput
+                        inputRef={actions.renameInputRef}
                         value={actions.renameValue}
-                        onChange={(e) => actions.setRenameValue(e.target.value)}
-                        onBlur={() => {
-                          if (!actions.renameCancelledRef.current) {
-                            actions.handleGroupRenameCommit(
-                              gh.groupId,
-                              actions.renameValue,
-                            );
-                          }
-                          actions.renameCancelledRef.current = false;
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            (e.target as HTMLInputElement).blur();
-                          } else if (e.key === 'Escape') {
-                            e.preventDefault();
-                            actions.renameCancelledRef.current = true;
-                            actions.setRenamingItemId(null);
-                          }
-                        }}
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onClick={(e) => e.stopPropagation()}
-                        onDoubleClick={(e) => e.stopPropagation()}
+                        cancelledRef={actions.renameCancelledRef}
+                        onChange={actions.setRenameValue}
+                        onCommit={(value) =>
+                          actions.handleGroupRenameCommit(gh.groupId, value)
+                        }
+                        onCancel={() => actions.setRenamingItemId(null)}
                       />
                     ) : (
                       <span className="flex-1 text-body truncate font-medium">
@@ -813,34 +660,15 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
                   {/* 이름 */}
                   {actions.renamingItemId === item.id ? (
-                    <input
-                      ref={actions.renameInputRef}
-                      type="text"
-                      className="flex-1 text-body bg-transparent border-none p-0 outline-none text-fg min-w-0 caret-accent"
+                    <LayerRenameInput
+                      inputRef={actions.renameInputRef}
                       value={actions.renameValue}
-                      onChange={(e) => actions.setRenameValue(e.target.value)}
-                      onBlur={() => {
-                        if (!actions.renameCancelledRef.current) {
-                          actions.handleLayerRenameCommit(
-                            item,
-                            actions.renameValue,
-                          );
-                        }
-                        actions.renameCancelledRef.current = false;
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          (e.target as HTMLInputElement).blur();
-                        } else if (e.key === 'Escape') {
-                          e.preventDefault();
-                          actions.renameCancelledRef.current = true;
-                          actions.setRenamingItemId(null);
-                        }
-                      }}
-                      onMouseDown={(e) => e.stopPropagation()}
-                      onClick={(e) => e.stopPropagation()}
-                      onDoubleClick={(e) => e.stopPropagation()}
+                      cancelledRef={actions.renameCancelledRef}
+                      onChange={actions.setRenameValue}
+                      onCommit={(value) =>
+                        actions.handleLayerRenameCommit(item, value)
+                      }
+                      onCancel={() => actions.setRenamingItemId(null)}
                     />
                   ) : (
                     <span className="flex-1 text-body truncate">

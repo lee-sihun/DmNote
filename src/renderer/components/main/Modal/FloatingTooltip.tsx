@@ -17,6 +17,9 @@ interface FloatingTooltipProps {
   placement?: 'top' | 'bottom' | 'left' | 'right';
   delay?: number; // hover 시 툴팁 표시 전 대기 시간 (ms)
   disabled?: boolean; // true일 때 툴팁 미표시
+  // 래퍼가 flex 아이템 자리에 들어갈 때 축소 규칙을 넘긴다.
+  // 규칙을 안쪽 자식에 두면 래퍼만 줄어들어 자식이 이웃 위로 삐져나온다
+  className?: string;
 }
 
 const FloatingTooltip = ({
@@ -25,6 +28,7 @@ const FloatingTooltip = ({
   placement = 'top',
   delay = 500,
   disabled = false,
+  className,
 }: FloatingTooltipProps) => {
   const [open, setOpen] = useState(false);
   const arrowRef = useRef<HTMLDivElement | null>(null);
@@ -155,7 +159,7 @@ const FloatingTooltip = ({
         onFocus={handleFocus}
         onBlur={handleClose}
         aria-describedby={open ? id : undefined}
-        className="inline-flex"
+        className={className ? `inline-flex ${className}` : 'inline-flex'}
       >
         {children}
       </div>

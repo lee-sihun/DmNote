@@ -140,6 +140,9 @@
   --z-chrome-popup: 40;
   --z-chrome-modal: 50;
   --z-chrome-submenu: 60;
+  /* 잡고 있는 요소. 팝업·모달 위로 떠야 툴바 바와 팝업 목록 사이를 오갈 때
+     중간에 가려지지 않는다. 드래그 중에는 툴팁을 띄우지 않으므로 그 아래 */
+  --z-chrome-drag: 65;
   --z-chrome-tooltip: 70;
 
   /* 격리된 그리드 안에서만 비교되는 캔버스 내부 스택.
@@ -227,6 +230,27 @@
      방향 비대칭으로 읽혔다 */
   --ui-segment-duration: 220ms;
   --ui-segment-ease: cubic-bezier(0.34, 1.2, 0.64, 1);
+
+  /* 탭 드래그 - 칩 본체는 포인터를 그대로 따르고 안쪽 라벨이 관성을 표현한다.
+     bend 세기는 칩 크기에 비례해야 한다. 참고한 프로토타입은 261x46 카드에서 0.3인데
+     여기 칩은 높이 30px이라 그 값을 그대로 쓰면 라벨이 8px씩 밀려 밖으로 새 나간다 */
+  --ui-tab-bend-strength: 0.12;
+  /* 집히는 순간 - 배율만 전이한다. 기울기는 스프링이 이미 늦춰서 준다 */
+  --ui-tab-lift-scale: 1.04;
+  /* 잡은 칩은 반투명해야 놓을 자리가 비쳐 보인다 */
+  --ui-tab-ghost-opacity: 0.7;
+  --ui-tab-lift-duration: 200ms;
+  --ui-tab-lift-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* 착지 - 눌림이 짧고 복원이 길어야 무게가 실린다 */
+  --ui-tab-land-duration: 380ms;
+  --ui-tab-land-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* 교체 상대가 내주는 자리. 톤만 바꾼다 - 배율을 넣으면 라운딩과 인셋 링이
+     같이 줄어 패딩 공식이 깨지고 글자도 뭉갠다. 깊이는 위쪽 안쪽 그림자가 만든다.
+     필은 선택 상태(--ui-fill-hover 0.108)보다 한 단 위여야 구분된다 */
+  --ui-tab-socket-fill: rgba(255, 255, 255, 0.145);
+  --ui-tab-socket-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.28);
+  --ui-tab-return-duration: 400ms;
+  --ui-tab-return-ease: cubic-bezier(0.34, 1.4, 0.64, 1);
 
   /* 팝업 등퇴장 - 드롭다운, 팝오버, 피커 공통 다이얼.
      닫힘이 열림보다 짧은 건 의도, 사라지는 걸 기다릴 이유가 없음 */

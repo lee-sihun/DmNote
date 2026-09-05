@@ -6,7 +6,6 @@
  */
 
 import { useRef } from 'react';
-import { newElementId } from '@src/renderer/editor/model/elementId';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
@@ -19,77 +18,38 @@ import {
   type SelectedElement,
   type ClipboardItem,
 } from '@stores/grid/useGridSelectionStore';
-import { PASTE_OFFSET } from './constants';
-import type { KeyMappings, KeySlot } from '@src/types/key/keys';
-import { cloneSlot } from '@utils/keySlot';
-import {
-  reissueSpritePoseIds,
-  remapSpritePoseTriggers,
-  rebindPoseTriggersByKey,
-} from '@utils/sprite/poseIdentity';
-import { buildSpriteKeyCanonicalMap } from '@utils/sprite/spriteKeyBinding';
-import { toSpriteWireShape } from '@utils/sprite/spriteWireShape';
-import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
-import {
-  buildNextLayerGroupName,
-  buildLayerItemsForMode,
-  applyZIndexToLayerOrder,
-} from '@utils/layerGroupUtils';
+import type { KeyMappings } from '@src/types/key/keys';
 import { commitGeneratedSemanticOps } from '@src/renderer/editor/runtime/editorSemanticOps';
 import {
   ElementIntentAbort,
-  applySealedSliceMutation,
-  combineReceipts,
   createPropertyReceipt,
   generateGeometryIntentOps,
   reportElementOpSkipped,
-  type ElementIntentReceipt,
   type PropertyIntents,
   type PropertyReceiptEntry,
 } from '@src/renderer/editor/runtime/elementIntent';
 import {
-  applyPluginAdditionEagerly,
   runMixedElementOpsIntent,
   runMixedGestureElementIntent,
 } from '@src/renderer/editor/runtime/mixedElementIntent';
-import { stableStringify } from '@utils/core/stableStringify';
-import type {
-  CanonicalEditorDocumentV1,
-  CanonicalKeyPosition,
-  CanonicalStatItemPosition,
-  CanonicalGraphItemPosition,
-  CanonicalKnobItemPosition,
-  CanonicalReactiveSpritePosition,
-  EditorInsertFrozenElementsOpV1,
-} from '@src/types/editor';
+import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
 import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
 import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import { rotatePluginInstancesEditSession } from '@plugins/runtime/displayElement/instancesCommitQueue';
-import { reissueDisplayElementHandlers } from '@plugins/runtime/displayElement/displayElementApi';
 import { deleteFrozenSelection } from '@src/renderer/editor/runtime/deleteFrozenSelection';
 import {
   beginMixedGestureTransaction,
   cancelUncommittedMixedGestureTransaction,
 } from '@plugins/runtime/displayElement/gestureTransaction';
-
-// 붙여넣기 블록의 스택 순서 결정. 배열 위치가 곧 최종 z이므로 원본의 상대
-// 스택(동결 payload zIndex 내림차순)을 따르고, 동률은 payload 순서로 안정
-// 정렬한다. zIndex 없는 레거시 항목은 직전 항목의 z를 이어받아 payload 내
-// 원본 상대 순서를 지킨다 - append 후 배열 위치를 쓰면 블록 최상단으로 튄다
-const orderPastedItemsByFrozenZ = <T>(
-  entries: ReadonlyArray<{ item: T; zIndex: number | undefined }>,
-): T[] => {
-  let carry = Number.POSITIVE_INFINITY;
-  return entries
-    .map(({ item, zIndex }, order) => {
-      carry = zIndex ?? carry;
-      return { item, order, z: carry };
-    })
-    .sort((a, b) => b.z - a.z || a.order - b.order)
-    .map((entry) => entry.item);
-};
+import {
+  moveSelectedNativePositions,
+  moveSelectedPluginElements,
+  selectedPluginIds,
+} from '@utils/grid/selectionMovement';
+import { createSelectionClipboardSnapshot } from '@utils/grid/selectionClipboard';
+import { pasteSelection } from './pasteSelection';
 
 interface UseGridSelectionParams {
   selectedElements: SelectedElement[];
@@ -371,150 +331,107 @@ export function useGridSelection({
     const currentPluginElements =
       usePluginDisplayElementStore.getState().elements;
 
-    // 키 위치 배치 업데이트
-    const keyUpdates = selectedElements.filter((el) => el.type === 'key');
-    if (keyUpdates.length > 0) {
-      const newPositions = { ...currentPositions };
-      const tabPositions = [...(newPositions[selectedKeyType] || [])];
+    const selectedNativeIds = (
+      type: 'key' | 'stat' | 'graph' | 'knob' | 'sprite',
+    ): Set<string> =>
+      new Set(
+        selectedElements
+          .filter((element) => element.type === type)
+          .map((element) => element.id),
+      );
 
-      keyUpdates.forEach((el) => {
-        const index = tabPositions.findIndex(
-          (position) => position.id === el.id,
+    const keyIds = selectedNativeIds('key');
+    if (keyIds.size > 0) {
+      useKeyStore
+        .getState()
+        .setPositions(
+          moveSelectedNativePositions(
+            currentPositions,
+            selectedKeyType,
+            keyIds,
+            deltaX,
+            deltaY,
+          ),
         );
-        if (index < 0) return;
-        const currentPos = tabPositions[index];
-        if (currentPos) {
-          tabPositions[index] = {
-            ...currentPos,
-            dx: currentPos.dx + deltaX,
-            dy: currentPos.dy + deltaY,
-          };
-        }
-      });
-
-      newPositions[selectedKeyType] = tabPositions;
-      useKeyStore.getState().setPositions(newPositions);
     }
 
-    // 통계 요소 배치 업데이트
-    const statUpdates = selectedElements.filter((el) => el.type === 'stat');
-    if (statUpdates.length > 0) {
-      const currentStatPositions = useStatItemStore.getState().positions;
-      const newStatPositions = { ...currentStatPositions };
-      const tabPositions = [...(newStatPositions[selectedKeyType] || [])];
-
-      statUpdates.forEach((el) => {
-        const index = tabPositions.findIndex(
-          (position) => position.id === el.id,
+    const statIds = selectedNativeIds('stat');
+    if (statIds.size > 0) {
+      const current = useStatItemStore.getState().positions;
+      useStatItemStore
+        .getState()
+        .setPositions(
+          moveSelectedNativePositions(
+            current,
+            selectedKeyType,
+            statIds,
+            deltaX,
+            deltaY,
+          ),
         );
-        if (index < 0) return;
-        const currentPos = tabPositions[index];
-        if (currentPos) {
-          tabPositions[index] = {
-            ...currentPos,
-            dx: currentPos.dx + deltaX,
-            dy: currentPos.dy + deltaY,
-          };
-        }
-      });
-
-      newStatPositions[selectedKeyType] = tabPositions;
-      useStatItemStore.getState().setPositions(newStatPositions);
     }
 
-    // 그래프 요소 배치 업데이트
-    const graphUpdates = selectedElements.filter((el) => el.type === 'graph');
-    if (graphUpdates.length > 0) {
-      const currentGraphPositions = useGraphItemStore.getState().positions;
-      const newGraphPositions = { ...currentGraphPositions };
-      const tabPositions = [...(newGraphPositions[selectedKeyType] || [])];
-
-      graphUpdates.forEach((el) => {
-        const index = tabPositions.findIndex(
-          (position) => position.id === el.id,
+    const graphIds = selectedNativeIds('graph');
+    if (graphIds.size > 0) {
+      const current = useGraphItemStore.getState().positions;
+      useGraphItemStore
+        .getState()
+        .setPositions(
+          moveSelectedNativePositions(
+            current,
+            selectedKeyType,
+            graphIds,
+            deltaX,
+            deltaY,
+          ),
         );
-        if (index < 0) return;
-        const currentPos = tabPositions[index];
-        if (currentPos) {
-          tabPositions[index] = {
-            ...currentPos,
-            dx: currentPos.dx + deltaX,
-            dy: currentPos.dy + deltaY,
-          };
-        }
-      });
-
-      newGraphPositions[selectedKeyType] = tabPositions;
-      useGraphItemStore.getState().setPositions(newGraphPositions);
     }
 
-    // 노브 요소 배치 업데이트
-    const knobUpdates = selectedElements.filter((el) => el.type === 'knob');
-    if (knobUpdates.length > 0) {
-      const currentKnobPositions = useKnobItemStore.getState().positions;
-      const newKnobPositions = { ...currentKnobPositions };
-      const tabPositions = [...(newKnobPositions[selectedKeyType] || [])];
-
-      knobUpdates.forEach((el) => {
-        const index = tabPositions.findIndex(
-          (position) => position.id === el.id,
+    const knobIds = selectedNativeIds('knob');
+    if (knobIds.size > 0) {
+      const current = useKnobItemStore.getState().positions;
+      useKnobItemStore
+        .getState()
+        .setPositions(
+          moveSelectedNativePositions(
+            current,
+            selectedKeyType,
+            knobIds,
+            deltaX,
+            deltaY,
+          ),
         );
-        if (index < 0) return;
-        const currentPos = tabPositions[index];
-        if (currentPos) {
-          tabPositions[index] = {
-            ...currentPos,
-            dx: currentPos.dx + deltaX,
-            dy: currentPos.dy + deltaY,
-          };
-        }
-      });
-
-      newKnobPositions[selectedKeyType] = tabPositions;
-      useKnobItemStore.getState().setPositions(newKnobPositions);
     }
 
-    // 스프라이트 요소 배치 업데이트
-    const spriteUpdates = selectedElements.filter((el) => el.type === 'sprite');
-    if (spriteUpdates.length > 0) {
-      const currentSpritePositions = useSpriteStore.getState().positions;
-      const newSpritePositions = { ...currentSpritePositions };
-      const tabPositions = [...(newSpritePositions[selectedKeyType] || [])];
-
-      spriteUpdates.forEach((el) => {
-        const index = tabPositions.findIndex(
-          (position) => position.id === el.id,
+    const spriteIds = selectedNativeIds('sprite');
+    if (spriteIds.size > 0) {
+      const current = useSpriteStore.getState().positions;
+      useSpriteStore
+        .getState()
+        .setPositions(
+          moveSelectedNativePositions(
+            current,
+            selectedKeyType,
+            spriteIds,
+            deltaX,
+            deltaY,
+          ),
         );
-        if (index < 0) return;
-        const currentPos = tabPositions[index];
-        if (currentPos) {
-          tabPositions[index] = {
-            ...currentPos,
-            dx: currentPos.dx + deltaX,
-            dy: currentPos.dy + deltaY,
-          };
-        }
-      });
-
-      newSpritePositions[selectedKeyType] = tabPositions;
-      useSpriteStore.getState().setPositions(newSpritePositions);
     }
 
     // 플러그인 요소 배치 업데이트
-    const pluginUpdates = selectedElements.filter((el) => el.type === 'plugin');
+    const pluginUpdateIds = new Set(
+      selectedElements
+        .filter((element) => element.type === 'plugin')
+        .map((element) => element.id),
+    );
     let stagedBeforeEagerWrite = false;
-    if (pluginUpdates.length > 0) {
+    if (pluginUpdateIds.size > 0) {
       if (gestureId) {
-        const selectedPluginIds = new Set(
-          pluginUpdates.map((element) => element.id),
+        const movedPluginIds = selectedPluginIds(
+          currentPluginElements,
+          pluginUpdateIds,
         );
-        const movedPluginIds = [
-          ...new Set(
-            currentPluginElements
-              .filter((element) => selectedPluginIds.has(element.fullId))
-              .map((element) => element.pluginId),
-          ),
-        ];
         // 화살표 이동은 pointer 시작 경계가 없으므로 여기서 staging을 eager
         // 쓰기 앞에 세운다. 드래그는 Grid의 시작 경계가 이미 같은 id로 stage함
         if (syncToOverlay && movedPluginIds.length > 0) {
@@ -525,21 +442,12 @@ export function useGridSelection({
           rotatePluginInstancesEditSession(pluginId, gestureId);
         });
       }
-      const newElements = currentPluginElements.map((pluginEl) => {
-        const isSelected = pluginUpdates.some(
-          (sel) => sel.id === pluginEl.fullId,
-        );
-        if (isSelected) {
-          return {
-            ...pluginEl,
-            position: {
-              x: pluginEl.position.x + deltaX,
-              y: pluginEl.position.y + deltaY,
-            },
-          };
-        }
-        return pluginEl;
-      });
+      const newElements = moveSelectedPluginElements(
+        currentPluginElements,
+        pluginUpdateIds,
+        deltaX,
+        deltaY,
+      );
       // syncToOverlay가 false이면 오버레이 동기화 스킵 (드래그 중)
       usePluginDisplayElementStore
         .getState()
@@ -570,1154 +478,34 @@ export function useGridSelection({
   const copySelectedElements = () => {
     if (selectedElements.length === 0) return;
 
-    // 최신 상태를 직접 스토어에서 가져오기 (클로저 문제 방지)
-    // 클립보드는 이후 paste 커밋의 원본이므로 canonical 기준으로 캡처
-    const { keyMappings: km, canonicalPositions: pos } = useKeyStore.getState();
-    const currentMappings = km[selectedKeyType] || [];
-    const currentPositions = pos[selectedKeyType] || [];
-    const currentStatPositions =
-      useStatItemStore.getState().positions[selectedKeyType] || [];
-    const currentGraphPositions =
-      useGraphItemStore.getState().positions[selectedKeyType] || [];
-    const currentKnobPositions =
-      useKnobItemStore.getState().positions[selectedKeyType] || [];
-    const currentSpritePositions =
-      useSpriteStore.getState().positions[selectedKeyType] || [];
-    const currentPluginElements =
-      usePluginDisplayElementStore.getState().elements;
-
-    // 트리거 id -> canonical 키. 재생 매핑과 같은 결합을 쓴다
-    const sourceKeyCanonicals = buildSpriteKeyCanonicalMap(
-      currentMappings,
-      currentPositions,
-    );
-
-    const clipboardItems: ClipboardItem[] = [];
-
-    for (const element of selectedElements) {
-      if (element.type === 'key') {
-        const index = currentPositions.findIndex(
-          (position) => position.id === element.id,
-        );
-        const keyCode = index >= 0 ? currentMappings[index] : undefined;
-        const position = index >= 0 ? currentPositions[index] : undefined;
-        // 미할당 키는 빈 문자열 슬롯이라 truthy 검사로 거르면 복사가 누락된다
-        if (keyCode !== undefined && position) {
-          clipboardItems.push({
-            type: 'key',
-            keyCode: cloneSlot(keyCode),
-            position: { ...position },
-          });
-        }
-      } else if (element.type === 'stat') {
-        const position = currentStatPositions.find(
-          (candidate) => candidate.id === element.id,
-        );
-        if (position) {
-          clipboardItems.push({
-            type: 'stat',
-            position: { ...position },
-          });
-        }
-      } else if (element.type === 'graph') {
-        const position = currentGraphPositions.find(
-          (candidate) => candidate.id === element.id,
-        );
-        if (position) {
-          clipboardItems.push({
-            type: 'graph',
-            position: { ...position },
-          });
-        }
-      } else if (element.type === 'knob') {
-        const position = currentKnobPositions.find(
-          (candidate) => candidate.id === element.id,
-        );
-        if (position) {
-          clipboardItems.push({
-            type: 'knob',
-            position: { ...position },
-          });
-        }
-      } else if (element.type === 'sprite') {
-        const position = currentSpritePositions.find(
-          (candidate) => candidate.id === element.id,
-        );
-        if (position) {
-          clipboardItems.push({
-            type: 'sprite',
-            position: { ...position },
-            // 다른 탭에 붙일 때 같은 키로 다시 결합하려면 지금의 결합을 얼려야 한다
-            triggerCanonicals: Object.fromEntries(
-              position.poses.flatMap((pose) =>
-                pose.triggers.flatMap((trigger) => {
-                  const canonical = sourceKeyCanonicals.get(trigger);
-                  return canonical === undefined ? [] : [[trigger, canonical]];
-                }),
-              ),
-            ),
-          });
-        }
-      } else if (element.type === 'plugin') {
-        const pluginElement = currentPluginElements.find(
-          (el) => el.fullId === element.id,
-        );
-        if (pluginElement) {
-          // fullId를 제외한 나머지 데이터 복사
-          const { fullId: _fullId, ...elementData } = pluginElement;
-          clipboardItems.push({
-            type: 'plugin',
-            element: elementData,
-          });
-        }
-      }
-    }
-
-    if (clipboardItems.length > 0) {
-      // 그룹 헤더가 선택된 경우 그룹 정보도 함께 저장
-      const selectedGroupIds =
-        useGridSelectionStore.getState().selectedGroupIds;
-      const clipboardGroups: {
-        id: string;
-        name: string;
-        collapsed?: boolean;
-      }[] = [];
-
-      if (selectedGroupIds.length > 0) {
-        const layerGroups = useLayerGroupStore
-          .getState()
-          .getGroupsForMode(selectedKeyType);
-        const collapsedGroups = useLayerGroupStore.getState().collapsedGroups;
-        for (const gid of selectedGroupIds) {
-          const group = layerGroups.find((g) => g.id === gid);
-          if (group) {
-            clipboardGroups.push({
-              id: gid,
-              name: group.name,
-              collapsed: collapsedGroups.has(gid) || undefined,
-            });
-          }
-        }
-      }
-
-      setClipboard(clipboardItems, clipboardGroups, selectedKeyType);
+    const keyState = useKeyStore.getState();
+    const layerGroupState = useLayerGroupStore.getState();
+    const selectionState = useGridSelectionStore.getState();
+    const snapshot = createSelectionClipboardSnapshot({
+      selectedElements,
+      keyMappings: keyState.keyMappings[selectedKeyType] || [],
+      keyPositions: keyState.canonicalPositions[selectedKeyType] || [],
+      statPositions:
+        useStatItemStore.getState().positions[selectedKeyType] || [],
+      graphPositions:
+        useGraphItemStore.getState().positions[selectedKeyType] || [],
+      knobPositions:
+        useKnobItemStore.getState().positions[selectedKeyType] || [],
+      spritePositions:
+        useSpriteStore.getState().positions[selectedKeyType] || [],
+      pluginElements: usePluginDisplayElementStore.getState().elements,
+      selectedGroupIds: selectionState.selectedGroupIds,
+      layerGroups: layerGroupState.getGroupsForMode(selectedKeyType),
+      collapsedGroupIds: layerGroupState.collapsedGroups,
+    });
+    if (snapshot.items.length > 0) {
+      // 복사 원본 탭 - 다른 탭에 붙일 때 스프라이트 트리거 재결합 판정에 쓴다
+      setClipboard(snapshot.items, snapshot.groups, selectedKeyType);
     }
   };
 
-  // 클립보드에서 붙여넣기: 계획(신규 id·payload·그룹·plugin fullId·앵커)을
-  // 호출 시점에 동결하고, eager는 결합 봉인 receipt, wire는 슬롯 base와
-  // 봉인 plugin projection의 결합 순서에서 재생성한다. 초기 plugin이 없어도
-  // 항상 mixed-capable primitive를 탄다 - 슬롯 대기 중 추가된 plugin이
-  // z 재부여에서 빠지는 TOCTOU를 막는다
-  const pasteElements = async () => {
-    const currentClipboard = useGridSelectionStore.getState().clipboard;
-    if (currentClipboard.length === 0) return;
-    const gestureId = crypto.randomUUID();
-    const clipboardGroups = useGridSelectionStore.getState().clipboardGroups;
-    const clipboardMode = useGridSelectionStore.getState().clipboardMode;
-    const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
-    const currentSelectedElements =
-      useGridSelectionStore.getState().selectedElements;
-    const currentSelectedGroupIds =
-      useGridSelectionStore.getState().selectedGroupIds;
-
-    // 신규 그룹 동결 (스토어 쓰기는 eager 봉인 안에서)
-    const groupIdMap = new Map<string, string>();
-    const frozenNewGroups: Array<{
-      id: string;
-      name: string;
-      collapsed: boolean;
-    }> = [];
-    if (clipboardGroups.length > 0) {
-      const modeGroups = [...(currentLayerGroups[selectedKeyType] || [])];
-      for (const clipboardGroup of clipboardGroups) {
-        const newGroupId = crypto.randomUUID();
-        const newGroupName = buildNextLayerGroupName(
-          clipboardGroup.name,
-          modeGroups,
-        );
-        groupIdMap.set(clipboardGroup.id, newGroupId);
-        const frozen = {
-          id: newGroupId,
-          name: newGroupName,
-          collapsed: Boolean(clipboardGroup.collapsed),
-        };
-        frozenNewGroups.push(frozen);
-        modeGroups.push({ id: newGroupId, name: newGroupName });
-      }
-    }
-    const callModeGroups = currentLayerGroups[selectedKeyType] || [];
-    const remapGroupId = (groupId: string | undefined) => {
-      if (!groupId) return groupId;
-      if (groupIdMap.has(groupId)) return groupIdMap.get(groupId);
-      return callModeGroups.some((group) => group.id === groupId)
-        ? groupId
-        : undefined;
-    };
-
-    // 배치 내 키 구id -> 신id 수집 - 함께 붙여넣는 스프라이트 트리거가
-    // 원본 키 대신 사본 키를 가리키게 한다 (groupIdMap과 같은 패턴)
-    const keyIdMap = new Map<string, string>();
-
-    // 신규 native payload 동결
-    const keysToAdd: {
-      keyCode: KeySlot;
-      position: CanonicalKeyPosition;
-    }[] = [];
-    const statsToAdd: { position: CanonicalStatItemPosition }[] = [];
-    const graphsToAdd: { position: CanonicalGraphItemPosition }[] = [];
-    const knobsToAdd: { position: CanonicalKnobItemPosition }[] = [];
-    const spritesToAdd: {
-      position: CanonicalReactiveSpritePosition;
-      triggerCanonicals?: Record<string, string>;
-    }[] = [];
-    const pluginPayloads: Omit<PluginDisplayElementInternal, 'fullId'>[] = [];
-    for (const item of currentClipboard) {
-      if (item.type === 'key') {
-        const newKeyId = newElementId();
-        if (item.position.id) keyIdMap.set(item.position.id, newKeyId);
-        keysToAdd.push({
-          keyCode: cloneSlot(item.keyCode),
-          position: {
-            ...item.position,
-            id: newKeyId,
-            groupId: remapGroupId(item.position.groupId),
-            dx: (item.position.dx || 0) + PASTE_OFFSET,
-            dy: (item.position.dy || 0) + PASTE_OFFSET,
-          },
-        });
-      } else if (item.type === 'stat') {
-        statsToAdd.push({
-          position: {
-            ...item.position,
-            id: newElementId(),
-            groupId: remapGroupId(item.position.groupId),
-            dx: (item.position.dx || 0) + PASTE_OFFSET,
-            dy: (item.position.dy || 0) + PASTE_OFFSET,
-          },
-        });
-      } else if (item.type === 'graph') {
-        graphsToAdd.push({
-          position: {
-            ...item.position,
-            id: newElementId(),
-            groupId: remapGroupId(item.position.groupId),
-            dx: (item.position.dx || 0) + PASTE_OFFSET,
-            dy: (item.position.dy || 0) + PASTE_OFFSET,
-          },
-        });
-      } else if (item.type === 'knob') {
-        knobsToAdd.push({
-          position: {
-            ...item.position,
-            id: newElementId(),
-            groupId: remapGroupId(item.position.groupId),
-            dx: (item.position.dx || 0) + PASTE_OFFSET,
-            dy: (item.position.dy || 0) + PASTE_OFFSET,
-          },
-        });
-      } else if (item.type === 'sprite') {
-        spritesToAdd.push({
-          triggerCanonicals: item.triggerCanonicals,
-          // wire 정규화: nullish layerName·groupId는 키 부재로 맞춰 ack와 일치
-          position: toSpriteWireShape({
-            ...item.position,
-            id: newElementId(),
-            // 사본 poseId 재발급 - 원본과 공유하면 백엔드가 중복으로 거부
-            poses: reissueSpritePoseIds(item.position.poses),
-            groupId: remapGroupId(item.position.groupId ?? undefined),
-            dx: (item.position.dx || 0) + PASTE_OFFSET,
-            dy: (item.position.dy || 0) + PASTE_OFFSET,
-          }),
-        });
-      } else if (item.type === 'plugin') {
-        pluginPayloads.push({
-          ...item.element,
-          groupId: remapGroupId(item.element.groupId),
-          position: {
-            x: (item.element.position?.x || 0) + PASTE_OFFSET,
-            y: (item.element.position?.y || 0) + PASTE_OFFSET,
-          },
-          tabId: selectedKeyType,
-        });
-      }
-    }
-
-    // 스프라이트 트리거를 같은 배치 키의 신 id로 재결합, 배치 밖 키 참조는
-    // 유지. 키가 스프라이트 뒤에 올 수 있어 payload 동결 후 일괄 치환한다.
-    // 치환된 id가 정렬 순서를 깨뜨릴 수 있어 wire 정규화를 다시 적용한다
-    // 다른 탭으로 옮겨 붙이면 함께 복사된 키로 재결합되지 못한 트리거는 원본 탭
-    // 키를 계속 가리킨다. 요소 id는 문서 전역 유일이라 대상 탭에서 절대 해석되지
-    // 않아 눌러도 반응하지 않는 자세가 조용히 남는다. 트리거만 비우면 백엔드가
-    // EMPTY_SPRITE_POSE_TRIGGERS로 커밋을 막으므로 그 자세를 통째로 버린다.
-    // 같은 탭이면 배치 밖 키 참조를 그대로 두는 기존 계약을 유지한다
-    const isCrossModePaste =
-      clipboardMode !== null && clipboardMode !== selectedKeyType;
-    if (spritesToAdd.length > 0) {
-      // 같은 탭이면 배치 밖 트리거를 그대로 둔다 (의도된 계약). 다른 탭이면 그
-      // 참조가 절대 해석되지 않으므로 복사 시 얼려둔 canonical 키로 다시 결합한다
-      const targetKeyIdsByCanonical = new Map<string, string[]>();
-      if (isCrossModePaste) {
-        const { keyMappings: km, canonicalPositions: pos } =
-          useKeyStore.getState();
-        for (const [id, canonical] of buildSpriteKeyCanonicalMap(
-          km[selectedKeyType] ?? [],
-          pos[selectedKeyType] ?? [],
-        )) {
-          const ids = targetKeyIdsByCanonical.get(canonical) ?? [];
-          ids.push(id);
-          targetKeyIdsByCanonical.set(canonical, ids);
-        }
-      }
-      for (const sprite of spritesToAdd) {
-        const remapped =
-          keyIdMap.size > 0
-            ? remapSpritePoseTriggers(sprite.position.poses, keyIdMap)
-            : sprite.position.poses;
-        sprite.position = toSpriteWireShape({
-          ...sprite.position,
-          poses: isCrossModePaste
-            ? rebindPoseTriggersByKey(
-                remapped,
-                sprite.triggerCanonicals ?? {},
-                targetKeyIdsByCanonical,
-              )
-            : remapped,
-        });
-      }
-    }
-
-    // maxInstances 사전 검증 - add 경로(생성 메뉴)와 동일하게 상한 도달 시
-    // 거부·경고. 혼합 선택도 destructive 관례(부분 성공 금지)에 따라 전체 중단
-    const frozenInstanceCaps: Array<{
-      definitionId: string;
-      pluginId: string;
-      maxInstances: number;
-      pastedCount: number;
-    }> = [];
-    if (pluginPayloads.length > 0) {
-      const pastedCountByDefinition = new Map<string, number>();
-      for (const element of pluginPayloads) {
-        if (!element.definitionId) continue;
-        pastedCountByDefinition.set(
-          element.definitionId,
-          (pastedCountByDefinition.get(element.definitionId) ?? 0) + 1,
-        );
-      }
-      const { definitions, elements: currentElements } =
-        usePluginDisplayElementStore.getState();
-      for (const [definitionId, pastedCount] of pastedCountByDefinition) {
-        const definition = definitions.get(definitionId);
-        const maxInstances = definition?.maxInstances;
-        if (!definition || !maxInstances || maxInstances <= 0) continue;
-        frozenInstanceCaps.push({
-          definitionId,
-          pluginId: definition.pluginId,
-          maxInstances,
-          pastedCount,
-        });
-        const currentCount = currentElements.filter(
-          (element) =>
-            element.definitionId === definitionId &&
-            element.tabId === selectedKeyType,
-        ).length;
-        if (currentCount + pastedCount > maxInstances) {
-          console.warn(
-            `[Plugin ${definition.pluginId}] Max instances (${maxInstances}) reached for ${definitionId} in tab ${selectedKeyType}`,
-          );
-          reportElementOpSkipped('paste max instances');
-          return;
-        }
-      }
-    }
-
-    // plugin id·fullId 사전 동결 - eager 루프 생성은 retry·receipt를 비결정적으로
-    // 만든다. 붙여넣기는 새 인스턴스이므로 id 재발급 - 복사 원본 id를 유지하면
-    // 영구 instanceId가 중복되어 백엔드 커밋이 거절된다. 핸들러 등록도 원본과
-    // 공유하지 않도록 재발급 - _onXxxId 공유는 한쪽 제거가 다른 쪽을 죽인다
-    const frozenPluginElements: PluginDisplayElementInternal[] =
-      pluginPayloads.map((element) => {
-        const id = crypto.randomUUID();
-        return {
-          ...reissueDisplayElementHandlers(element),
-          id,
-          fullId: `${element.pluginId}::${id}`,
-        };
-      });
-    const pluginIdsToAdd = [
-      ...new Set(frozenPluginElements.map((element) => element.pluginId)),
-    ];
-    const hasEditorPaste =
-      keysToAdd.length > 0 ||
-      statsToAdd.length > 0 ||
-      graphsToAdd.length > 0 ||
-      knobsToAdd.length > 0 ||
-      spritesToAdd.length > 0 ||
-      clipboardGroups.length > 0;
-    if (!hasEditorPaste && frozenPluginElements.length === 0) return;
-
-    // 앵커 동결: 호출 시점 결합 순서에서 삽입 위치의 기존 아이템 id
-    const callOrderItems = buildLayerItemsForMode(
-      selectedKeyType,
-      useKeyStore.getState().canonicalPositions,
-      useStatItemStore.getState().positions,
-      useGraphItemStore.getState().positions,
-      useKnobItemStore.getState().positions,
-      useSpriteStore.getState().positions,
-      usePluginDisplayElementStore.getState().elements,
-    );
-    // 앵커 descriptor: 선택 요소와 선택 그룹 최상단 중 더 위를 동결하되,
-    // 그룹이 이기면 groupId로 동결한다 - 당시 최상단 자식이 삭제돼도 살아
-    // 있는 그룹 경계를 재해석할 수 있다
-    let anchorElementIdx = Number.POSITIVE_INFINITY;
-    let anchorElementId: string | null = null;
-    for (const element of currentSelectedElements) {
-      const index = callOrderItems.findIndex((item) => item.id === element.id);
-      if (index !== -1 && index < anchorElementIdx) {
-        anchorElementIdx = index;
-        anchorElementId = element.id;
-      }
-    }
-    let anchorGroupIdx = Number.POSITIVE_INFINITY;
-    let anchorGroupId: string | null = null;
-    for (const groupId of currentSelectedGroupIds) {
-      const index = callOrderItems.findIndex(
-        (item) => item.groupId === groupId,
-      );
-      if (index !== -1 && index < anchorGroupIdx) {
-        anchorGroupIdx = index;
-        anchorGroupId = groupId;
-      }
-    }
-    // tie는 그룹 우선 - 그룹 클릭은 자식 전체와 groupId를 함께 선택하므로
-    // 최상단 자식 index와 그룹 index가 같다
-    const frozenAnchor: { elementId?: string; groupId?: string } | null =
-      anchorGroupIdx <= anchorElementIdx && anchorGroupId
-        ? { groupId: anchorGroupId }
-        : anchorElementId
-        ? { elementId: anchorElementId }
-        : null;
-
-    // z 재부여는 mode 내 모든 plugin에 닿는다 - scope는 신규 ∪ mode 전체
-    const pluginScope = (
-      elements: readonly PluginDisplayElementInternal[],
-    ): string[] => [
-      ...new Set([
-        ...pluginIdsToAdd,
-        ...elements
-          .filter((element) => element.tabId === selectedKeyType)
-          .map((element) => element.pluginId)
-          .filter((pluginId): pluginId is string => Boolean(pluginId)),
-      ]),
-    ];
-
-    interface PasteDocView {
-      keys: Record<string, KeySlot[]>;
-      keyPositions: CanonicalEditorDocumentV1['keyPositions'];
-      statPositions: CanonicalEditorDocumentV1['statPositions'];
-      graphPositions: CanonicalEditorDocumentV1['graphPositions'];
-      knobPositions: CanonicalEditorDocumentV1['knobPositions'];
-      spritePositions: CanonicalEditorDocumentV1['spritePositions'];
-      layerGroups: Record<string, Array<{ id: string; name: string }>>;
-    }
-
-    const payloadFingerprint = (value: unknown): string =>
-      stableStringify({
-        ...(value as Record<string, unknown>),
-        zIndex: undefined,
-      });
-
-    // 문서 뷰(base 또는 스토어)에서 동결 계획을 재적용해 결과를 산출.
-    // 충돌(같은 id에 다른 payload)은 전체 중단, 동일 payload는 skip(멱등)
-    const computePaste = (
-      view: PasteDocView,
-      projection: readonly PluginDisplayElementInternal[],
-    ): {
-      appended: boolean;
-      keys: Record<string, KeySlot[]>;
-      zPatch: ReturnType<typeof applyZIndexToLayerOrder>;
-      layerGroups: Record<string, Array<{ id: string; name: string }>>;
-      groupsChanged: boolean;
-      desiredProjection: PluginDisplayElementInternal[];
-      nativeBatchState: 'fresh' | 'realized' | 'partial';
-      frozenGroupConflict: boolean;
-    } => {
-      const mode = selectedKeyType;
-      let appended = false;
-
-      const findNativeById = (
-        id: string,
-      ): { field: keyof PasteDocView; mode: string; index: number } | null => {
-        const fields = [
-          'keyPositions',
-          'statPositions',
-          'graphPositions',
-          'knobPositions',
-          'spritePositions',
-        ] as const;
-        for (const field of fields) {
-          for (const [ownMode, list] of Object.entries(view[field])) {
-            const index = (list as Array<{ id: string }>).findIndex(
-              (position) => position.id === id,
-            );
-            if (index !== -1) return { field, mode: ownMode, index };
-          }
-        }
-        return null;
-      };
-
-      const nextKeys = { ...view.keys };
-      const nextKeyPositions = { ...view.keyPositions };
-      const nextStatPositions = { ...view.statPositions };
-      const nextGraphPositions = { ...view.graphPositions };
-      const nextKnobPositions = { ...view.knobPositions };
-      const nextSpritePositions = { ...view.spritePositions };
-
-      const appendedNativeIds = new Set<string>();
-      let realizedFrozenNativeParts = 0;
-      let missingFrozenNativeParts = 0;
-      let frozenGroupConflict = false;
-      for (const entry of keysToAdd) {
-        const existing = findNativeById(entry.position.id);
-        if (existing) {
-          const position = (
-            view[existing.field][existing.mode] as Array<
-              Record<string, unknown>
-            >
-          )[existing.index];
-          const pairedSlot = view.keys[existing.mode]?.[existing.index];
-          if (
-            existing.field !== 'keyPositions' ||
-            payloadFingerprint(position) !==
-              payloadFingerprint(entry.position) ||
-            stableStringify(pairedSlot) !== stableStringify(entry.keyCode)
-          ) {
-            throw new ElementIntentAbort('paste id collision');
-          }
-          realizedFrozenNativeParts += 1;
-          continue;
-        }
-        nextKeys[mode] = [...(nextKeys[mode] ?? []), entry.keyCode];
-        nextKeyPositions[mode] = [
-          ...(nextKeyPositions[mode] ?? []),
-          entry.position,
-        ];
-        appendedNativeIds.add(entry.position.id);
-        missingFrozenNativeParts += 1;
-        appended = true;
-      }
-      const appendSimple = <T extends { id: string }>(
-        record: Record<string, T[]>,
-        entries: Array<{ position: T }>,
-        field: keyof PasteDocView,
-      ): Record<string, T[]> => {
-        let next = record;
-        for (const entry of entries) {
-          const existing = findNativeById(entry.position.id);
-          if (existing) {
-            const position = (
-              view[existing.field][existing.mode] as Array<
-                Record<string, unknown>
-              >
-            )[existing.index];
-            if (
-              existing.field !== field ||
-              payloadFingerprint(position) !==
-                payloadFingerprint(entry.position)
-            ) {
-              throw new ElementIntentAbort('paste id collision');
-            }
-            realizedFrozenNativeParts += 1;
-            continue;
-          }
-          next = { ...next, [mode]: [...(next[mode] ?? []), entry.position] };
-          appendedNativeIds.add(entry.position.id);
-          missingFrozenNativeParts += 1;
-          appended = true;
-        }
-        return next;
-      };
-      const statNext = appendSimple(
-        nextStatPositions,
-        statsToAdd,
-        'statPositions',
-      );
-      const graphNext = appendSimple(
-        nextGraphPositions,
-        graphsToAdd,
-        'graphPositions',
-      );
-      const knobNext = appendSimple(
-        nextKnobPositions,
-        knobsToAdd,
-        'knobPositions',
-      );
-      const spriteNext = appendSimple(
-        nextSpritePositions,
-        spritesToAdd,
-        'spritePositions',
-      );
-
-      // 신규 그룹 append (id 기준 멱등)
-      let layerGroups = view.layerGroups;
-      let groupsChanged = false;
-      if (frozenNewGroups.length > 0) {
-        const modeGroups = [...(layerGroups[mode] ?? [])];
-        for (const group of frozenNewGroups) {
-          const existing = modeGroups.find(
-            (candidate) => candidate.id === group.id,
-          );
-          if (existing) {
-            if (existing.name !== group.name) {
-              frozenGroupConflict = true;
-            }
-            realizedFrozenNativeParts += 1;
-            continue;
-          }
-          modeGroups.push({ id: group.id, name: group.name });
-          missingFrozenNativeParts += 1;
-          groupsChanged = true;
-        }
-        if (groupsChanged) {
-          layerGroups = { ...layerGroups, [mode]: modeGroups };
-        }
-      }
-
-      // plugin append (fullId 멱등·충돌 검사)
-      const appendedPlugins: PluginDisplayElementInternal[] = [];
-      for (const element of frozenPluginElements) {
-        const existing = projection.find(
-          (candidate) => candidate.fullId === element.fullId,
-        );
-        if (existing) {
-          if (payloadFingerprint(existing) !== payloadFingerprint(element)) {
-            throw new ElementIntentAbort('paste plugin fullId collision');
-          }
-          continue;
-        }
-        appendedPlugins.push(element);
-        appended = true;
-      }
-      const combinedProjection = [...projection, ...appendedPlugins];
-
-      // 상한 재검증 - 동결과 정산 사이 추가된 인스턴스와의 TOCTOU 차단.
-      // 초과는 부분 성공 대신 전체 중단 (사전 검증과 동일한 fail-closed)
-      for (const cap of frozenInstanceCaps) {
-        const count = combinedProjection.filter(
-          (element) =>
-            element.definitionId === cap.definitionId && element.tabId === mode,
-        ).length;
-        if (count > cap.maxInstances) {
-          throw new ElementIntentAbort('paste max instances exceeded');
-        }
-      }
-
-      // 결합 순서 재구성 + 동결 앵커 재해석 (소실 시 최상단 fallback)
-      const allItems = buildLayerItemsForMode(
-        mode,
-        nextKeyPositions as never,
-        statNext as never,
-        graphNext as never,
-        knobNext as never,
-        spriteNext as never,
-        combinedProjection,
-      );
-      const newIdSet = new Set<string>([
-        ...appendedNativeIds,
-        ...appendedPlugins.map((element) => element.fullId),
-      ]);
-      const existingItems = allItems.filter((item) => !newIdSet.has(item.id));
-      const pastedById = new Map(
-        allItems
-          .filter((item) => newIdSet.has(item.id))
-          .map((item) => [item.id, item]),
-      );
-      // 블록 내부는 원본의 상대 스택을 따른다 - payload는 타입별로 묶인
-      // 순서라 그대로 쓰면 복사본의 위아래가 뒤집힌다. 정렬 키는 동결
-      // payload의 zIndex 원본값 (append 후 대체값이 아니라)
-      const pastedOrdered = orderPastedItemsByFrozenZ([
-        ...keysToAdd.map((entry) => ({
-          item: entry.position.id,
-          zIndex: entry.position.zIndex,
-        })),
-        ...statsToAdd.map((entry) => ({
-          item: entry.position.id,
-          zIndex: entry.position.zIndex,
-        })),
-        ...graphsToAdd.map((entry) => ({
-          item: entry.position.id,
-          zIndex: entry.position.zIndex,
-        })),
-        ...knobsToAdd.map((entry) => ({
-          item: entry.position.id,
-          zIndex: entry.position.zIndex,
-        })),
-        ...spritesToAdd.map((entry) => ({
-          item: entry.position.id,
-          zIndex: entry.position.zIndex ?? undefined,
-        })),
-        ...frozenPluginElements.map((element) => ({
-          item: element.fullId,
-          zIndex: element.zIndex,
-        })),
-      ])
-        .map((id) => pastedById.get(id))
-        .filter((item): item is NonNullable<typeof item> => Boolean(item));
-      let anchorIndex = 0;
-      if (frozenAnchor?.groupId) {
-        const index = existingItems.findIndex(
-          (item) => item.groupId === frozenAnchor.groupId,
-        );
-        anchorIndex = index !== -1 ? index : 0;
-      } else if (frozenAnchor?.elementId) {
-        const index = existingItems.findIndex(
-          (item) => item.id === frozenAnchor.elementId,
-        );
-        anchorIndex = index !== -1 ? index : 0;
-      }
-      const reordered = [
-        ...existingItems.slice(0, anchorIndex),
-        ...pastedOrdered,
-        ...existingItems.slice(anchorIndex),
-      ];
-      const zPatch = applyZIndexToLayerOrder(
-        reordered,
-        mode,
-        nextKeyPositions as never,
-        statNext as never,
-        graphNext as never,
-        knobNext as never,
-        spriteNext as never,
-      );
-      const zByFullId = new Map(
-        zPatch.pluginUpdates.map((update) => [update.fullId, update.zIndex]),
-      );
-      const desiredProjection = combinedProjection.map((element) => {
-        const zIndex = zByFullId.get(element.fullId);
-        return zIndex === undefined ? element : { ...element, zIndex };
-      });
-
-      return {
-        appended,
-        keys: nextKeys,
-        zPatch,
-        layerGroups,
-        groupsChanged,
-        desiredProjection,
-        nativeBatchState:
-          realizedFrozenNativeParts > 0 && missingFrozenNativeParts > 0
-            ? 'partial'
-            : realizedFrozenNativeParts > 0
-            ? 'realized'
-            : 'fresh',
-        frozenGroupConflict,
-      };
-    };
-
-    const buildFrozenInsertOp = (
-      view: PasteDocView,
-      plan: ReturnType<typeof computePaste>,
-    ): { kind: 'ops'; op: EditorInsertFrozenElementsOpV1 | null } => {
-      const mode = selectedKeyType;
-      const frozenNativeIds = new Set([
-        ...keysToAdd.map((entry) => entry.position.id),
-        ...statsToAdd.map((entry) => entry.position.id),
-        ...graphsToAdd.map((entry) => entry.position.id),
-        ...knobsToAdd.map((entry) => entry.position.id),
-        ...spritesToAdd.map((entry) => entry.position.id),
-      ]);
-      const finalById = <T extends { id: string }>(
-        record: Record<string, T[]>,
-      ) =>
-        new Map(
-          (record[mode] ?? []).map((position) => [position.id, position]),
-        );
-      const finalKeys = finalById(plan.zPatch.keyPositions);
-      const finalStats = finalById(plan.zPatch.statPositions);
-      const finalGraphs = finalById(plan.zPatch.graphPositions);
-      const finalKnobs = finalById(plan.zPatch.knobPositions);
-      const finalSprites = finalById(plan.zPatch.spritePositions);
-      const elements: EditorInsertFrozenElementsOpV1['elements'] = [
-        ...keysToAdd.map((entry) => ({
-          elementType: 'key' as const,
-          slot: entry.keyCode,
-          position: finalKeys.get(entry.position.id) ?? entry.position,
-        })),
-        ...statsToAdd.map((entry) => ({
-          elementType: 'stat' as const,
-          position: finalStats.get(entry.position.id) ?? entry.position,
-        })),
-        ...graphsToAdd.map((entry) => ({
-          elementType: 'graph' as const,
-          position: finalGraphs.get(entry.position.id) ?? entry.position,
-        })),
-        ...knobsToAdd.map((entry) => ({
-          elementType: 'knob' as const,
-          position: finalKnobs.get(entry.position.id) ?? entry.position,
-        })),
-        ...spritesToAdd.map((entry) => ({
-          elementType: 'sprite' as const,
-          position: finalSprites.get(entry.position.id) ?? entry.position,
-        })),
-      ];
-      const zUpdates: EditorInsertFrozenElementsOpV1['zUpdates'] = [];
-      const collectZUpdates = (
-        elementType: 'key' | 'stat' | 'graph' | 'knob' | 'sprite',
-        current: Array<{ id: string }>,
-        final: Map<string, { id: string; zIndex?: number }>,
-      ) => {
-        for (const position of current) {
-          const id = position.id;
-          if (!id || !isNativeElementId(id)) return false;
-          if (frozenNativeIds.has(id)) continue;
-          const zIndex = final.get(id)?.zIndex;
-          if (!Number.isSafeInteger(zIndex)) return false;
-          zUpdates.push({ elementType, id, zIndex: zIndex! });
-        }
-        return true;
-      };
-      const stable =
-        collectZUpdates('key', view.keyPositions[mode] ?? [], finalKeys) &&
-        collectZUpdates('stat', view.statPositions[mode] ?? [], finalStats) &&
-        collectZUpdates(
-          'graph',
-          view.graphPositions[mode] ?? [],
-          finalGraphs,
-        ) &&
-        collectZUpdates('knob', view.knobPositions[mode] ?? [], finalKnobs) &&
-        collectZUpdates(
-          'sprite',
-          view.spritePositions[mode] ?? [],
-          finalSprites,
-        );
-      if (!stable) {
-        throw new ElementIntentAbort('paste source document is not canonical');
-      }
-      if (plan.frozenGroupConflict) {
-        throw new ElementIntentAbort('paste group id collision');
-      }
-      if (plan.nativeBatchState === 'partial') {
-        throw new ElementIntentAbort('paste partial state collision');
-      }
-      if (elements.length === 0 && zUpdates.length === 0) {
-        return { kind: 'ops', op: null };
-      }
-      return {
-        kind: 'ops',
-        op: {
-          kind: 'insertFrozenElements',
-          mode,
-          elements,
-          groups: frozenNewGroups.map(({ id, name }) => ({ id, name })),
-          zUpdates,
-        },
-      };
-    };
-
-    try {
-      await pasteWithFrozenPlan();
-    } finally {
-      cancelUncommittedMixedGestureTransaction(gestureId);
-    }
-
-    async function pasteWithFrozenPlan(): Promise<void> {
-      // eager 전에 초기 scope를 stage - staging 전 스토어 변이는 200ms
-      // debounce 저장이 abort보다 먼저 영속시킬 수 있다
-      const initialScope = pluginScope(
-        usePluginDisplayElementStore.getState().elements,
-      );
-      if (initialScope.length > 0) {
-        beginMixedGestureTransaction(gestureId, initialScope);
-      }
-      // 기존 plugin의 zIndex eager도 이 게스처 세션으로 - 별도 세션이 생기면
-      // 편입 후 실패의 canonical pull이 외부 충돌로 오판해 건너뛴다
-      initialScope.forEach((pluginId) => {
-        rotatePluginInstancesEditSession(pluginId, gestureId);
-      });
-
-      // eager 계획을 쓰기 전에 확정 (충돌 abort가 쓰기 전에 발생)
-      const eagerElementsBefore =
-        usePluginDisplayElementStore.getState().elements;
-      const eagerPlan = computePaste(
-        {
-          keys: useKeyStore.getState().keyMappings as never,
-          keyPositions: useKeyStore.getState().canonicalPositions as never,
-          statPositions: useStatItemStore.getState().positions as never,
-          graphPositions: useGraphItemStore.getState().positions as never,
-          knobPositions: useKnobItemStore.getState().positions as never,
-          spritePositions: useSpriteStore.getState().positions as never,
-          layerGroups: useLayerGroupStore.getState().layerGroups as never,
-        },
-        eagerElementsBefore,
-      );
-      // editor와 plugin은 독립 소유권 - 결합 봉인은 무관한 plugin 변경
-      // 하나로 editor 복원까지 거부한다
-      const editorReceipt = applySealedSliceMutation({
-        modes: [selectedKeyType],
-        fields: [
-          'keys',
-          'keyPositions',
-          'statPositions',
-          'graphPositions',
-          'knobPositions',
-          'spritePositions',
-          'layerGroups',
-        ],
-        mutate: () => {
-          useKeyStore
-            .getState()
-            .setKeyMappingsAndPositions(
-              eagerPlan.keys as never,
-              eagerPlan.zPatch.keyPositions as never,
-            );
-          useStatItemStore
-            .getState()
-            .setPositions(eagerPlan.zPatch.statPositions as never);
-          useGraphItemStore
-            .getState()
-            .setPositions(eagerPlan.zPatch.graphPositions as never);
-          useKnobItemStore
-            .getState()
-            .setPositions(eagerPlan.zPatch.knobPositions as never);
-          useSpriteStore
-            .getState()
-            .setPositions(eagerPlan.zPatch.spritePositions as never);
-          if (eagerPlan.groupsChanged) {
-            useLayerGroupStore
-              .getState()
-              .setLayerGroups(eagerPlan.layerGroups as never);
-          }
-        },
-      });
-      // plugin semantic receipt: 신규 fullId membership + 기존 zIndex CAS
-      const beforeZByFullId = new Map(
-        eagerElementsBefore.map((element) => [element.fullId, element.zIndex]),
-      );
-      // 멱등 skip된 동결 id를 receipt가 소유하면 실패 rollback이 기존
-      // 요소를 삭제한다 - eager 전에 없던 id만 membership 대상
-      const eagerBeforeIds = new Set(
-        eagerElementsBefore.map((element) => element.fullId),
-      );
-      const addedFullIds = frozenPluginElements
-        .map((element) => element.fullId)
-        .filter((fullId) => !eagerBeforeIds.has(fullId));
-      const addedSet = new Set(addedFullIds);
-      const zChanges = eagerPlan.desiredProjection
-        .filter((element) => !addedSet.has(element.fullId))
-        .filter(
-          (element) => beforeZByFullId.get(element.fullId) !== element.zIndex,
-        )
-        .map((element) => ({
-          fullId: element.fullId,
-          before: beforeZByFullId.get(element.fullId),
-          expected: element.zIndex as number,
-        }));
-      let pluginReceipt: ElementIntentReceipt | null = null;
-      try {
-        pluginReceipt = applyPluginAdditionEagerly(
-          addedFullIds,
-          zChanges,
-          () => {
-            usePluginDisplayElementStore
-              .getState()
-              .setElements(eagerPlan.desiredProjection, { skipSync: true });
-          },
-        );
-      } catch (error) {
-        // plugin eager 실패 시 editor eager 잔존 방지
-        editorReceipt.rollback();
-        throw error;
-      }
-      const receipt = combineReceipts(editorReceipt, pluginReceipt);
-
-      // 접힘 상태는 문서 밖 UI - 즉시 적용, 실패 미복원(기록된 정책)
-      for (const group of frozenNewGroups) {
-        if (group.collapsed) {
-          useLayerGroupStore.getState().setCollapsed(group.id, true);
-        }
-      }
-
-      // 선택 이동은 eager 직후 동기 구간에서 - await 뒤로 미루면 라운드트립
-      // 동안 선택이 원본에 남아 Delete 같은 후속 조작이 원본을 지운다.
-      // 편입 전 abort로 롤백되면 정산 뒤 pruneRolledBackPasteSelection이 정리한다
-      const newSelectedElements: SelectedElement[] = [];
-      const collect = (
-        type: 'key' | 'stat' | 'graph' | 'knob' | 'sprite',
-        record: Record<string, Array<{ id: string }>>,
-        ids: readonly string[],
-      ) => {
-        const list = record[selectedKeyType] ?? [];
-        for (const id of ids) {
-          const index = list.findIndex((position) => position.id === id);
-          if (index !== -1) {
-            newSelectedElements.push({ type, id, index });
-          }
-        }
-      };
-      collect(
-        'key',
-        useKeyStore.getState().canonicalPositions as never,
-        keysToAdd.map((entry) => entry.position.id),
-      );
-      collect(
-        'stat',
-        useStatItemStore.getState().positions as never,
-        statsToAdd.map((entry) => entry.position.id),
-      );
-      collect(
-        'graph',
-        useGraphItemStore.getState().positions as never,
-        graphsToAdd.map((entry) => entry.position.id),
-      );
-      collect(
-        'knob',
-        useKnobItemStore.getState().positions as never,
-        knobsToAdd.map((entry) => entry.position.id),
-      );
-      collect(
-        'sprite',
-        useSpriteStore.getState().positions as never,
-        spritesToAdd.map((entry) => entry.position.id),
-      );
-      const presentPluginIds = new Set(
-        usePluginDisplayElementStore
-          .getState()
-          .elements.map((element) => element.fullId),
-      );
-      for (const element of frozenPluginElements) {
-        if (presentPluginIds.has(element.fullId)) {
-          newSelectedElements.push({ type: 'plugin', id: element.fullId });
-        }
-      }
-      if (newSelectedElements.length > 0) {
-        if (groupIdMap.size > 0) {
-          useGridSelectionStore
-            .getState()
-            .setFullSelection(newSelectedElements, [...groupIdMap.values()]);
-        } else {
-          setSelectedElements(newSelectedElements);
-        }
-      }
-
-      // 편입 전 abort는 문서 적용 없이 eager만 되돌아가 선택 재조정이 없다 -
-      // 이번 paste가 발급한 id 중 스토어에서 사라진 것만 선택에서 걷어낸다
-      // (편입 후 실패의 eager 유지분은 스토어에 살아 있으므로 그대로 유지)
-      const pruneRolledBackPasteSelection = () => {
-        const newElementIds = new Set([
-          ...keysToAdd.map((entry) => entry.position.id),
-          ...statsToAdd.map((entry) => entry.position.id),
-          ...graphsToAdd.map((entry) => entry.position.id),
-          ...knobsToAdd.map((entry) => entry.position.id),
-          ...spritesToAdd.map((entry) => entry.position.id),
-          ...frozenPluginElements.map((element) => element.fullId),
-        ]);
-        const presentIds = new Set<string>([
-          ...(
-            useKeyStore.getState().canonicalPositions[selectedKeyType] ?? []
-          ).map((position) => position.id),
-          ...(useStatItemStore.getState().positions[selectedKeyType] ?? []).map(
-            (position) => position.id,
-          ),
-          ...(
-            useGraphItemStore.getState().positions[selectedKeyType] ?? []
-          ).map((position) => position.id),
-          ...(useKnobItemStore.getState().positions[selectedKeyType] ?? []).map(
-            (position) => position.id,
-          ),
-          ...(useSpriteStore.getState().positions[selectedKeyType] ?? []).map(
-            (position) => position.id,
-          ),
-          ...usePluginDisplayElementStore
-            .getState()
-            .elements.map((element) => element.fullId),
-        ]);
-        const selection = useGridSelectionStore.getState();
-        const keptElements = selection.selectedElements.filter(
-          (element) =>
-            !newElementIds.has(element.id) || presentIds.has(element.id),
-        );
-        const newGroupIds = new Set(groupIdMap.values());
-        const presentGroupIds = new Set(
-          (
-            useLayerGroupStore.getState().layerGroups[selectedKeyType] ?? []
-          ).map((group) => group.id),
-        );
-        const keptGroupIds = selection.selectedGroupIds.filter(
-          (groupId) =>
-            !newGroupIds.has(groupId) || presentGroupIds.has(groupId),
-        );
-        if (
-          keptElements.length !== selection.selectedElements.length ||
-          keptGroupIds.length !== selection.selectedGroupIds.length
-        ) {
-          selection.setFullSelection(keptElements, keptGroupIds);
-        }
-      };
-
-      try {
-        const result = await runMixedGestureElementIntent({
-          gestureId,
-          initialPluginIds: pluginScope(
-            usePluginDisplayElementStore.getState().elements,
-          ),
-          pluginScope,
-          receipt,
-          generate: ({ base, pluginProjection }) => {
-            const plan = computePaste(
-              {
-                keys: base.keys as never,
-                keyPositions: base.keyPositions as never,
-                statPositions: base.statPositions as never,
-                graphPositions: base.graphPositions as never,
-                knobPositions: base.knobPositions as never,
-                spritePositions: base.spritePositions as never,
-                layerGroups: base.layerGroups as never,
-              },
-              pluginProjection,
-            );
-            const insert = buildFrozenInsertOp(
-              {
-                keys: base.keys as never,
-                keyPositions: base.keyPositions as never,
-                statPositions: base.statPositions as never,
-                graphPositions: base.graphPositions as never,
-                knobPositions: base.knobPositions as never,
-                spritePositions: base.spritePositions as never,
-                layerGroups: base.layerGroups as never,
-              },
-              plan,
-            );
-            if (insert.op) {
-              return {
-                kind: 'ops',
-                ops: [insert.op],
-                desiredPluginProjection: plan.desiredProjection,
-              };
-            }
-            if (!plan.appended) return { kind: 'satisfied' };
-            return {
-              kind: 'patch',
-              patch: null,
-              desiredPluginProjection: plan.desiredProjection,
-            };
-          },
-          skipContext: 'paste settlement',
-        });
-        if (!result.committed && !result.satisfied) {
-          pruneRolledBackPasteSelection();
-        }
-      } catch (error) {
-        // 편입 후 실패의 상태 정합은 projection·canonical pull이 소유 -
-        // 호출부 경계에서는 기록만 (삭제 경로와 대칭)
-        console.error('Failed to persist pasted elements', error);
-        pruneRolledBackPasteSelection();
-      }
-
-      sendBridgeMessageBestEffort('overlay', 'plugin:displayElements:sync', {
-        elements: usePluginDisplayElementStore.getState().elements,
-      });
-    }
-  };
+  const pasteElements = () =>
+    pasteSelection({ selectedKeyType, setSelectedElements });
 
   return {
     moveSelectedElements,

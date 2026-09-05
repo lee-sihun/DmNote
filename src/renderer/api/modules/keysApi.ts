@@ -19,6 +19,8 @@ import type {
   KeysResetPayload,
   CustomTabResult,
   CustomTabDeleteResult,
+  TabMetadataResult,
+  TabOrderOp,
   RawInputPayload,
 } from '@src/types/plugin/api';
 import type {
@@ -165,6 +167,11 @@ export const keysApi = {
       runExclusiveLegacyMutation(() =>
         invoke<CustomTabDeleteResult>('custom_tabs_delete', { id }),
       ),
+    // 내장 탭 id를 넘기면 백엔드가 unknown-tab으로 거절한다
+    rename: (id: string, name: string) =>
+      runExclusiveLegacyMutation(() =>
+        invoke<TabMetadataResult>('custom_tabs_rename', { id, name }),
+      ),
     select: (id: string) =>
       invokeEditorWrite<CustomTabDeleteResult>('custom_tabs_select', { id }),
     restore: (customTabs: CustomTab[], selectedKeyType: string) =>
@@ -174,5 +181,21 @@ export const keysApi = {
       }),
     onChanged: (listener: (payload: CustomTabsChangePayload) => void) =>
       subscribe<CustomTabsChangePayload>('customTabs:changed', listener),
+  },
+  // 순서는 내장 탭까지 포함하므로 customTabs 밖에 둔다
+  tabs: {
+    /**
+     * 두 탭의 자리를 맞바꾼다
+     *
+     * 결과 배열이 아니라 연산을 보낸다. 백엔드가 최신 순서 위에 얹으므로
+     * 기다리는 사이 무관한 탭이 생기거나 사라져도 거절되지 않는다.
+     * 인자 순서는 의미를 갖지 않는다
+     */
+    swap: (a: string, b: string) =>
+      runExclusiveLegacyMutation(() =>
+        invoke<TabMetadataResult>('tabs_reorder', {
+          op: { kind: 'swap', a, b } satisfies TabOrderOp,
+        }),
+      ),
   },
 };

@@ -256,7 +256,10 @@ fn publish_history_aux_change(
                 "customTabs:changed",
                 &CustomTabChangePayload {
                     custom_tabs: snapshot.custom_tabs.clone(),
+                    tab_order: snapshot.tab_order.clone(),
+                    bar_count: snapshot.bar_count,
                     selected_key_type: snapshot.selected_key_type.clone(),
+                    selection_authoritative: true,
                 },
             );
             emit_best_effort(
@@ -308,7 +311,10 @@ fn publish_history_aux_change(
                 "customTabs:changed",
                 &CustomTabChangePayload {
                     custom_tabs: projection.preset_snapshot.custom_tabs.clone(),
+                    tab_order: projection.preset_snapshot.tab_order.clone(),
+                    bar_count: projection.preset_snapshot.bar_count,
                     selected_key_type: projection.preset_snapshot.selected_key_type.clone(),
+                    selection_authoritative: true,
                 },
             );
             emit_best_effort(
@@ -407,6 +413,8 @@ fn preset_history_event_projection(
             knob_positions: snapshot.document.knob_positions.clone(),
             sprite_positions: snapshot.document.sprite_positions.clone(),
             custom_tabs: snapshot.custom_tabs.clone(),
+            tab_order: snapshot.tab_order.clone(),
+            bar_count: snapshot.bar_count,
             selected_key_type: snapshot.selected_key_type.clone(),
             tab_note_overrides: snapshot.settings.tab_note_overrides.clone(),
         },

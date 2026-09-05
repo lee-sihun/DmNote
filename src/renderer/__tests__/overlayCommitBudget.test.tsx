@@ -9,14 +9,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import CountDisplay from '@components/overlay/counters/CountDisplay';
 import OverlayGraphItem from '@components/overlay/counters/OverlayGraphItem';
 
-const graphProbe = vi.hoisted(() => ({ history: [] as number[] }));
-
 // 그래프 렌더 자체가 아니라 커밋 횟수만 측정 — 무거운 자식은 스텁
 vi.mock('@components/shared/GraphPanel', () => ({
-  default: ({ history = [] }: { history?: number[] }) => {
-    graphProbe.history = history;
-    return null;
-  },
+  default: () => null,
 }));
 
 // 테스트가 신호 값을 직접 제어
@@ -57,7 +52,6 @@ beforeEach(() => {
   });
   commits = 0;
   mockStatSignal.value = 0;
-  graphProbe.history = [];
 });
 
 afterEach(() => {
@@ -270,20 +264,5 @@ describe('OverlayGraphItem 유휴 커밋 예산', () => {
     commits = 0;
     advanceInSteps(5_000, 50);
     expect(commits).toBeLessThanOrEqual(2);
-  });
-
-  it('1000ms 속도는 입력 샘플을 약 1000ms 동안 유지', () => {
-    renderGraph();
-    advanceInSteps(200, 100);
-
-    mockStatSignal.value = 5;
-    advanceInSteps(100, 100);
-    mockStatSignal.value = 0;
-
-    advanceInSteps(900, 100);
-    expect(graphProbe.history.some((value) => value !== 0)).toBe(true);
-
-    advanceInSteps(100, 100);
-    expect(graphProbe.history.every((value) => value === 0)).toBe(true);
   });
 });

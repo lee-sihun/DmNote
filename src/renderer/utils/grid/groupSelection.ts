@@ -36,6 +36,11 @@ export interface GroupSelectionSource {
   modeGroups: readonly Pick<LayerGroupDef, 'id'>[];
 }
 
+export type SelectionGroupingSummary =
+  | { kind: 'none' }
+  | { kind: 'same'; groupId: string }
+  | { kind: 'mixed' };
+
 const nativeCollections = (source: GroupSelectionSource) =>
   ({
     key: source.keyPositions,
@@ -58,6 +63,54 @@ const resolveClickedGroupId = (
       (pos) => pos?.id === clicked.id,
     )?.groupId ?? undefined
   );
+};
+
+const resolveSelectionGroupId = (
+  element: SelectedElement,
+  source: GroupSelectionSource,
+  modeGroupIds: ReadonlySet<string>,
+): string | undefined => {
+  if (element.type === 'plugin') {
+    const groupId = source.pluginElements.find(
+      (candidate) => candidate.fullId === element.id,
+    )?.groupId;
+    return groupId && modeGroupIds.has(groupId) ? groupId : undefined;
+  }
+
+  return nativeCollections(source)[element.type].find(
+    (position) => position?.id === element.id,
+  )?.groupId;
+};
+
+/**
+ * 선택 집합의 그룹 메뉴 상태를 계산한다.
+ * native의 기존 dangling groupId는 해제 대상으로 유지하고, plugin은 현재 모드에
+ * 정의된 그룹만 유효하게 보는 기존 캔버스 계약을 보존한다.
+ */
+export const summarizeSelectionGrouping = (
+  selectedElements: readonly SelectedElement[],
+  source: GroupSelectionSource,
+): SelectionGroupingSummary => {
+  const modeGroupIds = new Set(source.modeGroups.map((group) => group.id));
+  let firstGroupId: string | undefined;
+  let anyInGroup = false;
+  let allInSameGroup = true;
+
+  selectedElements.forEach((element, index) => {
+    const groupId = resolveSelectionGroupId(element, source, modeGroupIds);
+    if (groupId) anyInGroup = true;
+    if (index === 0) {
+      firstGroupId = groupId;
+    } else if (groupId !== firstGroupId) {
+      allInSameGroup = false;
+    }
+  });
+
+  if (anyInGroup && allInSameGroup && firstGroupId) {
+    return { kind: 'same', groupId: firstGroupId };
+  }
+  if (!anyInGroup) return { kind: 'none' };
+  return { kind: 'mixed' };
 };
 
 /**

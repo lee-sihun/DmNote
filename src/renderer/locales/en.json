@@ -306,7 +306,9 @@
   "tabs": {
     "title": "Custom tabs",
     "createTitle": "Create Tab",
+    "renameTitle": "Rename Tab",
     "create": "Create",
+    "rename": "Rename",
     "delete": "Delete",
     "deleteConfirm": "Delete the '{{name}}' tab?",
     "name": {
@@ -319,7 +321,8 @@
     "errors": {
       "max": "You can add up to 30 tabs",
       "invalid": "Invalid name",
-      "createFail": "Failed to create"
+      "createFail": "Failed to create",
+      "renameFail": "Failed to rename"
     }
   },
   "laboratory": {

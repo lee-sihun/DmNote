@@ -156,7 +156,9 @@ fn transcode_utf16(file: File, little_endian: bool) -> Option<(Vec<u8>, bool)> {
     }
 
     let units = body
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|pair| {
             let bytes = [pair[0], pair[1]];
             if little_endian {

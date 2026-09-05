@@ -6,6 +6,7 @@ import GraphPanel from '@components/shared/GraphPanel';
 import { resolveImageSource } from '@utils/core/imageSource';
 
 const GRAPH_UPDATE_MS = 100;
+const GRAPH_TICK_MS = 50;
 
 interface GraphPosition {
   hidden?: boolean;
@@ -163,7 +164,7 @@ const OverlayGraphItem = ({ position, index = 0 }: OverlayGraphItemProps) => {
         avg,
         maxval: Math.max(maxValueRef.current, 1),
       });
-    }, GRAPH_UPDATE_MS);
+    }, GRAPH_TICK_MS);
 
     return () => clearInterval(interval);
   }, [statSignal]);

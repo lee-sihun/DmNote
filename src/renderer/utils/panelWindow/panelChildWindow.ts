@@ -1,5 +1,6 @@
 import { panelWindowApi } from '@api/modules/panelWindowApi';
 import { registerHistoryEditorFlushDocument } from '@src/renderer/editor/runtime/historyEditorFlushLock';
+import { initializeMotionPreferences } from '@utils/animation/motionPreferences';
 
 import {
   mirrorDocumentStyles,
@@ -108,6 +109,7 @@ const createPanelChildWindow = async (): Promise<PanelChildWindow> => {
   }
   const doc = child.document;
   prepareChildDocument(document, doc);
+  initializeMotionPreferences(doc);
   const styles = mirrorDocumentStyles(document, doc);
   await styles.ready;
   if (child.closed) {

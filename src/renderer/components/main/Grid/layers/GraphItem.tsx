@@ -1,10 +1,12 @@
 import type { GradientSpec } from '@src/types/color';
 import React, { useState } from 'react';
-import { useGridItemInteraction } from '@hooks/Grid/useGridItemInteraction';
 import { useGradientPreviewSession } from '@stores/grid/useGradientEditStore';
 import GraphPanel from '@components/shared/GraphPanel';
 import { resolveImageSource } from '@utils/core/imageSource';
-import type { GridItemProps } from './gridItemProps';
+import {
+  useGridElementInteraction,
+  type GridElementInteractionProps,
+} from '@hooks/Grid/useGridElementInteraction';
 
 interface GraphPosition {
   hidden?: boolean;
@@ -28,6 +30,11 @@ interface GraphPosition {
   idleImageFit?: string;
   imageFit?: string;
   useInlineStyles?: boolean;
+  zIndex?: number;
+}
+
+interface GraphItemProps extends GridElementInteractionProps {
+  position: GraphPosition;
   zIndex?: number;
 }
 
@@ -60,7 +67,7 @@ const GraphItem = ({
   panY = 0,
   zIndex = 0,
   isViewportTransforming = false,
-}: GridItemProps<GraphPosition>) => {
+}: GraphItemProps) => {
   const {
     dx = 0,
     dy = 0,
@@ -95,7 +102,6 @@ const GraphItem = ({
   const [uid] = useState(
     () => `graph-preview-${Math.random().toString(36).slice(2, 11)}`,
   );
-
   const previewHistory = [...PREVIEW_HISTORY_BASE];
   const previewImageSrc =
     resolveImageSource(inactiveImage) ||
@@ -104,48 +110,48 @@ const GraphItem = ({
   const previewImageFit = idleImageFit || imageFit || 'cover';
 
   const {
-    isSelectionMode,
-    isDraggingOrResizing,
-    draggable,
-    handleSelectionDragPointerDown,
-    handleClick,
-    handleDoubleClick,
-    handleContextMenu,
     attachRef,
-  } = useGridItemInteraction({
+    dx: renderDx,
+    dy: renderDy,
+    handleClick,
+    handleContextMenu,
+    handleDoubleClick,
+    handleSelectionDragPointerDown,
+    isDraggingOrResizing,
+    isSelectionMode,
+  } = useGridElementInteraction({
     index,
     elementId,
-    dx,
-    dy,
+    initialX: dx,
+    initialY: dy,
     elementWidth: width || 200,
     elementHeight: height || 100,
-    isSelected,
-    selectedElements,
-    zoom,
-    panX,
-    panY,
-    activeTool,
-    isViewportTransforming,
     onPositionChange,
     onClick,
     onDoubleClick,
     onCtrlClick,
     onShiftClick,
+    isSelected,
+    selectedElements,
     onMultiDrag,
     onMultiDragStart,
     onMultiDragEnd,
+    activeTool,
     onEraserClick,
     onContextMenu,
     setReferenceRef,
+    zoom,
+    panX,
+    panY,
+    isViewportTransforming,
   });
 
   if (position?.hidden) return null;
-
   return (
     <GraphPanel
       ref={attachRef}
-      dx={draggable.dx}
-      dy={draggable.dy}
+      dx={renderDx}
+      dy={renderDy}
       width={width}
       height={height}
       zIndex={position.zIndex ?? zIndex}

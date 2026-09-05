@@ -2,12 +2,37 @@
 
 [한국어](https://github.com/DmNote-App/DmNote/blob/main/CHANGELOG.md) | **English**
 
-[2.0.1](#201) · [2.0.0](#200) · [1.6.1](#161) · [1.6.0](#160) · [1.5.2](#152) · [1.5.1](#151) · [1.5.0](#150)
+[2.0.2](#202) · [2.0.1](#201) · [2.0.0](#200) · [1.6.1](#161) · [1.6.0](#160) · [1.5.2](#152) · [1.5.1](#151) · [1.5.0](#150)
 
 <!-- Release bodies link here with an anchor derived from the version (2.0.1 -> #201).
      Changing the version heading format silently breaks links in existing releases.
      Two-digit segments collide (1.2.10 / 1.21.0 both -> #1210); introduce explicit
      anchors in scripts/lib/release-notes.js and the headings if that day comes. -->
+
+---
+
+## [2.0.2](https://github.com/DmNote-App/DmNote/releases/tag/2.0.2)
+
+`2026-08-31`
+
+### New
+
+- Improved tab management
+  - Tabs can be dragged in the bottom toolbar and tab list to change their display order and which tabs appear in the bottom toolbar.
+  - Tabs can be right-clicked in the bottom toolbar and tab list to rename or delete them.
+- Added a tab reordering function and `tabOrder` and `barCount` data to the plugin API
+
+### Fix
+
+- Fixed the detached properties panel jittering or drifting from the cursor when dragged between displays with different scaling
+- Fixed window positions restoring incorrectly after restarting the app
+- Fixed some animations being disabled on Windows
+- Improved web font editing stability
+
+### Etc
+
+- Reduced the Windows executable size
+- Improved some design elements
 
 ---
 

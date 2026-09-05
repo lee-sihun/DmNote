@@ -2,6 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
 import { getFocusableElements } from '@utils/focusableElements';
+import { getLastInputModality } from '@utils/focus/pointerFocusGuard';
 import { useFocusRestore } from '@hooks/ui/useFocusRestore';
 import { useDeferredContentMount } from '@hooks/ui/useDeferredContentMount';
 import type { PopupMotionState } from '@hooks/ui/usePopupPresence';
@@ -89,7 +90,13 @@ const Modal = ({
     ) {
       return;
     }
-    const initialTarget = getFocusableElements(backdrop)[0] ?? backdrop;
+    // 마우스로 연 모달은 첫 컨트롤 대신 backdrop(tabIndex=-1)으로 - 보이지 않는
+    // 컨트롤 포커스가 이후 키 입력에 :focus-visible 링으로 떠오르는 것 방지.
+    // Tab 트랩이 backdrop 기준 첫 요소로 진입시키므로 키보드 접근은 동일
+    const initialTarget =
+      getLastInputModality() === 'pointer'
+        ? backdrop
+        : getFocusableElements(backdrop)[0] ?? backdrop;
     initialTarget.focus();
   }, [captureOpener, closing, contentReady]);
 

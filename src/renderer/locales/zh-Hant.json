@@ -306,7 +306,9 @@
   "tabs": {
     "title": "自訂標籤頁",
     "createTitle": "建立標籤頁",
+    "renameTitle": "重新命名標籤頁",
     "create": "建立",
+    "rename": "重新命名",
     "delete": "刪除",
     "deleteConfirm": "刪除 '{{name}}' 標籤頁？",
     "name": {
@@ -319,7 +321,8 @@
     "errors": {
       "max": "最多可添加 30 個標籤頁",
       "invalid": "無效的名稱",
-      "createFail": "建立失敗"
+      "createFail": "建立失敗",
+      "renameFail": "重新命名失敗"
     }
   },
   "laboratory": {

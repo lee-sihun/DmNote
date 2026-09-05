@@ -10,7 +10,9 @@ interface ReloadIconProps {
 // 잉크 무게중심 기준 옵티컬 보정은 원이 내려가 보여 쓰지 않는다
 const ReloadIcon = ({ spinning = false }: ReloadIconProps) => (
   <span
-    className={'inline-flex' + (spinning ? ' motion-safe:animate-spin' : '')}
+    className={
+      'inline-flex' + (spinning ? ' dmn-reload-spin animate-spin' : '')
+    }
   >
     <svg
       width="13"

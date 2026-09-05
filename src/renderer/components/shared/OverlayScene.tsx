@@ -4,56 +4,15 @@ import { isMac } from '@utils/core/platform';
 import KeyCounterLayer from '@components/overlay/counters/KeyCounterLayer';
 import StatItem from '@components/overlay/counters/StatItem';
 import StatCounterLayer from '@components/overlay/counters/StatCounterLayer';
-import OverlayGraphItemBase from '@components/overlay/counters/OverlayGraphItem';
-import OverlayKnobItemBase from '@components/overlay/counters/OverlayKnobItem';
+import OverlayGraphItem from '@components/overlay/counters/OverlayGraphItem';
+import OverlayKnobItem from '@components/overlay/counters/OverlayKnobItem';
 import OverlaySpriteItem from '@components/overlay/counters/OverlaySpriteItem';
 import { PluginElementsRenderer } from '@components/shared/PluginElementsRenderer';
 import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
-import { type KeyPosition } from '@src/types/key/keys';
 import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
 import type { NoteSettings } from '@src/types/settings/noteSettings';
 import type { NoteBuffer } from '@stores/signals/noteBuffer';
 import { resolveZIndexFallback } from '@utils/core/zIndexFallback';
-
-// 타입 별칭 (공용)
-interface OverlayKeyProps {
-  keyName: string;
-  globalKey: string;
-  position: KeyPosition;
-  mode?: string;
-  counterEnabled?: boolean;
-}
-
-interface OverlayStatItemProps {
-  statType: string;
-  label?: string;
-  position: Record<string, unknown>;
-  counterEnabled?: boolean;
-}
-
-interface OverlayStatCounterLayerProps {
-  positions: Record<string, unknown>[];
-}
-
-interface OverlayGraphItemProps {
-  index?: number;
-  position: Record<string, unknown>;
-}
-
-interface OverlayKnobItemProps {
-  index?: number;
-  position: Record<string, unknown>;
-}
-
-const OverlayKey = Key as React.ComponentType<OverlayKeyProps>;
-const OverlayStatItem =
-  StatItem as unknown as React.ComponentType<OverlayStatItemProps>;
-const OverlayStatCounterLayer =
-  StatCounterLayer as unknown as React.ComponentType<OverlayStatCounterLayerProps>;
-const OverlayGraphItem =
-  OverlayGraphItemBase as React.ComponentType<OverlayGraphItemProps>;
-const OverlayKnobItem =
-  OverlayKnobItemBase as React.ComponentType<OverlayKnobItemProps>;
 
 // Tracks 레이지 로딩
 const Tracks = lazy(async () => {
@@ -201,7 +160,7 @@ const OverlayScene = ({
         const position = resolveZIndexFallback(basePosition, index);
 
         return (
-          <OverlayKey
+          <Key
             key={position.id}
             keyName={displayName}
             globalKey={key}
@@ -212,9 +171,9 @@ const OverlayScene = ({
         );
       })}
       {displayStatPositions.map((pos, index) => {
-        if (!pos || (pos as { hidden?: boolean }).hidden) return null;
+        if (!pos || pos.hidden) return null;
 
-        const statType = (pos as { statType?: string }).statType ?? 'kps';
+        const statType = pos.statType ?? 'kps';
         const defaultLabel =
           statType === 'kpsAvg'
             ? 'AVG'
@@ -223,17 +182,14 @@ const OverlayScene = ({
             : statType === 'total'
             ? 'Total'
             : 'KPS';
-        const label =
-          (
-            ((pos as { displayText?: string }).displayText || '') as string
-          ).trim() || defaultLabel;
+        const label = (pos.displayText || '').trim() || defaultLabel;
         const position = {
           ...pos,
-          zIndex: (pos as { zIndex?: number }).zIndex ?? index,
+          zIndex: pos.zIndex ?? index,
         };
 
         return (
-          <OverlayStatItem
+          <StatItem
             key={pos.id}
             statType={statType}
             label={label}
@@ -243,10 +199,10 @@ const OverlayScene = ({
         );
       })}
       {displayGraphPositions.map((pos, index) => {
-        if (!pos || (pos as { hidden?: boolean }).hidden) return null;
+        if (!pos || pos.hidden) return null;
         const graphPosition = {
           ...pos,
-          zIndex: (pos as { zIndex?: number }).zIndex ?? index,
+          zIndex: pos.zIndex ?? index,
         };
         return (
           <OverlayGraphItem
@@ -257,10 +213,10 @@ const OverlayScene = ({
         );
       })}
       {displayKnobPositions.map((pos, index) => {
-        if (!pos || (pos as { hidden?: boolean }).hidden) return null;
+        if (!pos || pos.hidden) return null;
         const knobPosition = {
           ...pos,
-          zIndex: (pos as { zIndex?: number }).zIndex ?? index,
+          zIndex: pos.zIndex ?? index,
         };
         return (
           <OverlayKnobItem key={pos.id} index={index} position={knobPosition} />
@@ -287,7 +243,7 @@ const OverlayScene = ({
           mode={selectedKeyType}
         />
       ) : null}
-      <OverlayStatCounterLayer positions={displayStatPositions} />
+      <StatCounterLayer positions={displayStatPositions} />
       {showPluginElements && positionOffset && (
         <PluginElementsRenderer
           windowType="overlay"

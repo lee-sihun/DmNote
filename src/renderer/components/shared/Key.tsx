@@ -3,13 +3,9 @@ import React, { useEffect, useRef } from 'react';
 import { getKeySignal } from '@stores/signals/keySignals';
 import { getKeyCounterSignal } from '@stores/signals/keyCounterSignals';
 import { useSignals } from '@preact/signals-react/runtime';
-import { useGridItemInteraction } from '@hooks/Grid/useGridItemInteraction';
 import type { KeyCounterSettings } from '@src/types/key/keys';
 import { useCounterSettings } from '@hooks/overlay/useCounterSettings';
-import {
-  isErrorForCurrentSrc,
-  useFailedImageSrcs,
-} from '@hooks/overlay/useFailedImageSrcs';
+import { useFailedImageSrcs } from '@hooks/overlay/useFailedImageSrcs';
 import { warmupImageSource } from '@utils/core/imageWarmup';
 import {
   computeKeyElementStyles,
@@ -18,51 +14,27 @@ import {
 import { useGradientPreviewSession } from '@stores/grid/useGradientEditStore';
 import { useEditStatePreviewActive } from '@stores/grid/useEditStatePreviewStore';
 import InsideCounterLayout from '@components/overlay/counters/InsideCounterLayout';
-import KeyLabel from '@components/shared/KeyLabel';
+import {
+  KeyElementContent,
+  OverlayKeyElementFace,
+} from '@components/shared/KeyElementFace';
 import { useCounterAxisAnchor } from '@hooks/shared/useCounterAxisAnchor';
+import {
+  useGridElementInteraction,
+  type GridElementInteractionProps,
+} from '@hooks/Grid/useGridElementInteraction';
 
 // DraggableKey에서 counter가 KeyCounterSettings 타입인 확장 position
 interface KeyPosition extends KeyElementPosition {
   counter?: KeyCounterSettings;
 }
 
-interface SelectedElement {
-  id: string;
-  type?: string;
-  index?: number;
-}
-
-interface DraggableKeyProps {
-  index: number;
-  elementId: string;
+interface DraggableKeyProps extends GridElementInteractionProps {
   /** 그라디언트 프리뷰 앵커 종류. id 문자열 모양으로 추론하지 않는다 */
   anchorKind?: 'key' | 'stat';
   position: KeyPosition;
   keyName: string;
-  onPositionChange: (
-    index: number,
-    dx: number,
-    dy: number,
-    elementId: string,
-  ) => void;
-  onClick?: (e: React.MouseEvent) => void;
-  onDoubleClick?: (e: React.MouseEvent) => void;
-  onCtrlClick?: (e: React.MouseEvent) => void;
-  onShiftClick?: (e: React.MouseEvent) => void;
-  isSelected?: boolean;
-  selectedElements?: SelectedElement[];
-  onMultiDrag?: (dx: number, dy: number) => void;
-  onMultiDragStart?: () => void | (() => void);
-  onMultiDragEnd?: () => void;
-  activeTool?: string;
-  onEraserClick?: () => void;
-  onContextMenu?: (e: React.MouseEvent) => void;
-  setReferenceRef?: (node: HTMLElement | null) => void;
-  zoom?: number;
-  panX?: number;
-  panY?: number;
   zIndex?: number;
-  isViewportTransforming?: boolean;
   counterEnabled?: boolean;
   counterPreviewValue?: number;
   counterValueSignal?: { value: number };
@@ -156,44 +128,43 @@ const DraggableKey = React.memo(
       anchorOrigin,
     );
 
-    const {
-      isSelectionMode,
-      isDraggingOrResizing,
-      draggable,
-      handleSelectionDragPointerDown,
-      handleClick,
-      handleDoubleClick,
-      handleContextMenu,
-      attachRef: attachInteractionRef,
-    } = useGridItemInteraction({
+    const interaction = useGridElementInteraction({
       index,
       elementId,
-      dx,
-      dy,
+      initialX: dx,
+      initialY: dy,
       elementWidth: width || 60,
       elementHeight: height || 60,
-      isSelected,
-      selectedElements,
-      zoom,
-      panX,
-      panY,
-      activeTool,
-      isViewportTransforming,
       onPositionChange,
       onClick,
       onDoubleClick,
       onCtrlClick,
       onShiftClick,
+      isSelected,
+      selectedElements,
       onMultiDrag,
       onMultiDragStart,
       onMultiDragEnd,
+      activeTool,
       onEraserClick,
       onContextMenu,
       setReferenceRef,
+      zoom,
+      panX,
+      panY,
+      isViewportTransforming,
     });
-
-    const renderDx = draggable.dx;
-    const renderDy = draggable.dy;
+    const {
+      dx: renderDx,
+      dy: renderDy,
+      handleClick,
+      handleContextMenu,
+      handleDoubleClick,
+      handleSelectionDragPointerDown,
+      isDraggingOrResizing,
+      isSelectionMode,
+      wasMoved,
+    } = interaction;
 
     // 뷰포트 이동은 그리드 부모가 이미 합성 레이어를 소유
     // 키까지 중첩 승격하면 DOM 글자가 흐리게 래스터화됨
@@ -221,25 +192,22 @@ const DraggableKey = React.memo(
       previewPosition.inactiveImage,
       previewPosition.activeImage,
     );
-    const {
-      keyStyle: computedKeyStyle,
-      borderRingStyle,
-      imageStyle,
-      textStyle,
-      labelPaintStyle,
-      labelHasGradient,
-      labelMetricsDep,
-      currentImageSrc,
-      hasCurrentImage,
-      imageMode,
-      imageReplaces,
-      labelText,
-    } = computeKeyElementStyles({
+    const computedStyles = computeKeyElementStyles({
       position: previewPosition,
       active: previewActive,
       label: displayName,
       failedImageSrcs,
     });
+    const {
+      keyStyle: computedKeyStyle,
+      textStyle,
+      labelPaintStyle,
+      labelHasGradient,
+      labelMetricsDep,
+      labelText,
+      hasCurrentImage,
+      imageMode,
+    } = computedStyles;
     // 그리드(스케일 레이어) 안에서는 승격 금지 - WebKit은 합성 자식이 하나라도
     // 생기면 스케일 컨테이너 자체를 레이어로 만들어 내용 전체가 흐려진다.
     // 이동 키는 매 프레임 손상 영역만 재페인트하는 쪽이 선명하고 충분히 싸다
@@ -286,18 +254,17 @@ const DraggableKey = React.memo(
       );
     };
 
-    // 카운터 축 앵커가 루트 노드를 읽으므로 공용 부착 앞에 먼저 채운다
     const attachRef = (node: HTMLElement | null) => {
       keyRootRef.current = node;
-      attachInteractionRef(node);
+      interaction.attachRef(node);
     };
 
     return (
       <div
         ref={attachRef}
-        className={`absolute dmn-grabbable ${
-          draggable && draggable.wasMoved ? '' : ''
-        } ${className || ''}`}
+        className={`absolute dmn-grabbable ${wasMoved ? '' : ''} ${
+          className || ''
+        }`}
         style={keyStyle}
         data-state={previewActive ? 'active' : 'inactive'}
         data-editing={isDraggingOrResizing ? 'true' : undefined}
@@ -312,42 +279,13 @@ const DraggableKey = React.memo(
         onContextMenu={handleContextMenu}
         onDragStart={(e) => e.preventDefault()}
       >
-        {borderRingStyle && (
-          <span
-            aria-hidden="true"
-            data-gradient-border-ring="true"
-            style={borderRingStyle}
-          />
-        )}
-        {hasCurrentImage && (
-          <img
-            src={currentImageSrc || ''}
-            alt=""
-            data-key-image-layer="true"
-            style={imageStyle}
-            draggable={false}
-            onError={(event) => {
-              if (!isErrorForCurrentSrc(event.currentTarget, currentImageSrc))
-                return;
-              markFailed(currentImageSrc);
-            }}
-          />
-        )}
-        {imageReplaces ? null : showInsideCounter ? (
-          renderInsideCounterPreview()
-        ) : (
-          <div
-            className="flex items-center justify-center h-full font-bold"
-            style={textStyle}
-          >
-            <KeyLabel
-              text={labelText}
-              paintStyle={labelPaintStyle}
-              hasGradient={labelHasGradient}
-              metricsDep={labelMetricsDep}
-            />
-          </div>
-        )}
+        <KeyElementContent
+          styles={{ ...computedStyles, keyStyle }}
+          insideContent={
+            showInsideCounter ? renderInsideCounterPreview() : undefined
+          }
+          markImageFailed={markFailed}
+        />
       </div>
     );
   },
@@ -370,28 +308,21 @@ export const Key = React.memo(function Key({
     position.inactiveImage,
     position.activeImage,
   );
+  const styles = computeKeyElementStyles({
+    position,
+    active,
+    label: keyName,
+    failedImageSrcs,
+  });
   const {
-    keyStyle,
-    borderRingStyle,
-    imageStyle,
     textStyle,
     labelPaintStyle,
     labelHasGradient,
     labelMetricsDep,
     inactiveImageSrc,
     activeImageSrc,
-    currentImageSrc,
-    hasCurrentImage,
-    imageMode,
-    imageReplaces,
-    isTransparent,
     labelText,
-  } = computeKeyElementStyles({
-    position,
-    active,
-    label: keyName,
-    failedImageSrcs,
-  });
+  } = styles;
 
   useEffect(() => {
     warmupImageSource(inactiveImageSrc);
@@ -401,15 +332,13 @@ export const Key = React.memo(function Key({
   const counterSettings = useCounterSettings(position?.counter);
 
   if (position.hidden) return null;
-
-  if (isTransparent) {
+  if (styles.isTransparent) {
     return (
-      <div
-        aria-hidden="true"
-        className={`absolute ${position.className || ''}`}
-        style={{ ...keyStyle, visibility: 'hidden', pointerEvents: 'none' }}
-        data-overlay-hit="true"
-        data-overlay-hit-only="true"
+      <OverlayKeyElementFace
+        position={position}
+        active={active}
+        styles={styles}
+        markImageFailed={markFailed}
       />
     );
   }
@@ -424,62 +353,28 @@ export const Key = React.memo(function Key({
     ? getKeyCounterSignal(mode ?? '', globalKey)
     : undefined;
 
+  const insideContent =
+    showInsideCounter && counterSignal ? (
+      <InsideCounterLayout
+        countSignal={counterSignal}
+        labelText={labelText}
+        textStyle={textStyle}
+        labelPaintStyle={labelPaintStyle}
+        labelHasGradient={labelHasGradient}
+        labelMetricsDep={labelMetricsDep}
+        active={active}
+        counterSettings={counterSettings}
+        useInlineStyles={position.useInlineStyles === true}
+      />
+    ) : undefined;
+
   return (
-    <div
-      className={`absolute ${position.className || ''}`}
-      style={keyStyle}
-      data-state={active ? 'active' : 'inactive'}
-      data-key-element="true"
-      data-overlay-hit="true"
-      data-key-image={hasCurrentImage ? 'true' : undefined}
-      data-key-image-mode={hasCurrentImage ? imageMode : undefined}
-    >
-      {borderRingStyle && (
-        <span
-          aria-hidden="true"
-          data-gradient-border-ring="true"
-          style={borderRingStyle}
-        />
-      )}
-      {hasCurrentImage && (
-        <img
-          src={currentImageSrc || ''}
-          alt=""
-          data-key-image-layer="true"
-          style={imageStyle}
-          draggable={false}
-          onError={(event) => {
-            if (!isErrorForCurrentSrc(event.currentTarget, currentImageSrc))
-              return;
-            markFailed(currentImageSrc);
-          }}
-        />
-      )}
-      {imageReplaces ? null : showInsideCounter && counterSignal ? (
-        <InsideCounterLayout
-          countSignal={counterSignal}
-          labelText={labelText}
-          textStyle={textStyle}
-          labelPaintStyle={labelPaintStyle}
-          labelHasGradient={labelHasGradient}
-          labelMetricsDep={labelMetricsDep}
-          active={active}
-          counterSettings={counterSettings}
-          useInlineStyles={position.useInlineStyles === true}
-        />
-      ) : (
-        <div
-          className="flex items-center justify-center h-full font-bold"
-          style={textStyle}
-        >
-          <KeyLabel
-            text={labelText}
-            paintStyle={labelPaintStyle}
-            hasGradient={labelHasGradient}
-            metricsDep={labelMetricsDep}
-          />
-        </div>
-      )}
-    </div>
+    <OverlayKeyElementFace
+      position={position}
+      active={active}
+      styles={styles}
+      insideContent={insideContent}
+      markImageFailed={markFailed}
+    />
   );
 });

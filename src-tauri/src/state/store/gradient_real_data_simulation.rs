@@ -376,6 +376,7 @@ fn editor_preset_from_store(data: &AppStoreData) -> PresetFile {
         graph_positions: Some(data.graph_positions.clone()),
         knob_positions: Some(data.knob_positions.clone()),
         custom_tabs: Some(data.custom_tabs.clone()),
+        tab_order: Some(data.tab_order.clone()),
         selected_key_type: Some(data.selected_key_type.clone()),
         layer_groups: Some(data.layer_groups.clone()),
         ..PresetFile::default()
@@ -417,6 +418,10 @@ fn import_editor_preset(directory: &Path, preset: PresetFile) -> AppStoreData {
     let custom_tabs = preset
         .custom_tabs
         .unwrap_or_else(|| current.custom_tabs.clone());
+    let tab_order = preset
+        .tab_order
+        .map(|order| crate::state::tab_metadata::normalize_tab_order(&order, &custom_tabs))
+        .unwrap_or_else(|| crate::state::tab_metadata::legacy_tab_order(&custom_tabs));
     let selected_key_type = preset
         .selected_key_type
         .unwrap_or_else(|| current.selected_key_type.clone());
@@ -440,6 +445,7 @@ fn import_editor_preset(directory: &Path, preset: PresetFile) -> AppStoreData {
                 data.knob_positions = knob_positions;
                 data.layer_groups = layer_groups;
                 data.custom_tabs = custom_tabs;
+                data.tab_order = tab_order;
                 data.selected_key_type = selected_key_type;
                 crate::state::native_element_id::rekey_store_element_ids(data);
                 Ok(())

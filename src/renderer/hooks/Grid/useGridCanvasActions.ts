@@ -49,6 +49,7 @@ import {
   DEFAULT_ELEMENT_FONT,
   DEFAULT_ELEMENT_RADIUS,
 } from '@utils/core/elementDefaults';
+import { getLooseStatTypeLabel } from '@utils/grid/statTypeLabel';
 import { toSpriteWireShape } from '@utils/sprite/spriteWireShape';
 
 // 공통: zIndex 목록 수집 - 결과가 persist되는 z 계산에 쓰이므로 canonical 기준
@@ -225,14 +226,6 @@ export const placeFrozenDuplicateAt = (
   return true;
 };
 
-function getStatTypeLabel(type: string): string {
-  if (type === 'kps') return 'KPS';
-  if (type === 'kpsAvg') return 'AVG';
-  if (type === 'kpsMax') return 'MAX';
-  if (type === 'total') return 'Total';
-  return String(type || '');
-}
-
 export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
   const addKeyAtPosition = (dx: number, dy: number) => {
     void addKeyAt(selectedKeyType, dx, dy).catch(reportElementOpError);
@@ -279,7 +272,7 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     return {
       elementType: 'stat',
       sourceIndex,
-      keyName: getStatTypeLabel(position.statType),
+      keyName: getLooseStatTypeLabel(position.statType),
       position: {
         ...position,
         noteColor: clonedNoteColor,
@@ -311,7 +304,7 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     return {
       elementType: 'graph',
       sourceIndex,
-      keyName: getStatTypeLabel(position.statType),
+      keyName: getLooseStatTypeLabel(position.statType),
       position: { ...position },
     };
   };

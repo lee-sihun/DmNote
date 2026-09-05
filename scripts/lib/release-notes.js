@@ -151,9 +151,9 @@ const buildReleaseNotes = ({ version, assets, contributors }) => {
     if (!described) throw new Error(`분류되지 않은 자산: ${version} / ${name}`);
     return { name, ...described };
   });
-  // Windows 먼저, 그 안에서는 신규 설치용 ZIP 먼저
+  // Windows 먼저, 그 안에서는 자동 업데이트용 EXE 먼저
   const weight = (row) =>
-    (row.platform === 'Windows' ? 0 : 10) + (row.use === '에셋 미포함' ? 1 : 0);
+    (row.platform === 'Windows' ? 0 : 10) + (row.use === '에셋 포함' ? 1 : 0);
   rows.sort((a, b) => weight(a) - weight(b));
 
   const hasWindows = rows.some((row) => row.platform === 'Windows');
@@ -178,8 +178,8 @@ const buildReleaseNotes = ({ version, assets, contributors }) => {
   ];
 
   const notes = [];
-  // 2.0.0부터 서명·공증되어 xattr 우회가 불필요 — 그 이전 macOS 자산에만 가이드를 남긴다
-  if (hasMac && older('2.0.0')) {
+  // 가이드가 권한 설정 중심으로 개편되어 모든 macOS 릴리즈에 링크를 남긴다
+  if (hasMac) {
     notes.push(
       `- [macOS 설치 및 권한 설정 가이드](${repoUrl}/blob/main/docs/mac_guide.md)`,
     );

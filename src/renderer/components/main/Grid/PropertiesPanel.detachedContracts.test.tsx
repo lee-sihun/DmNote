@@ -313,30 +313,28 @@ vi.mock('@src/renderer/editor/runtime/editGestureController', () => ({
   },
 }));
 vi.mock('./PropertiesPanel/index', async () => {
-  const { default: PanelRenameTitle } = await import(
-    './PropertiesPanel/PanelRenameTitle'
+  const { default: PanelRenameControl } = await import(
+    './PropertiesPanel/PanelRenameControl'
   );
   const Stub = ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
   );
+  // 헤더 이름 변경 계약만 실제 컨트롤로 검증 - 패널 props와 컨트롤 props가 같은 이름을 쓴다
   const SingleKeyStatPanel = (
-    renameProps: React.ComponentProps<typeof PanelRenameTitle> & {
-      handleRenameCommit: (value: string) => void;
-      handleRenameCancel: () => void;
-      handleRenameStart: () => void;
-    },
+    renameProps: Omit<
+      React.ComponentProps<typeof PanelRenameControl>,
+      'title' | 'titleClassName' | 'renameButtonTitle'
+    >,
   ) => {
     singleKeyStatPropsMock(renameProps);
     return (
       <>
         <ScopeProbe id="single-key-stat" />
-        <PanelRenameTitle
+        <PanelRenameControl
           {...renameProps}
           title="Key"
-          onRenameCommit={renameProps.handleRenameCommit}
-          onRenameCancel={renameProps.handleRenameCancel}
-          onRenameStart={renameProps.handleRenameStart}
-          renameLabel="contextMenu.rename"
+          titleClassName=""
+          renameButtonTitle="contextMenu.rename"
         />
       </>
     );
@@ -389,19 +387,21 @@ vi.mock('./PropertiesPanel/index', async () => {
         </button>
       </>
     ),
-    useBatchHandlers: (props: Record<string, unknown>) => {
-      batchPropsMock(props);
-      return {
-        handleBatchStyleChangeComplete: legacyBatchStyleCommitMock,
-        handleBatchCounterUpdate: legacyBatchCounterUpdateMock,
-      };
-    },
     usePanelScroll: () => ({
       batchScrollRefFor: () => vi.fn(),
       singleScrollRefFor: () => vi.fn(),
     }),
   };
 });
+vi.mock('./PropertiesPanel/batch/useBatchHandlers', () => ({
+  useBatchHandlers: (props: Record<string, unknown>) => {
+    batchPropsMock(props);
+    return {
+      handleBatchStyleChangeComplete: legacyBatchStyleCommitMock,
+      handleBatchCounterUpdate: legacyBatchCounterUpdateMock,
+    };
+  },
+}));
 vi.mock('./PropertiesPanel/PanelNavContext', () => ({
   PanelNavProvider: ({ children }: { children: React.ReactNode }) => children,
 }));

@@ -21,9 +21,14 @@ const mocks = vi.hoisted(() => ({
   updateElement: vi.fn(),
   setResizing: vi.fn(),
   clearGuides: vi.fn(),
+  setDraggedBounds: vi.fn(),
   setActiveGuides: vi.fn(),
   setSpacingGuides: vi.fn(),
   setSizeMatchGuides: vi.fn(),
+  calculateSnapPoints: vi.fn(),
+  calculateSizeSnap: vi.fn(),
+  // 스냅 실물 - 비율 고정·축 게이트처럼 실제 스냅 계산이 필요한 테스트가 되돌려 쓴다
+  realSmartGuides: null as typeof import('@utils/grid/smartGuides') | null,
   commitPatch: vi.fn(() => Promise.resolve()),
   beginMixedGesture: vi.fn(),
   commitMixedGesture: vi.fn(() => Promise.resolve()),
@@ -88,13 +93,31 @@ vi.mock('@stores/grid/useSmartGuidesStore', () => ({
   useSmartGuidesStore: {
     getState: () => ({
       clearGuides: mocks.clearGuides,
-      setDraggedBounds: vi.fn(),
+      setDraggedBounds: mocks.setDraggedBounds,
       setActiveGuides: mocks.setActiveGuides,
       setSpacingGuides: mocks.setSpacingGuides,
       setSizeMatchGuides: mocks.setSizeMatchGuides,
     }),
   },
 }));
+
+vi.mock('@utils/grid/smartGuides', async (importOriginal) => {
+  const original = await importOriginal<
+    typeof import('@utils/grid/smartGuides')
+  >();
+  mocks.realSmartGuides = original;
+  return {
+    ...original,
+    calculateSnapPoints: mocks.calculateSnapPoints,
+    calculateSizeSnap: mocks.calculateSizeSnap,
+  };
+});
+
+const useRealSmartGuides = () => {
+  const real = mocks.realSmartGuides!;
+  mocks.calculateSnapPoints.mockImplementation(real.calculateSnapPoints);
+  mocks.calculateSizeSnap.mockImplementation(real.calculateSizeSnap);
+};
 
 vi.mock('@stores/grid/useGridSelectionStore', () => ({
   selectionElementId: (
@@ -235,73 +258,6 @@ describe('useGridResize plugin gesture lifecycle', () => {
   let events: string[];
   let pluginGestureIds: string[];
 
-  it('history 잠금 중 새 resize는 시작하거나 저장하지 않는다', async () => {
-    await renderHarness([stableKeySelection(STABLE_A)]);
-    acquireHistoryEditorFlushLock('resize-start');
-    try {
-      await act(async () => {
-        api.handleResizeStart();
-        api.handleResize({ x: 10, y: 20, width: 80, height: 90 });
-        api.handleResizeComplete();
-      });
-      expect(mocks.commitSingleBounds).not.toHaveBeenCalled();
-      expect(mocks.setResizing).not.toHaveBeenCalled();
-      expect(api.previewBounds).toBeNull();
-    } finally {
-      resetHistoryEditorFlushLock();
-    }
-  });
-
-  it.each(
-    ['native', 'plugin', 'group'].flatMap((kind) =>
-      ['applied', 'locked'].map((boundary) => ({ kind, boundary })),
-    ),
-  )(
-    '$kind history $boundary 뒤 늦은 preview와 complete는 저장하지 않는다',
-    async ({ kind, boundary }) => {
-      mocks.elements = [{ fullId: 'plugin-a:one', pluginId: 'plugin-a' }];
-      const selection =
-        kind === 'plugin'
-          ? [pluginSelection('plugin-a:one')]
-          : [stableKeySelection(STABLE_A)];
-      await renderHarness(selection);
-      const bounds = { x: 10, y: 20, width: 80, height: 90 };
-      const groupResult = {
-        groupBounds: bounds,
-        elementBounds: [{ element: selection[0], bounds }],
-        handle: { id: 'se', dx: 1, dy: 1 },
-      };
-      await act(async () => {
-        api.handleResizeStart();
-        if (kind === 'group') api.handleGroupResize(groupResult);
-        else api.handleResize(bounds);
-        if (boundary === 'applied')
-          useCommittedApplyStore.getState().bump('historyUndo');
-        else acquireHistoryEditorFlushLock('resize-release');
-        if (kind === 'group') {
-          api.handleGroupResize(groupResult);
-          api.handleGroupResizeComplete();
-        } else {
-          api.handleResize(bounds);
-          api.handleResizeComplete();
-        }
-      });
-      expect(mocks.commitSingleBounds).not.toHaveBeenCalled();
-      expect(mocks.commitGroupBounds).not.toHaveBeenCalled();
-      expect(mocks.updateElement).not.toHaveBeenCalled();
-      if (boundary === 'locked') {
-        await act(async () => {
-          useCommittedApplyStore.getState().bump('historyUndo');
-        });
-        resetHistoryEditorFlushLock();
-      }
-      expect(api.previewBounds).toBeNull();
-      expect(api.previewGroupBounds).toBeNull();
-      expect(api.previewElementBounds).toBeNull();
-      if (kind === 'plugin') expect(mocks.end).toHaveBeenCalledOnce();
-    },
-  );
-
   const renderHarness = async (
     selectedElements: SelectedElement[],
     getOtherElements?: (excludeId: string) => ElementBounds[],
@@ -332,9 +288,12 @@ describe('useGridResize plugin gesture lifecycle', () => {
     mocks.updateElement.mockReset();
     mocks.setResizing.mockReset();
     mocks.clearGuides.mockReset();
+    mocks.setDraggedBounds.mockReset();
     mocks.setActiveGuides.mockReset();
     mocks.setSpacingGuides.mockReset();
     mocks.setSizeMatchGuides.mockReset();
+    mocks.calculateSnapPoints.mockReset();
+    mocks.calculateSizeSnap.mockReset();
     mocks.commitPatch.mockClear();
     mocks.commitGroupBounds.mockClear();
     mocks.commitSingleBounds.mockClear();
@@ -350,6 +309,23 @@ describe('useGridResize plugin gesture lifecycle', () => {
       spacingGuides: false,
       sizeMatchGuides: false,
     };
+    mocks.calculateSnapPoints.mockImplementation((draggedBounds) => ({
+      snappedX: draggedBounds.left,
+      snappedY: draggedBounds.top,
+      guides: [],
+      spacingGuides: [],
+      didSnapX: false,
+      didSnapY: false,
+      didSpacingSnapX: false,
+      didSpacingSnapY: false,
+    }));
+    mocks.calculateSizeSnap.mockImplementation((width, height) => ({
+      snappedWidth: width,
+      snappedHeight: height,
+      sizeMatchGuides: [],
+      didSnapWidth: false,
+      didSnapHeight: false,
+    }));
     mocks.begin.mockImplementation((pluginId: string, gestureId: string) => {
       const token = `token-${++tokenSequence}`;
       pluginGestureIds.push(gestureId);
@@ -505,68 +481,6 @@ describe('useGridResize plugin gesture lifecycle', () => {
       ['plugin-a'],
       expect.anything(),
     );
-  });
-
-  it('그룹 resize의 sprite는 resizeSprite op으로 bounds와 콘텐츠를 함께 스케일한다', async () => {
-    const original = spriteAt(STABLE_SPRITE);
-    useSpriteStore.setState({ positions: { '4key': [original] } });
-    mocks.elements = [{ fullId: 'plugin-a:one', pluginId: 'plugin-a' }];
-    const spriteSelected: SelectedElement = {
-      id: STABLE_SPRITE,
-      type: 'sprite',
-      index: 0,
-    };
-    const selected = [spriteSelected, pluginSelection('plugin-a:one')];
-    await renderHarness(selected);
-
-    await act(async () => {
-      api.handleResizeStart();
-      api.handleGroupResize({
-        groupBounds: { x: 10, y: 20, width: 200, height: 80 },
-        elementBounds: [
-          {
-            element: spriteSelected,
-            bounds: { x: 10, y: 20, width: 100, height: 60 },
-          },
-          {
-            element: selected[1],
-            bounds: { x: 120, y: 20, width: 80, height: 60 },
-          },
-        ],
-        handle: { id: 'e', dx: 1, dy: 0 },
-      });
-      api.handleGroupResizeComplete();
-    });
-
-    // wire: sprite는 resizeSprite op - bounds만 실리고 배율은 백엔드가 최신
-    // base 기준으로 재적용한다
-    expect(mocks.commitMixedGesture).toHaveBeenCalledWith(
-      pluginGestureIds[0],
-      {
-        opsVersion: EDITOR_OPS_VERSION,
-        ops: [
-          {
-            kind: 'resizeSprite',
-            id: STABLE_SPRITE,
-            bounds: { dx: 10, dy: 20, width: 100, height: 60 },
-          },
-        ],
-      },
-      ['plugin-a'],
-      expect.anything(),
-    );
-    // eager: 200x120 → 100x60 (sx=sy=0.5)로 콘텐츠까지 비례 스케일.
-    // pivot은 정규화 좌표라 불변 (참조까지 보존)
-    const eager = useSpriteStore.getState().positions['4key'][0];
-    expect(eager).toMatchObject({ dx: 10, dy: 20, width: 100, height: 60 });
-    expect(eager.idleTransform).toEqual({ x: 0, y: 0, rotation: 0, scale: 1 });
-    expect(eager.poses[0].transform).toEqual({
-      x: 6,
-      y: -3,
-      rotation: 15,
-      scale: 1.2,
-    });
-    expect(eager.pivot).toBe(original.pivot);
   });
 
   it('혼합 그룹의 native ID가 비정규면 plugin까지 함께 fail-close한다', async () => {
@@ -752,6 +666,106 @@ describe('useGridResize plugin gesture lifecycle', () => {
     expect(getOtherElements).toHaveBeenLastCalledWith(STABLE_A);
   });
 
+  it('size match 비활성 native resize는 대상과 무관한 수평 간격 가이드를 제외한다', async () => {
+    const unrelatedGuide = {
+      type: 'spacing' as const,
+      direction: 'horizontal' as const,
+      value: 20,
+      startPos: 0,
+      endPos: 20,
+      crossAxisPos: 0,
+      fromElementId: 'reference-a',
+      toElementId: 'reference-b',
+      isMatched: true,
+    };
+    const relatedGuide = {
+      ...unrelatedGuide,
+      fromElementId: STABLE_A,
+      toElementId: 'reference-c',
+    };
+    mocks.gridSettings = {
+      alignmentGuides: true,
+      spacingGuides: true,
+      sizeMatchGuides: false,
+    };
+    mocks.calculateSnapPoints.mockReturnValue({
+      snappedX: 0,
+      snappedY: 0,
+      guides: [],
+      spacingGuides: [relatedGuide, unrelatedGuide],
+      didSnapX: true,
+      didSnapY: false,
+      didSpacingSnapX: true,
+      didSpacingSnapY: false,
+    });
+    await renderHarness([stableKeySelection(STABLE_A)], () => []);
+
+    await act(async () => {
+      api.handleResizeStart();
+      api.handleResize({
+        x: 0,
+        y: 0,
+        width: 120,
+        height: 60,
+        handle: { id: 'e', dx: 1, dy: 0 },
+      });
+    });
+
+    expect(mocks.setSpacingGuides).toHaveBeenLastCalledWith([relatedGuide]);
+  });
+
+  it('size match 비활성 plugin resize는 참조용 수평 간격 가이드를 유지한다', async () => {
+    const pluginId = 'plugin-a:one';
+    const unrelatedGuide = {
+      type: 'spacing' as const,
+      direction: 'horizontal' as const,
+      value: 20,
+      startPos: 0,
+      endPos: 20,
+      crossAxisPos: 0,
+      fromElementId: 'reference-a',
+      toElementId: 'reference-b',
+      isMatched: true,
+    };
+    const relatedGuide = {
+      ...unrelatedGuide,
+      fromElementId: pluginId,
+      toElementId: 'reference-c',
+    };
+    mocks.gridSettings = {
+      alignmentGuides: true,
+      spacingGuides: true,
+      sizeMatchGuides: false,
+    };
+    mocks.calculateSnapPoints.mockReturnValue({
+      snappedX: 0,
+      snappedY: 0,
+      guides: [],
+      spacingGuides: [relatedGuide, unrelatedGuide],
+      didSnapX: true,
+      didSnapY: false,
+      didSpacingSnapX: true,
+      didSpacingSnapY: false,
+    });
+    await renderHarness([pluginSelection(pluginId)], () => []);
+
+    await act(async () => {
+      api.handleResizeStart();
+      api.handleResize({
+        x: 0,
+        y: 0,
+        width: 120,
+        height: 60,
+        handle: { id: 'e', dx: 1, dy: 0 },
+      });
+    });
+
+    expect(mocks.setSpacingGuides).toHaveBeenLastCalledWith([
+      relatedGuide,
+      unrelatedGuide,
+    ]);
+  });
+
   it('합성 native 단일 resize는 로컬과 wire를 모두 무커밋한다', async () => {
     await renderHarness([keySelection()]);
 
@@ -833,7 +847,138 @@ describe('useGridResize plugin gesture lifecycle', () => {
     expect(mocks.end).toHaveBeenCalledWith('plugin-a', 'token-1');
     expect(mocks.setResizing).toHaveBeenLastCalledWith(false);
   });
+
+  it('history 잠금 중 새 resize는 시작하거나 저장하지 않는다', async () => {
+    await renderHarness([stableKeySelection(STABLE_A)]);
+    acquireHistoryEditorFlushLock('resize-start');
+    try {
+      await act(async () => {
+        api.handleResizeStart();
+        api.handleResize({ x: 10, y: 20, width: 80, height: 90 });
+        api.handleResizeComplete();
+      });
+      expect(mocks.commitSingleBounds).not.toHaveBeenCalled();
+      expect(mocks.setResizing).not.toHaveBeenCalled();
+      expect(api.previewBounds).toBeNull();
+    } finally {
+      resetHistoryEditorFlushLock();
+    }
+  });
+
+  it.each(
+    ['native', 'plugin', 'group'].flatMap((kind) =>
+      ['applied', 'locked'].map((boundary) => ({ kind, boundary })),
+    ),
+  )(
+    '$kind history $boundary 뒤 늦은 preview와 complete는 저장하지 않는다',
+    async ({ kind, boundary }) => {
+      mocks.elements = [{ fullId: 'plugin-a:one', pluginId: 'plugin-a' }];
+      const selection =
+        kind === 'plugin'
+          ? [pluginSelection('plugin-a:one')]
+          : [stableKeySelection(STABLE_A)];
+      await renderHarness(selection);
+      const bounds = { x: 10, y: 20, width: 80, height: 90 };
+      const groupResult = {
+        groupBounds: bounds,
+        elementBounds: [{ element: selection[0], bounds }],
+        handle: { id: 'se', dx: 1, dy: 1 },
+      };
+      await act(async () => {
+        api.handleResizeStart();
+        if (kind === 'group') api.handleGroupResize(groupResult);
+        else api.handleResize(bounds);
+        if (boundary === 'applied')
+          useCommittedApplyStore.getState().bump('historyUndo');
+        else acquireHistoryEditorFlushLock('resize-release');
+        if (kind === 'group') {
+          api.handleGroupResize(groupResult);
+          api.handleGroupResizeComplete();
+        } else {
+          api.handleResize(bounds);
+          api.handleResizeComplete();
+        }
+      });
+      expect(mocks.commitSingleBounds).not.toHaveBeenCalled();
+      expect(mocks.commitGroupBounds).not.toHaveBeenCalled();
+      expect(mocks.updateElement).not.toHaveBeenCalled();
+      if (boundary === 'locked') {
+        await act(async () => {
+          useCommittedApplyStore.getState().bump('historyUndo');
+        });
+        resetHistoryEditorFlushLock();
+      }
+      expect(api.previewBounds).toBeNull();
+      expect(api.previewGroupBounds).toBeNull();
+      expect(api.previewElementBounds).toBeNull();
+      if (kind === 'plugin') expect(mocks.end).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('그룹 resize의 sprite는 resizeSprite op으로 bounds와 콘텐츠를 함께 스케일한다', async () => {
+    const original = spriteAt(STABLE_SPRITE);
+    useSpriteStore.setState({ positions: { '4key': [original] } });
+    mocks.elements = [{ fullId: 'plugin-a:one', pluginId: 'plugin-a' }];
+    const spriteSelected: SelectedElement = {
+      id: STABLE_SPRITE,
+      type: 'sprite',
+      index: 0,
+    };
+    const selected = [spriteSelected, pluginSelection('plugin-a:one')];
+    await renderHarness(selected);
+
+    await act(async () => {
+      api.handleResizeStart();
+      api.handleGroupResize({
+        groupBounds: { x: 10, y: 20, width: 200, height: 80 },
+        elementBounds: [
+          {
+            element: spriteSelected,
+            bounds: { x: 10, y: 20, width: 100, height: 60 },
+          },
+          {
+            element: selected[1],
+            bounds: { x: 120, y: 20, width: 80, height: 60 },
+          },
+        ],
+        handle: { id: 'e', dx: 1, dy: 0 },
+      });
+      api.handleGroupResizeComplete();
+    });
+
+    // wire: sprite는 resizeSprite op - bounds만 실리고 배율은 백엔드가 최신
+    // base 기준으로 재적용한다
+    expect(mocks.commitMixedGesture).toHaveBeenCalledWith(
+      pluginGestureIds[0],
+      {
+        opsVersion: EDITOR_OPS_VERSION,
+        ops: [
+          {
+            kind: 'resizeSprite',
+            id: STABLE_SPRITE,
+            bounds: { dx: 10, dy: 20, width: 100, height: 60 },
+          },
+        ],
+      },
+      ['plugin-a'],
+      expect.anything(),
+    );
+    // eager: 200x120 → 100x60 (sx=sy=0.5)로 콘텐츠까지 비례 스케일.
+    // pivot은 정규화 좌표라 불변 (참조까지 보존)
+    const eager = useSpriteStore.getState().positions['4key'][0];
+    expect(eager).toMatchObject({ dx: 10, dy: 20, width: 100, height: 60 });
+    expect(eager.idleTransform).toEqual({ x: 0, y: 0, rotation: 0, scale: 1 });
+    expect(eager.poses[0].transform).toEqual({
+      x: 6,
+      y: -3,
+      rotation: 15,
+      scale: 1.2,
+    });
+    expect(eager.pivot).toBe(original.pivot);
+  });
+
   it('비율 고정 리사이즈는 기준 축의 크기 일치만 받고 반대 축을 같은 배율로 놓는다', async () => {
+    useRealSmartGuides();
     mocks.gridSettings = {
       alignmentGuides: true,
       spacingGuides: false,
@@ -883,6 +1028,7 @@ describe('useGridResize plugin gesture lifecycle', () => {
   });
 
   it('기준 축 스냅이 배율 범위를 넘으면 상한으로 자른다', async () => {
+    useRealSmartGuides();
     mocks.gridSettings = {
       alignmentGuides: true,
       spacingGuides: false,
@@ -924,6 +1070,7 @@ describe('useGridResize plugin gesture lifecycle', () => {
   });
 
   it('잡지 않은 축의 크기 일치는 무시한다 (가로 핸들은 높이를 바꾸지 않는다)', async () => {
+    useRealSmartGuides();
     mocks.gridSettings = {
       alignmentGuides: true,
       spacingGuides: false,
@@ -959,7 +1106,9 @@ describe('useGridResize plugin gesture lifecycle', () => {
     });
     expect(api.previewBounds).toEqual({ x: 0, y: 0, width: 118, height: 60 });
   });
+
   it('플러그인 단일 리사이즈도 비율 고정 재유도를 같은 경로로 받는다', async () => {
+    useRealSmartGuides();
     mocks.gridSettings = {
       alignmentGuides: true,
       spacingGuides: false,
@@ -995,6 +1144,7 @@ describe('useGridResize plugin gesture lifecycle', () => {
   });
 
   it('비율 고정은 무시한 반대 축의 정렬 가이드를 그리지 않는다', async () => {
+    useRealSmartGuides();
     mocks.gridSettings = {
       alignmentGuides: true,
       spacingGuides: false,
@@ -1045,6 +1195,7 @@ describe('useGridResize plugin gesture lifecycle', () => {
   });
 
   it('잡지 않은 축은 정렬 후보가 있어도 위치를 옮기지 않는다', async () => {
+    useRealSmartGuides();
     mocks.gridSettings = {
       alignmentGuides: true,
       spacingGuides: false,

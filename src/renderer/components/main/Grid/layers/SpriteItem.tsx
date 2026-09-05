@@ -1,5 +1,8 @@
 import React from 'react';
-import { useGridItemInteraction } from '@hooks/Grid/useGridItemInteraction';
+import {
+  useGridElementInteraction,
+  type GridElementInteractionProps,
+} from '@hooks/Grid/useGridElementInteraction';
 import { useSpriteEditPreview } from '@stores/grid/useSpriteEditPreviewStore';
 import { isSameSpriteTransform } from '@utils/sprite/spriteGeometry';
 import {
@@ -20,7 +23,11 @@ import {
 } from '@utils/sprite/spritePlacement';
 import { DEFAULT_SPRITE_SIZE } from '@src/types/key/sprites';
 import type { CanonicalReactiveSpritePosition } from '@src/types/editor';
-import type { GridItemProps } from './gridItemProps';
+
+interface SpriteItemProps extends GridElementInteractionProps {
+  position: CanonicalReactiveSpritePosition;
+  zIndex?: number;
+}
 
 // 자세 편집 중 기본 자세를 뒤에 남기는 고스트의 투명도
 const IDLE_GHOST_OPACITY = 0.3;
@@ -51,7 +58,7 @@ const SpriteItem = ({
   panY = 0,
   zIndex = 0,
   isViewportTransforming = false,
-}: GridItemProps<CanonicalReactiveSpritePosition>) => {
+}: SpriteItemProps) => {
   const {
     dx = 0,
     dy = 0,
@@ -116,44 +123,45 @@ const SpriteItem = ({
       !isSameSpriteTransform(transform, position.idleTransform));
 
   const {
-    isSelectionMode,
-    isDraggingOrResizing,
-    draggable,
-    handleSelectionDragPointerDown,
-    handleClick,
-    handleDoubleClick,
-    handleContextMenu,
     attachRef,
-  } = useGridItemInteraction({
+    dx: renderDx,
+    dy: renderDy,
+    handleClick,
+    handleContextMenu,
+    handleDoubleClick,
+    handleSelectionDragPointerDown,
+    isDraggingOrResizing,
+    isSelectionMode,
+  } = useGridElementInteraction({
     index,
     elementId,
-    dx,
-    dy,
+    initialX: dx,
+    initialY: dy,
     elementWidth: width || DEFAULT_SPRITE_SIZE,
     elementHeight: height || DEFAULT_SPRITE_SIZE,
-    isSelected,
-    selectedElements,
-    zoom,
-    panX,
-    panY,
-    activeTool,
-    isViewportTransforming,
     onPositionChange,
     onClick,
     onDoubleClick,
     onCtrlClick,
     onShiftClick,
+    isSelected,
+    selectedElements,
     onMultiDrag,
     onMultiDragStart,
     onMultiDragEnd,
+    activeTool,
     onEraserClick,
     onContextMenu,
     setReferenceRef,
+    zoom,
+    panX,
+    panY,
+    isViewportTransforming,
   });
 
   if (position.hidden) return null;
 
-  const rootTransform = `translate(calc(${draggable.dx}px + var(--key-offset-x, 0px)), calc(${draggable.dy}px + var(--key-offset-y, 0px)))`;
+  const rootTransform = `translate(calc(${renderDx}px + var(--key-offset-x, 0px)), calc(${renderDy}px + var(--key-offset-y, 0px)))`;
 
   return (
     <div

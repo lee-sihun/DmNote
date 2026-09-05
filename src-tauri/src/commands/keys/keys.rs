@@ -1,6 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State, WebviewWindow};
 
 use crate::{
@@ -29,9 +29,12 @@ use crate::{
             AuxEditorResetTransactionOptions, AuxEditorTransactionOptions,
             PluginInstancesResetScope,
         },
+        tab_metadata::{normalize_bar_count, normalize_tab_order, validate_custom_tab_name},
         AppState,
     },
 };
+
+pub mod custom_tabs;
 
 const MAX_CUSTOM_TABS: usize = 30;
 
@@ -97,6 +100,7 @@ enum ModeResetKind {
 
 struct CustomTabDeletePlan {
     custom_tabs: Vec<CustomTab>,
+    tab_order: Vec<String>,
     next_selected: String,
 }
 
@@ -126,6 +130,8 @@ fn reset_all_editor_data(
     store.layer_groups.clear();
     store.key_counters = zeroed_counters(keys);
     store.custom_tabs.clear();
+    store.tab_order = normalize_tab_order(&[], &store.custom_tabs);
+    store.bar_count = normalize_bar_count(crate::models::default_bar_count(), &store.tab_order);
     store.selected_key_type = "4key".to_string();
     store.tab_note_overrides.clear();
     store.tab_css_overrides.clear();
@@ -361,34 +367,36 @@ pub(crate) fn reset_mode_data_for_test(store: &mut AppStoreData, mode: &str) -> 
 }
 
 fn plan_custom_tab_delete(store: &AppStoreData, id: &str) -> Option<CustomTabDeletePlan> {
-    let index = store.custom_tabs.iter().position(|tab| tab.id == id)?;
+    store.custom_tabs.iter().position(|tab| tab.id == id)?;
+    let mut tab_order = normalize_tab_order(&store.tab_order, &store.custom_tabs);
+    let index = tab_order.iter().position(|tab_id| tab_id == id)?;
+    let next_selected = if store.selected_key_type == id {
+        if index > 0 {
+            tab_order[index - 1].clone()
+        } else {
+            tab_order.get(1)?.clone()
+        }
+    } else {
+        store.selected_key_type.clone()
+    };
+    tab_order.remove(index);
     let custom_tabs: Vec<CustomTab> = store
         .custom_tabs
         .iter()
         .filter(|tab| tab.id != id)
         .cloned()
         .collect();
-    let selected_tab_deleted = store.selected_key_type == id;
-    let next_selected = if selected_tab_deleted {
-        if custom_tabs.is_empty() {
-            "8key".to_string()
-        } else {
-            custom_tabs[if index > 0 { index - 1 } else { 0 }]
-                .id
-                .clone()
-        }
-    } else {
-        store.selected_key_type.clone()
-    };
-
     Some(CustomTabDeletePlan {
         custom_tabs,
+        tab_order,
         next_selected,
     })
 }
 
 fn delete_custom_tab_data(store: &mut AppStoreData, id: &str, plan: &CustomTabDeletePlan) {
     store.custom_tabs = plan.custom_tabs.clone();
+    store.tab_order = plan.tab_order.clone();
+    store.bar_count = normalize_bar_count(store.bar_count, &store.tab_order);
     store.keys.remove(id);
     store.key_positions.remove(id);
     store.stat_positions.remove(id);
@@ -414,6 +422,8 @@ pub struct ResetAllResponse {
     pub keys: KeyMappings,
     pub positions: KeyPositions,
     pub custom_tabs: Vec<CustomTab>,
+    pub tab_order: Vec<String>,
+    pub bar_count: u8,
     pub selected_key_type: String,
 }
 
@@ -427,7 +437,112 @@ pub struct ResetModeResponse {
 #[serde(rename_all = "camelCase")]
 pub struct CustomTabChangePayload {
     pub custom_tabs: Vec<CustomTab>,
+    pub tab_order: Vec<String>,
+    pub bar_count: u8,
     pub selected_key_type: String,
+    pub selection_authoritative: bool,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TabMetadataSnapshot {
+    pub custom_tabs: Vec<CustomTab>,
+    pub tab_order: Vec<String>,
+    pub bar_count: u8,
+    pub selected_key_type: String,
+}
+
+impl TabMetadataSnapshot {
+    fn from_store(store: &AppStoreData) -> Self {
+        Self {
+            custom_tabs: store.custom_tabs.clone(),
+            tab_order: store.tab_order.clone(),
+            bar_count: store.bar_count,
+            selected_key_type: store.selected_key_type.clone(),
+        }
+    }
+}
+
+/// 탭 배치 연산
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+pub enum TabOrderOpV1 {
+    /// 두 탭 자리 교환
+    Swap { a: String, b: String },
+}
+
+fn rename_custom_tab_metadata(
+    store: &mut AppStoreData,
+    id: &str,
+    name: &str,
+) -> (TabMetadataSnapshot, Option<String>, bool) {
+    let Some(index) = store.custom_tabs.iter().position(|tab| tab.id == id) else {
+        return (
+            TabMetadataSnapshot::from_store(store),
+            Some("unknown-tab".to_string()),
+            false,
+        );
+    };
+    let name = match validate_custom_tab_name(name, &store.custom_tabs, Some(id)) {
+        Ok(name) => name,
+        Err(error) => {
+            return (
+                TabMetadataSnapshot::from_store(store),
+                Some(error.to_string()),
+                false,
+            );
+        }
+    };
+    let changed = store.custom_tabs[index].name != name;
+    store.custom_tabs[index].name = name;
+    (TabMetadataSnapshot::from_store(store), None, changed)
+}
+
+fn reorder_tab_metadata(
+    store: &mut AppStoreData,
+    op: &TabOrderOpV1,
+) -> (TabMetadataSnapshot, Option<String>, bool) {
+    let mut tab_order = normalize_tab_order(&store.tab_order, &store.custom_tabs);
+    let TabOrderOpV1::Swap { a, b } = op;
+    let error = match (
+        tab_order.iter().position(|id| id == a),
+        tab_order.iter().position(|id| id == b),
+    ) {
+        (Some(a_index), Some(b_index)) => {
+            if a_index != b_index {
+                tab_order.swap(a_index, b_index);
+            }
+            None
+        }
+        _ => Some("unknown-tab".to_string()),
+    };
+    let normalized_bar_count = normalize_bar_count(store.bar_count, &tab_order);
+    let changed = store.tab_order != tab_order || store.bar_count != normalized_bar_count;
+    store.tab_order = tab_order;
+    store.bar_count = normalized_bar_count;
+    (TabMetadataSnapshot::from_store(store), error, changed)
+}
+
+fn reorder_change_payload(
+    snapshot: &TabMetadataSnapshot,
+    changed: bool,
+) -> Option<CustomTabChangePayload> {
+    changed.then(|| CustomTabChangePayload {
+        custom_tabs: snapshot.custom_tabs.clone(),
+        tab_order: snapshot.tab_order.clone(),
+        bar_count: snapshot.bar_count,
+        selected_key_type: snapshot.selected_key_type.clone(),
+        selection_authoritative: false,
+    })
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TabMetadataResult {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub result: Option<TabMetadataSnapshot>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -612,6 +727,8 @@ fn keys_reset_all_inner(
     let layer_groups = transaction.change.document.layer_groups;
     let selected_key_type = transaction.change.selected_key_type;
     let custom_tabs: Vec<CustomTab> = Vec::new();
+    let tab_order = normalize_tab_order(&[], &custom_tabs);
+    let bar_count = normalize_bar_count(crate::models::default_bar_count(), &tab_order);
     let tab_note_overrides = crate::models::TabNoteOverrides::new();
 
     if let Err(error) = state.emit_settings_changed(&settings_diff, app) {
@@ -630,7 +747,10 @@ fn keys_reset_all_inner(
         "customTabs:changed",
         &CustomTabChangePayload {
             custom_tabs: custom_tabs.clone(),
+            tab_order: tab_order.clone(),
+            bar_count,
             selected_key_type: selected_key_type.clone(),
+            selection_authoritative: true,
         },
     );
     emit_best_effort(
@@ -657,6 +777,8 @@ fn keys_reset_all_inner(
         keys,
         positions,
         custom_tabs,
+        tab_order,
+        bar_count,
         selected_key_type,
     })
 }
@@ -766,415 +888,6 @@ fn keys_reset_mode_inner(
         success: true,
         mode,
     })
-}
-
-#[tauri::command]
-pub async fn custom_tabs_list(app: AppHandle) -> CmdResult<Vec<CustomTab>> {
-    run_blocking(app, |_, state| Ok(state.store.snapshot().custom_tabs)).await
-}
-
-#[tauri::command]
-pub async fn custom_tabs_create(
-    app: AppHandle,
-    window: WebviewWindow,
-    name: String,
-    observed_history_epoch: Option<u64>,
-) -> CmdResult<CustomTabCreateResult> {
-    if name.trim().is_empty() {
-        return Ok(CustomTabCreateResult {
-            result: None,
-            error: Some("invalid-name".to_string()),
-        });
-    }
-
-    let trimmed = name.trim().to_string();
-    let id = generate_custom_tab_id();
-    let tab = CustomTab {
-        id: id.clone(),
-        name: trimmed,
-    };
-    run_history_mutation(
-        app,
-        window.label().to_string(),
-        move |app, state, admission| {
-            custom_tabs_create_inner(state, app, id, tab, observed_history_epoch, admission)
-        },
-    )
-    .await
-}
-
-fn custom_tabs_create_inner(
-    state: &AppState,
-    app: &AppHandle,
-    id: String,
-    tab: CustomTab,
-    observed_history_epoch: Option<u64>,
-    admission: HistoryAdmissionLease,
-) -> CmdResult<CustomTabCreateResult> {
-    let (transaction, key_runtime_applied) = state
-        .commit_editor_transaction_preserving_runtime_counters(app, |runtime_counters| {
-            state
-                .store
-                .commit_aux_editor_transaction_with_runtime_counters_admission(
-                    AuxEditorTransactionOptions {
-                        scope: HistoryScope::CustomTabs,
-                        observed_history_epoch,
-                        origin: EditorCommitOrigin::LegacyAdapter("custom_tabs_create".to_string()),
-                        touched_fields: &[EditorField::Keys, EditorField::KeyPositions],
-                    },
-                    admission,
-                    runtime_counters,
-                    |store| {
-                        if store
-                            .custom_tabs
-                            .iter()
-                            .any(|existing| existing.name == tab.name)
-                        {
-                            return Ok(Err("duplicate-name".to_string()));
-                        }
-                        if store.custom_tabs.len() >= MAX_CUSTOM_TABS {
-                            return Ok(Err("max-reached".to_string()));
-                        }
-                        store.custom_tabs.push(tab.clone());
-                        store.keys.insert(id.clone(), Vec::new());
-                        store.key_positions.insert(id.clone(), Vec::new());
-                        store.selected_key_type = id.clone();
-                        Ok(Ok((tab.clone(), store.custom_tabs.clone())))
-                    },
-                )
-        })?;
-    let (tab, custom_tabs) = match transaction.value {
-        Ok(result) => result,
-        Err(error) => {
-            return Ok(CustomTabCreateResult {
-                result: None,
-                error: Some(error),
-            });
-        }
-    };
-    if key_runtime_applied {
-        publish_editor_change_after_key_runtime(state, app, &transaction.change);
-    } else {
-        publish_editor_change(state, app, &transaction.change, false);
-    }
-
-    emit_best_effort(
-        app,
-        "customTabs:changed",
-        &CustomTabChangePayload {
-            custom_tabs: custom_tabs.clone(),
-            selected_key_type: id.clone(),
-        },
-    );
-    emit_best_effort(app, "keys:changed", &transaction.change.document.keys);
-    emit_best_effort(
-        app,
-        "positions:changed",
-        &transaction.change.document.key_positions,
-    );
-    emit_best_effort(
-        app,
-        "keys:mode-changed",
-        &serde_json::json!({ "mode": &id }),
-    );
-    emit_aux_history_status(app, &transaction.change);
-
-    Ok(CustomTabCreateResult {
-        result: Some(tab),
-        error: None,
-    })
-}
-
-#[tauri::command]
-pub async fn custom_tabs_delete(
-    app: AppHandle,
-    window: WebviewWindow,
-    id: String,
-    observed_history_epoch: Option<u64>,
-) -> CmdResult<CustomTabDeleteResult> {
-    run_history_mutation(
-        app,
-        window.label().to_string(),
-        move |app, state, admission| {
-            custom_tabs_delete_inner(state, app, id, observed_history_epoch, admission)
-        },
-    )
-    .await
-}
-
-fn custom_tabs_delete_inner(
-    state: &AppState,
-    app: &AppHandle,
-    id: String,
-    observed_history_epoch: Option<u64>,
-    admission: HistoryAdmissionLease,
-) -> CmdResult<CustomTabDeleteResult> {
-    let (transaction, key_runtime_applied) = state
-        .commit_editor_transaction_preserving_runtime_counters(app, |runtime_counters| {
-            state
-                .store
-                .commit_aux_editor_reset_transaction_with_runtime_counters_admission(
-                    AuxEditorResetTransactionOptions {
-                        scope: HistoryScope::CustomTabs,
-                        observed_history_epoch,
-                        origin: EditorCommitOrigin::LegacyAdapter("custom_tabs_delete".to_string()),
-                        touched_fields: &[
-                            EditorField::Keys,
-                            EditorField::KeyPositions,
-                            EditorField::StatPositions,
-                            EditorField::GraphPositions,
-                            EditorField::KnobPositions,
-                            EditorField::SpritePositions,
-                            EditorField::LayerGroups,
-                        ],
-                        plugin_instances_reset: PluginInstancesResetScope::Mode(id.clone()),
-                    },
-                    admission,
-                    runtime_counters,
-                    |store| {
-                        let Some(plan) = plan_custom_tab_delete(store, &id) else {
-                            return Ok(Err(store.selected_key_type.clone()));
-                        };
-                        delete_custom_tab_data(store, &id, &plan);
-                        Ok(Ok((
-                            store.custom_tabs.clone(),
-                            store.selected_key_type.clone(),
-                            store.tab_note_overrides.clone(),
-                        )))
-                    },
-                )
-        })?;
-    let (custom_tabs, selected_key_type, tab_note_overrides) = match transaction.value {
-        Ok(result) => result,
-        Err(selected) => {
-            return Ok(CustomTabDeleteResult {
-                success: false,
-                selected,
-                error: Some("not-found".to_string()),
-            });
-        }
-    };
-    if key_runtime_applied {
-        publish_editor_change_after_key_runtime(state, app, &transaction.change);
-    } else {
-        publish_editor_change(state, app, &transaction.change, false);
-    }
-    publish_reset_plugin_instances(app, &transaction.change);
-    state.unwatch_tab_css(&id);
-
-    emit_best_effort(
-        app,
-        "customTabs:changed",
-        &CustomTabChangePayload {
-            custom_tabs,
-            selected_key_type: selected_key_type.clone(),
-        },
-    );
-    emit_best_effort(app, "keys:changed", &transaction.change.document.keys);
-    emit_best_effort(
-        app,
-        "positions:changed",
-        &transaction.change.document.key_positions,
-    );
-    emit_best_effort(
-        app,
-        "statPositions:changed",
-        &transaction.change.document.stat_positions,
-    );
-    emit_best_effort(
-        app,
-        "graphPositions:changed",
-        &transaction.change.document.graph_positions,
-    );
-    emit_best_effort(
-        app,
-        "knobPositions:changed",
-        &transaction.change.document.knob_positions,
-    );
-    emit_best_effort(
-        app,
-        "spritePositions:changed",
-        &transaction.change.document.sprite_positions,
-    );
-    emit_best_effort(
-        app,
-        "layerGroups:changed",
-        &transaction.change.document.layer_groups,
-    );
-    emit_best_effort(app, "tabNote:changed_all", &tab_note_overrides);
-    emit_best_effort(
-        app,
-        "tabCss:changed",
-        &crate::commands::editor::css::TabCssResponse {
-            tab_id: id,
-            css: None,
-        },
-    );
-    emit_best_effort(
-        app,
-        "keys:mode-changed",
-        &serde_json::json!({ "mode": &selected_key_type }),
-    );
-    emit_aux_history_status(app, &transaction.change);
-
-    Ok(CustomTabDeleteResult {
-        success: true,
-        selected: selected_key_type,
-        error: None,
-    })
-}
-
-#[derive(Serialize)]
-pub struct CustomTabSelectResult {
-    pub success: bool,
-    pub selected: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-}
-
-#[tauri::command]
-pub async fn custom_tabs_select(
-    app: AppHandle,
-    window: WebviewWindow,
-    id: String,
-    observed_history_epoch: Option<u64>,
-) -> CmdResult<CustomTabSelectResult> {
-    run_history_mutation(
-        app,
-        window.label().to_string(),
-        move |app, state, admission| {
-            custom_tabs_select_inner(state, app, id, observed_history_epoch, admission)
-        },
-    )
-    .await
-}
-
-fn custom_tabs_select_inner(
-    state: &AppState,
-    app: &AppHandle,
-    id: String,
-    observed_history_epoch: Option<u64>,
-    admission: HistoryAdmissionLease,
-) -> CmdResult<CustomTabSelectResult> {
-    let requested = id;
-    let transaction = state.store.commit_aux_editor_transaction_with_admission(
-        AuxEditorTransactionOptions {
-            scope: HistoryScope::Mode,
-            observed_history_epoch,
-            origin: EditorCommitOrigin::LegacyAdapter("custom_tabs_select".to_string()),
-            touched_fields: &[],
-        },
-        admission,
-        move |store| Ok(select_mode_if_available(store, &requested)),
-    )?;
-    let (success, selected) = transaction.value.clone();
-    if success
-        && state.apply_committed_editor_keys_without_counters(
-            transaction.change.runtime_publication_generation,
-            &transaction.change.document.keys,
-            &selected,
-        )
-    {
-        emit_best_effort(
-            app,
-            "keys:mode-changed",
-            &serde_json::json!({ "mode": &selected }),
-        );
-        state.refresh_obs_snapshot();
-    }
-    emit_aux_history_status(app, &transaction.change);
-
-    Ok(CustomTabSelectResult {
-        success,
-        selected,
-        error: (!success).then(|| "not-found".to_string()),
-    })
-}
-
-/// 커스텀 탭 목록과 선택 모드를 원자적으로 복원
-#[tauri::command]
-pub async fn custom_tabs_restore(
-    app: AppHandle,
-    window: WebviewWindow,
-    custom_tabs: Vec<CustomTab>,
-    selected_key_type: String,
-    observed_history_epoch: Option<u64>,
-) -> CmdResult<()> {
-    run_history_mutation(
-        app,
-        window.label().to_string(),
-        move |app, state, admission| {
-            custom_tabs_restore_inner(
-                state,
-                app,
-                custom_tabs,
-                selected_key_type,
-                observed_history_epoch,
-                admission,
-            )
-        },
-    )
-    .await
-}
-
-fn custom_tabs_restore_inner(
-    state: &AppState,
-    app: &AppHandle,
-    custom_tabs: Vec<CustomTab>,
-    selected_key_type: String,
-    observed_history_epoch: Option<u64>,
-    admission: HistoryAdmissionLease,
-) -> CmdResult<()> {
-    let (transaction, _) =
-        state.commit_editor_transaction_preserving_runtime_counters(app, |runtime_counters| {
-            state
-                .store
-                .commit_aux_editor_transaction_with_runtime_counters_admission(
-                    AuxEditorTransactionOptions {
-                        scope: HistoryScope::CustomTabs,
-                        observed_history_epoch,
-                        origin: EditorCommitOrigin::LegacyAdapter(
-                            "custom_tabs_restore".to_string(),
-                        ),
-                        touched_fields: &[],
-                    },
-                    admission,
-                    runtime_counters,
-                    move |store| {
-                        validate_history_restore_metadata(
-                            &EditorDocumentV1::from_store(store),
-                            &custom_tabs,
-                            &selected_key_type,
-                        )?;
-                        store.custom_tabs = custom_tabs;
-                        store.selected_key_type = selected_key_type;
-                        Ok((store.custom_tabs.clone(), store.selected_key_type.clone()))
-                    },
-                )
-        })?;
-    let (custom_tabs, selected_key_type) = transaction.value;
-
-    state.apply_committed_editor_keys_without_counters(
-        transaction.change.runtime_publication_generation,
-        &transaction.change.document.keys,
-        &selected_key_type,
-    );
-    emit_best_effort(
-        app,
-        "customTabs:changed",
-        &CustomTabChangePayload {
-            custom_tabs,
-            selected_key_type: selected_key_type.clone(),
-        },
-    );
-    emit_best_effort(
-        app,
-        "keys:mode-changed",
-        &serde_json::json!({ "mode": &selected_key_type }),
-    );
-    state.refresh_obs_snapshot();
-    emit_aux_history_status(app, &transaction.change);
-    Ok(())
 }
 
 #[tauri::command]
@@ -1317,900 +1030,4 @@ pub fn raw_input_unsubscribe(state: State<'_, AppState>) -> CmdResult<RawInputSu
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{
-        delete_custom_tab_data, plan_custom_tab_delete, reset_all_editor_data,
-        reset_all_editor_data_with_images, reset_mode_data, reset_mode_data_with_images,
-        reset_mode_kind, select_mode_if_available, set_mode_with, ModeResetKind,
-    };
-    use crate::{
-        defaults::{default_keys, default_positions, default_stat_positions},
-        keyboard::KeyboardManager,
-        models::{
-            AppStoreData, CustomTab, EditorCommitOrigin, EditorField, GraphPosition, GraphStatType,
-            GraphType, KeyCounters, KeySlot, KnobPosition, LayerGroupDef, StatPosition, StatType,
-            TabCss, TabNoteSettings,
-        },
-        state::{
-            app_state::KeyCounterEventEmitter, store::PluginInstancesResetScope, AppState, AppStore,
-        },
-    };
-    use std::{cell::Cell, collections::HashSet};
-
-    const TARGET_TAB: &str = "custom-target";
-
-    struct NoopCounterEmitter;
-
-    impl KeyCounterEventEmitter for NoopCounterEmitter {
-        fn emit_key_counters(
-            &self,
-            _counters: &KeyCounters,
-            _session_id: &str,
-            _revision: u64,
-        ) -> anyhow::Result<()> {
-            Ok(())
-        }
-
-        fn emit_key_counter(
-            &self,
-            _mode: &str,
-            _key: &str,
-            _count: u32,
-            _session_id: &str,
-            _revision: u64,
-        ) -> anyhow::Result<()> {
-            Ok(())
-        }
-    }
-
-    fn populated_custom_tab_store() -> AppStoreData {
-        let position = default_positions()
-            .values()
-            .next()
-            .and_then(|positions| positions.first())
-            .cloned()
-            .expect("default position fixture");
-        let mut store = AppStoreData {
-            custom_tabs: vec![
-                CustomTab {
-                    id: "custom-before".to_string(),
-                    name: "Before".to_string(),
-                },
-                CustomTab {
-                    id: TARGET_TAB.to_string(),
-                    name: "Target".to_string(),
-                },
-            ],
-            selected_key_type: TARGET_TAB.to_string(),
-            ..AppStoreData::default()
-        };
-        store
-            .keys
-            .insert(TARGET_TAB.to_string(), vec![KeySlot::from("KeyD")]);
-        store
-            .key_positions
-            .insert(TARGET_TAB.to_string(), vec![position.clone()]);
-        store.stat_positions.insert(
-            TARGET_TAB.to_string(),
-            vec![StatPosition {
-                stat_type: StatType::Kps,
-                position: position.clone(),
-            }],
-        );
-        store.graph_positions.insert(
-            TARGET_TAB.to_string(),
-            vec![GraphPosition {
-                stat_type: GraphStatType::Kps,
-                graph_type: GraphType::Line,
-                graph_speed: 1,
-                graph_color: "#ffffff".to_string(),
-                show_avg_line: true,
-                position: position.clone(),
-            }],
-        );
-        store.knob_positions.insert(
-            TARGET_TAB.to_string(),
-            vec![KnobPosition {
-                axis_id: "axis".to_string(),
-                sensitivity: 1.0,
-                reverse: false,
-                position,
-            }],
-        );
-        store.layer_groups.insert(
-            TARGET_TAB.to_string(),
-            vec![LayerGroupDef {
-                id: "group".to_string(),
-                name: "Group".to_string(),
-            }],
-        );
-        store
-            .tab_css_overrides
-            .insert(TARGET_TAB.to_string(), TabCss::default());
-        store
-            .tab_note_overrides
-            .insert(TARGET_TAB.to_string(), TabNoteSettings::default());
-        store.key_counters.insert(
-            TARGET_TAB.to_string(),
-            [("KeyD".to_string(), 7)].into_iter().collect(),
-        );
-        store
-    }
-
-    #[test]
-    fn deleting_selected_custom_tab_clears_all_tab_scoped_data() {
-        let mut store = populated_custom_tab_store();
-        let plan = plan_custom_tab_delete(&store, TARGET_TAB).expect("delete plan");
-
-        assert_eq!(plan.next_selected, "custom-before");
-        delete_custom_tab_data(&mut store, TARGET_TAB, &plan);
-
-        assert!(!store.custom_tabs.iter().any(|tab| tab.id == TARGET_TAB));
-        assert!(!store.keys.contains_key(TARGET_TAB));
-        assert!(!store.key_positions.contains_key(TARGET_TAB));
-        assert!(!store.stat_positions.contains_key(TARGET_TAB));
-        assert!(!store.graph_positions.contains_key(TARGET_TAB));
-        assert!(!store.knob_positions.contains_key(TARGET_TAB));
-        assert!(!store.layer_groups.contains_key(TARGET_TAB));
-        assert!(!store.tab_css_overrides.contains_key(TARGET_TAB));
-        assert!(!store.tab_note_overrides.contains_key(TARGET_TAB));
-        assert!(!store.key_counters.contains_key(TARGET_TAB));
-        assert_eq!(store.selected_key_type, "custom-before");
-    }
-
-    #[test]
-    fn reset_all_clears_knob_positions_and_zeroes_default_counters() {
-        let mut store = populated_custom_tab_store();
-        reset_all_editor_data(
-            &mut store,
-            default_keys(),
-            default_positions(),
-            default_stat_positions(),
-        );
-
-        assert!(store.knob_positions.is_empty());
-        assert!(store.custom_tabs.is_empty());
-        assert_eq!(store.selected_key_type, "4key");
-        assert_eq!(store.stat_positions.len(), default_stat_positions().len());
-        assert!(store
-            .key_counters
-            .values()
-            .flat_map(|mode| mode.values())
-            .all(|count| *count == 0));
-    }
-
-    #[test]
-    fn reset_all_issues_a_fresh_globally_unique_id_generation_each_time() {
-        let mut store = populated_custom_tab_store();
-        reset_all_editor_data(
-            &mut store,
-            default_keys(),
-            default_positions(),
-            default_stat_positions(),
-        );
-        let first = store
-            .key_positions
-            .values()
-            .flatten()
-            .map(|position| position.id.clone())
-            .collect::<HashSet<_>>();
-        let first_count = store.key_positions.values().map(Vec::len).sum::<usize>();
-
-        reset_all_editor_data(
-            &mut store,
-            default_keys(),
-            default_positions(),
-            default_stat_positions(),
-        );
-        let second = store
-            .key_positions
-            .values()
-            .flatten()
-            .map(|position| position.id.clone())
-            .collect::<HashSet<_>>();
-
-        assert_eq!(first.len(), first_count);
-        assert_eq!(second.len(), first_count);
-        assert!(first.is_disjoint(&second));
-        assert!(second
-            .iter()
-            .all(|id| crate::state::native_element_id::is_valid_element_id(id)));
-    }
-
-    #[test]
-    fn reset_all_migrates_default_data_url_images_immediately() {
-        let dir = std::env::temp_dir().join(format!(
-            "dmnote-reset-all-default-images-{}",
-            uuid::Uuid::new_v4()
-        ));
-        std::fs::create_dir_all(&dir).unwrap();
-        let mut store = populated_custom_tab_store();
-
-        reset_all_editor_data_with_images(
-            &mut store,
-            default_keys(),
-            default_positions(),
-            default_stat_positions(),
-            &dir,
-        );
-
-        let positions = store
-            .key_positions
-            .values()
-            .flatten()
-            .chain(
-                store
-                    .stat_positions
-                    .values()
-                    .flatten()
-                    .map(|stat| &stat.position),
-            )
-            .chain(
-                store
-                    .graph_positions
-                    .values()
-                    .flatten()
-                    .map(|graph| &graph.position),
-            )
-            .chain(
-                store
-                    .knob_positions
-                    .values()
-                    .flatten()
-                    .map(|knob| &knob.position),
-            )
-            .collect::<Vec<_>>();
-        let image_paths = positions
-            .iter()
-            .flat_map(|position| [&position.active_image, &position.inactive_image])
-            .flatten()
-            .filter(|image| !image.is_empty())
-            .collect::<Vec<_>>();
-        assert!(!image_paths.is_empty());
-        assert!(image_paths.iter().all(|image| !image.starts_with("data:")));
-        assert!(image_paths
-            .iter()
-            .all(|image| std::path::Path::new(image.as_str()).is_file()));
-        assert!(store.stat_positions.values().flatten().all(|stat| {
-            crate::state::native_element_id::is_valid_element_id(&stat.position.id)
-        }));
-
-        std::fs::remove_dir_all(dir).unwrap();
-    }
-
-    #[test]
-    fn custom_mode_reset_is_supported_and_preserves_tab_identity() {
-        let mut store = populated_custom_tab_store();
-        let tabs_before = store.custom_tabs.clone();
-        let kind = reset_mode_kind(&store, TARGET_TAB);
-
-        assert_eq!(kind, Some(ModeResetKind::Custom));
-        reset_mode_data(&mut store, TARGET_TAB, kind.unwrap());
-
-        assert_eq!(store.custom_tabs, tabs_before);
-        assert!(store.keys[TARGET_TAB].is_empty());
-        assert!(store.key_positions[TARGET_TAB].is_empty());
-        assert!(store.stat_positions[TARGET_TAB].is_empty());
-        assert!(store.graph_positions[TARGET_TAB].is_empty());
-        assert!(store.knob_positions[TARGET_TAB].is_empty());
-        assert!(!store.layer_groups.contains_key(TARGET_TAB));
-        assert!(!store.tab_css_overrides.contains_key(TARGET_TAB));
-        assert!(!store.tab_note_overrides.contains_key(TARGET_TAB));
-        assert!(store.key_counters[TARGET_TAB].is_empty());
-    }
-
-    #[test]
-    fn default_mode_reset_clears_knob_positions() {
-        let mut store = AppStoreData::default();
-        store.knob_positions.insert(
-            "4key".to_string(),
-            populated_custom_tab_store().knob_positions[TARGET_TAB].clone(),
-        );
-
-        reset_mode_data(&mut store, "4key", ModeResetKind::Default);
-
-        assert!(store.knob_positions["4key"].is_empty());
-        assert_eq!(
-            store.stat_positions["4key"].len(),
-            default_stat_positions()["4key"].len()
-        );
-    }
-
-    #[test]
-    fn ghost_mode_request_leaves_store_keyboard_and_events_unchanged() {
-        let mut store = AppStoreData {
-            selected_key_type: "8key".to_string(),
-            ..AppStoreData::default()
-        };
-        store
-            .keys
-            .insert("ghost-mode".to_string(), vec![KeySlot::from("KeyA")]);
-        let keyboard = KeyboardManager::new(store.keys.clone(), "8key");
-        let commit_calls = Cell::new(0);
-        let emit_calls = Cell::new(0);
-
-        let response = set_mode_with(
-            &store,
-            "ghost-mode".to_string(),
-            |candidate| {
-                commit_calls.set(commit_calls.get() + 1);
-                Ok(candidate)
-            },
-            |effective| {
-                keyboard.set_mode(effective.to_string());
-                emit_calls.set(emit_calls.get() + 1);
-                Ok(())
-            },
-        )
-        .unwrap();
-
-        assert!(!response.success);
-        assert_eq!(response.mode, "8key");
-        assert_eq!(store.selected_key_type, "8key");
-        assert_eq!(keyboard.current_mode(), "8key");
-        assert_eq!(commit_calls.get(), 0);
-        assert_eq!(emit_calls.get(), 0);
-    }
-
-    #[test]
-    fn absent_mode_request_remains_a_no_op() {
-        let store = AppStoreData {
-            selected_key_type: "8key".to_string(),
-            ..AppStoreData::default()
-        };
-        let keyboard = KeyboardManager::new(store.keys.clone(), "8key");
-        let commit_calls = Cell::new(0);
-        let emit_calls = Cell::new(0);
-
-        let response = set_mode_with(
-            &store,
-            "missing-mode".to_string(),
-            |candidate| {
-                commit_calls.set(commit_calls.get() + 1);
-                Ok(candidate)
-            },
-            |effective| {
-                keyboard.set_mode(effective.to_string());
-                emit_calls.set(emit_calls.get() + 1);
-                Ok(())
-            },
-        )
-        .unwrap();
-
-        assert!(!response.success);
-        assert_eq!(response.mode, "8key");
-        assert_eq!(store.selected_key_type, "8key");
-        assert_eq!(keyboard.current_mode(), "8key");
-        assert_eq!(commit_calls.get(), 0);
-        assert_eq!(emit_calls.get(), 0);
-    }
-
-    #[test]
-    fn selection_after_concurrent_delete_uses_locked_store_state() {
-        let stale_snapshot = populated_custom_tab_store();
-        assert!(super::is_selectable_mode(&stale_snapshot, TARGET_TAB));
-
-        let mut locked_store = stale_snapshot;
-        let delete_plan = plan_custom_tab_delete(&locked_store, TARGET_TAB).unwrap();
-        delete_custom_tab_data(&mut locked_store, TARGET_TAB, &delete_plan);
-        let selected_after_delete = locked_store.selected_key_type.clone();
-
-        let (success, selected) = select_mode_if_available(&mut locked_store, TARGET_TAB);
-
-        assert!(!success);
-        assert_eq!(selected, selected_after_delete);
-        assert_eq!(locked_store.selected_key_type, selected_after_delete);
-        assert!(!locked_store.keys.contains_key(TARGET_TAB));
-    }
-
-    #[test]
-    fn reset_mode_with_changed_keys_preserves_other_live_mode_counters() {
-        let directory = tempfile::tempdir().unwrap();
-        let store = AppStore::initialize_for_test(directory.path()).unwrap();
-        store
-            .update(|data| data.key_counter_enabled = true)
-            .unwrap();
-        let customized = store
-            .commit_legacy_editor_transaction(
-                EditorCommitOrigin::LegacyAdapter("reset-test-setup".to_string()),
-                &[EditorField::Keys, EditorField::KeyPositions],
-                |data| {
-                    data.keys.get_mut("4key").unwrap()[0] = KeySlot::from("QA RESET KEY");
-                    Ok(())
-                },
-            )
-            .unwrap();
-        drop(customized);
-        let state = AppState::initialize(store).unwrap();
-        let emitter = NoopCounterEmitter;
-        let reset_mode = "4key";
-        let reset_key = state.store.snapshot().keys[reset_mode][0].canonical();
-        let preserved_mode = "5key";
-        let preserved_key = state.store.snapshot().keys[preserved_mode][0].canonical();
-        for expected in 1..=3 {
-            assert_eq!(
-                state.increment_key_counter_and_emit(&emitter, reset_mode, &reset_key),
-                Some(expected)
-            );
-        }
-        for expected in 1..=7 {
-            assert_eq!(
-                state.increment_key_counter_and_emit(&emitter, preserved_mode, &preserved_key),
-                Some(expected)
-            );
-        }
-        assert_eq!(
-            state.store.snapshot().key_counters[preserved_mode][&preserved_key],
-            0
-        );
-
-        let admission = state.store.admit_editor_mutation().unwrap();
-        let (transaction, key_runtime_applied) = state
-            .commit_legacy_editor_reset_preserving_runtime_counters(
-                &emitter,
-                EditorCommitOrigin::LegacyAdapter("keys_reset_mode".to_string()),
-                &[
-                    EditorField::Keys,
-                    EditorField::KeyPositions,
-                    EditorField::StatPositions,
-                    EditorField::GraphPositions,
-                    EditorField::KnobPositions,
-                    EditorField::SpritePositions,
-                    EditorField::LayerGroups,
-                ],
-                PluginInstancesResetScope::Mode(reset_mode.to_string()),
-                admission,
-                |data| {
-                    reset_mode_data_with_images(
-                        data,
-                        reset_mode,
-                        ModeResetKind::Default,
-                        directory.path(),
-                    );
-                    Ok(())
-                },
-            )
-            .unwrap();
-        assert!(key_runtime_applied);
-        assert!(transaction
-            .change
-            .result
-            .changed_fields
-            .contains(&EditorField::Keys));
-
-        assert_eq!(
-            state.snapshot_key_counters()[preserved_mode][&preserved_key],
-            7
-        );
-        assert!(state.snapshot_key_counters()[reset_mode]
-            .values()
-            .all(|count| *count == 0));
-        assert_eq!(
-            state.store.snapshot().key_counters[preserved_mode][&preserved_key],
-            7
-        );
-        state.shutdown();
-    }
-
-    #[test]
-    fn reset_mode_with_default_keys_applies_counter_only_reset_to_runtime() {
-        let directory = tempfile::tempdir().unwrap();
-        let store = AppStore::initialize_for_test(directory.path()).unwrap();
-        store
-            .update(|data| data.key_counter_enabled = true)
-            .unwrap();
-        let state = AppState::initialize(store).unwrap();
-        let emitter = NoopCounterEmitter;
-        let mode = "4key";
-        let key = state.store.snapshot().keys[mode][0].canonical();
-        for expected in 1..=7 {
-            assert_eq!(
-                state.increment_key_counter_and_emit(&emitter, mode, &key),
-                Some(expected)
-            );
-        }
-        assert_eq!(state.store.snapshot().key_counters[mode][&key], 0);
-        let generation_before = state.store.runtime_publication_generation();
-
-        let admission = state.store.admit_editor_mutation().unwrap();
-        let (transaction, key_runtime_applied) = state
-            .commit_legacy_editor_reset_preserving_runtime_counters(
-                &emitter,
-                EditorCommitOrigin::LegacyAdapter("keys_reset_mode".to_string()),
-                &[
-                    EditorField::Keys,
-                    EditorField::KeyPositions,
-                    EditorField::StatPositions,
-                    EditorField::GraphPositions,
-                    EditorField::KnobPositions,
-                    EditorField::SpritePositions,
-                    EditorField::LayerGroups,
-                ],
-                PluginInstancesResetScope::Mode(mode.to_string()),
-                admission,
-                |data| {
-                    reset_mode_data_with_images(
-                        data,
-                        mode,
-                        ModeResetKind::Default,
-                        directory.path(),
-                    );
-                    Ok(())
-                },
-            )
-            .unwrap();
-        assert!(key_runtime_applied);
-        assert!(!transaction
-            .change
-            .result
-            .changed_fields
-            .contains(&EditorField::Keys));
-        assert!(transaction.change.runtime_publication_generation > generation_before);
-
-        assert_eq!(state.snapshot_key_counters()[mode][&key], 0);
-        assert_eq!(state.store.snapshot().key_counters[mode][&key], 0);
-        state.shutdown();
-    }
-
-    #[test]
-    fn reset_mode_replays_queued_increment_for_unchanged_mapping() {
-        let directory = tempfile::tempdir().unwrap();
-        let store = AppStore::initialize_for_test(directory.path()).unwrap();
-        store
-            .update(|data| data.key_counter_enabled = true)
-            .unwrap();
-        let state = AppState::initialize(store).unwrap();
-        let emitter = NoopCounterEmitter;
-        let reset_mode = "4key";
-        let reset_key = state.store.snapshot().keys[reset_mode][0].canonical();
-        let preserved_mode = "5key";
-        let preserved_key = state.store.snapshot().keys[preserved_mode][0].canonical();
-        for expected in 1..=3 {
-            assert_eq!(
-                state.increment_key_counter_and_emit(&emitter, reset_mode, &reset_key),
-                Some(expected)
-            );
-        }
-        for expected in 1..=7 {
-            assert_eq!(
-                state.increment_key_counter_and_emit(&emitter, preserved_mode, &preserved_key),
-                Some(expected)
-            );
-        }
-
-        let admission = state.store.admit_editor_mutation().unwrap();
-        let (_, key_runtime_applied) = state
-            .commit_legacy_editor_reset_preserving_runtime_counters(
-                &emitter,
-                EditorCommitOrigin::LegacyAdapter("keys_reset_mode".to_string()),
-                &[
-                    EditorField::Keys,
-                    EditorField::KeyPositions,
-                    EditorField::StatPositions,
-                    EditorField::GraphPositions,
-                    EditorField::KnobPositions,
-                    EditorField::SpritePositions,
-                    EditorField::LayerGroups,
-                ],
-                PluginInstancesResetScope::Mode(reset_mode.to_string()),
-                admission,
-                |data| {
-                    assert_eq!(
-                        state.increment_key_counter_and_emit(&emitter, reset_mode, &reset_key,),
-                        None
-                    );
-                    reset_mode_data_with_images(
-                        data,
-                        reset_mode,
-                        ModeResetKind::Default,
-                        directory.path(),
-                    );
-                    Ok(())
-                },
-            )
-            .unwrap();
-
-        assert!(key_runtime_applied);
-        assert_eq!(state.snapshot_key_counters()[reset_mode][&reset_key], 1);
-        assert_eq!(
-            state.snapshot_key_counters()[preserved_mode][&preserved_key],
-            7
-        );
-        assert_eq!(
-            state.store.snapshot().key_counters[reset_mode][&reset_key],
-            0
-        );
-        assert_eq!(
-            state.store.snapshot().key_counters[preserved_mode][&preserved_key],
-            7
-        );
-        state.shutdown();
-    }
-
-    #[test]
-    fn reset_mode_drops_queued_increment_for_replaced_key() {
-        let directory = tempfile::tempdir().unwrap();
-        let store = AppStore::initialize_for_test(directory.path()).unwrap();
-        store
-            .update(|data| data.key_counter_enabled = true)
-            .unwrap();
-        let mode = "4key";
-        let replaced_key = "QA REPLACED KEY";
-        let setup = store
-            .commit_legacy_editor_transaction(
-                EditorCommitOrigin::LegacyAdapter("reset-queue-test-setup".to_string()),
-                &[EditorField::Keys, EditorField::KeyPositions],
-                |data| {
-                    data.keys.get_mut(mode).unwrap()[0] = KeySlot::from(replaced_key);
-                    Ok(())
-                },
-            )
-            .unwrap();
-        drop(setup);
-        let state = AppState::initialize(store).unwrap();
-        let emitter = NoopCounterEmitter;
-
-        let admission = state.store.admit_editor_mutation().unwrap();
-        let (_, key_runtime_applied) = state
-            .commit_legacy_editor_reset_preserving_runtime_counters(
-                &emitter,
-                EditorCommitOrigin::LegacyAdapter("keys_reset_mode".to_string()),
-                &[
-                    EditorField::Keys,
-                    EditorField::KeyPositions,
-                    EditorField::StatPositions,
-                    EditorField::GraphPositions,
-                    EditorField::KnobPositions,
-                    EditorField::SpritePositions,
-                    EditorField::LayerGroups,
-                ],
-                PluginInstancesResetScope::Mode(mode.to_string()),
-                admission,
-                |data| {
-                    assert_eq!(
-                        state.increment_key_counter_and_emit(&emitter, mode, replaced_key),
-                        None
-                    );
-                    reset_mode_data_with_images(
-                        data,
-                        mode,
-                        ModeResetKind::Default,
-                        directory.path(),
-                    );
-                    Ok(())
-                },
-            )
-            .unwrap();
-
-        assert!(key_runtime_applied);
-        assert!(!state.snapshot_key_counters()[mode].contains_key(replaced_key));
-        assert!(!state.store.snapshot().key_counters[mode].contains_key(replaced_key));
-        state.shutdown();
-        drop(state);
-        let reloaded = AppStore::initialize_for_test(directory.path()).unwrap();
-        assert!(!reloaded.snapshot().key_counters[mode].contains_key(replaced_key));
-        reloaded.flush_and_shutdown().unwrap();
-    }
-
-    #[test]
-    fn reset_all_drops_queued_increment_for_removed_custom_mode() {
-        let directory = tempfile::tempdir().unwrap();
-        let store = AppStore::initialize_for_test(directory.path()).unwrap();
-        store
-            .update(|data| data.key_counter_enabled = true)
-            .unwrap();
-        let mode = "qa-removed-custom-mode";
-        let key = "QA REMOVED KEY";
-        let mut position = default_positions()["4key"][0].clone();
-        position.id = uuid::Uuid::new_v4().to_string();
-        let setup = store
-            .commit_legacy_editor_transaction(
-                EditorCommitOrigin::LegacyAdapter("reset-queue-test-setup".to_string()),
-                &[EditorField::Keys, EditorField::KeyPositions],
-                |data| {
-                    data.custom_tabs.push(CustomTab {
-                        id: mode.to_string(),
-                        name: "Removed during reset".to_string(),
-                    });
-                    data.keys.insert(mode.to_string(), vec![KeySlot::from(key)]);
-                    data.key_positions.insert(mode.to_string(), vec![position]);
-                    data.selected_key_type = mode.to_string();
-                    Ok(())
-                },
-            )
-            .unwrap();
-        drop(setup);
-        let state = AppState::initialize(store).unwrap();
-        let emitter = NoopCounterEmitter;
-
-        let admission = state.store.admit_editor_mutation().unwrap();
-        let (_, key_runtime_applied) = state
-            .commit_legacy_editor_reset_preserving_runtime_counters(
-                &emitter,
-                EditorCommitOrigin::LegacyAdapter("keys_reset_all".to_string()),
-                &[
-                    EditorField::Keys,
-                    EditorField::KeyPositions,
-                    EditorField::StatPositions,
-                    EditorField::GraphPositions,
-                    EditorField::KnobPositions,
-                    EditorField::SpritePositions,
-                    EditorField::LayerGroups,
-                ],
-                PluginInstancesResetScope::All,
-                admission,
-                |data| {
-                    assert_eq!(
-                        state.increment_key_counter_and_emit(&emitter, mode, key),
-                        None
-                    );
-                    reset_all_editor_data_with_images(
-                        data,
-                        default_keys(),
-                        default_positions(),
-                        default_stat_positions(),
-                        directory.path(),
-                    );
-                    Ok(())
-                },
-            )
-            .unwrap();
-
-        assert!(key_runtime_applied);
-        assert!(!state.snapshot_key_counters().contains_key(mode));
-        assert!(!state.store.snapshot().key_counters.contains_key(mode));
-        state.shutdown();
-        drop(state);
-        let reloaded = AppStore::initialize_for_test(directory.path()).unwrap();
-        assert!(!reloaded.snapshot().key_counters.contains_key(mode));
-        reloaded.flush_and_shutdown().unwrap();
-    }
-
-    #[test]
-    fn reset_all_with_default_keys_applies_counter_only_reset_to_runtime() {
-        let directory = tempfile::tempdir().unwrap();
-        let store = AppStore::initialize_for_test(directory.path()).unwrap();
-        store
-            .update(|data| data.key_counter_enabled = true)
-            .unwrap();
-        let state = AppState::initialize(store).unwrap();
-        let emitter = NoopCounterEmitter;
-        let mode = "4key";
-        let key = state.store.snapshot().keys[mode][0].canonical();
-        for expected in 1..=7 {
-            assert_eq!(
-                state.increment_key_counter_and_emit(&emitter, mode, &key),
-                Some(expected)
-            );
-        }
-        assert_eq!(state.store.snapshot().key_counters[mode][&key], 0);
-        let generation_before = state.store.runtime_publication_generation();
-
-        let admission = state.store.admit_editor_mutation().unwrap();
-        let (transaction, key_runtime_applied) = state
-            .commit_legacy_editor_reset_preserving_runtime_counters(
-                &emitter,
-                EditorCommitOrigin::LegacyAdapter("keys_reset_all".to_string()),
-                &[
-                    EditorField::Keys,
-                    EditorField::KeyPositions,
-                    EditorField::StatPositions,
-                    EditorField::GraphPositions,
-                    EditorField::KnobPositions,
-                    EditorField::SpritePositions,
-                    EditorField::LayerGroups,
-                ],
-                PluginInstancesResetScope::All,
-                admission,
-                |data| {
-                    reset_all_editor_data_with_images(
-                        data,
-                        default_keys(),
-                        default_positions(),
-                        default_stat_positions(),
-                        directory.path(),
-                    );
-                    Ok(())
-                },
-            )
-            .unwrap();
-        assert!(key_runtime_applied);
-        assert!(!transaction
-            .change
-            .result
-            .changed_fields
-            .contains(&EditorField::Keys));
-        assert!(transaction.change.runtime_publication_generation > generation_before);
-
-        assert_eq!(state.snapshot_key_counters()[mode][&key], 0);
-        assert!(state
-            .store
-            .snapshot()
-            .key_counters
-            .values()
-            .flat_map(|counters| counters.values())
-            .all(|count| *count == 0));
-        state.shutdown();
-    }
-
-    #[test]
-    fn reset_all_with_changed_keys_zeroes_every_live_counter() {
-        let directory = tempfile::tempdir().unwrap();
-        let store = AppStore::initialize_for_test(directory.path()).unwrap();
-        store
-            .update(|data| data.key_counter_enabled = true)
-            .unwrap();
-        let customized = store
-            .commit_legacy_editor_transaction(
-                EditorCommitOrigin::LegacyAdapter("reset-all-test-setup".to_string()),
-                &[EditorField::Keys, EditorField::KeyPositions],
-                |data| {
-                    data.keys.get_mut("4key").unwrap()[0] = KeySlot::from("QA RESET ALL KEY");
-                    Ok(())
-                },
-            )
-            .unwrap();
-        drop(customized);
-        let state = AppState::initialize(store).unwrap();
-        let emitter = NoopCounterEmitter;
-        for mode in ["4key", "5key"] {
-            let key = state.store.snapshot().keys[mode][0].canonical();
-            for expected in 1..=7 {
-                assert_eq!(
-                    state.increment_key_counter_and_emit(&emitter, mode, &key),
-                    Some(expected)
-                );
-            }
-        }
-
-        let admission = state.store.admit_editor_mutation().unwrap();
-        let (transaction, key_runtime_applied) = state
-            .commit_legacy_editor_reset_preserving_runtime_counters(
-                &emitter,
-                EditorCommitOrigin::LegacyAdapter("keys_reset_all".to_string()),
-                &[
-                    EditorField::Keys,
-                    EditorField::KeyPositions,
-                    EditorField::StatPositions,
-                    EditorField::GraphPositions,
-                    EditorField::KnobPositions,
-                    EditorField::SpritePositions,
-                    EditorField::LayerGroups,
-                ],
-                PluginInstancesResetScope::All,
-                admission,
-                |data| {
-                    reset_all_editor_data_with_images(
-                        data,
-                        default_keys(),
-                        default_positions(),
-                        default_stat_positions(),
-                        directory.path(),
-                    );
-                    Ok(())
-                },
-            )
-            .unwrap();
-
-        assert!(key_runtime_applied);
-        assert!(transaction
-            .change
-            .result
-            .changed_fields
-            .contains(&EditorField::Keys));
-        assert_eq!(transaction.change.document.keys, *default_keys());
-        assert!(state
-            .snapshot_key_counters()
-            .values()
-            .flat_map(|counters| counters.values())
-            .all(|count| *count == 0));
-        assert!(state
-            .store
-            .snapshot()
-            .key_counters
-            .values()
-            .flat_map(|counters| counters.values())
-            .all(|count| *count == 0));
-        state.shutdown();
-    }
-}
+mod tests;

@@ -1,6 +1,5 @@
 import React, {
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -13,9 +12,6 @@ declare global {
   }
 }
 import { useTranslation } from '@contexts/useTranslation';
-import DraggableKey from '@components/shared/Key';
-import { commitElementPosition } from '@src/renderer/hooks/Grid/elementPositionCommit';
-import { deleteElementById } from '@src/renderer/editor/runtime/elementOps';
 import {
   commitStableLayerZOrder,
   orderStableZTargetsForBatch,
@@ -24,11 +20,14 @@ import {
   reportElementOpError,
   reportElementOpSkipped,
 } from '@src/renderer/editor/runtime/elementIntent';
-import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
+import {
+  resolveElementById,
+  type NativeElementType,
+} from '@src/renderer/editor/model/elementIdMap';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import TabCssModal from '../../Modal/content/editors/TabCssModal';
 import TabNoteSettingModal from '../../Modal/content/editors/TabNoteSettingModal';
-import ListPopup, { type ListItem } from '../../Modal/ListPopup';
+import ListPopup from '../../Modal/ListPopup';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
@@ -48,32 +47,12 @@ import GridMinimap from './GridMinimap';
 import GridBackground from './GridBackground';
 import SmartGuidesOverlay from '../overlays/SmartGuidesOverlay';
 import MarqueeSelectionOverlay from '../overlays/MarqueeSelectionOverlay';
-import ResizeHandles from '../handles/ResizeHandles';
-import GradientAxisOverlay from '../handles/GradientAxisHandle';
-import SpriteCanvasHandles from '../handles/SpriteCanvasHandles';
-import { SELECTION_BORDER_WIDTH } from '../handles/selectionOutline';
-import { matchSpriteAnchorPreset } from '@utils/sprite/spriteGeometry';
-import { useSpritePoseHandleStore } from '@stores/grid/useSpritePoseHandleStore';
 import { useGradientEditStore } from '@stores/grid/useGradientEditStore';
-import GroupResizeHandles from '../handles/GroupResizeHandles';
-import {
-  getElementBounds,
-  isAspectLockedElement,
-  isElementResizable,
-} from '../handles/groupResizeUtils';
+import { useSpritePoseHandleStore } from '@stores/grid/useSpritePoseHandleStore';
 import { getGridViewportLayerStyles } from '@utils/core/gridViewportStyles';
 import KeyCounterPreviewLayer from '../layers/KeyCounterPreviewLayer';
 import StatCounterLayer from '../layers/StatCounterLayer';
-import GraphItem from '../layers/GraphItem';
-import KnobItem from '../layers/KnobItem';
-import SpriteItem from '../layers/SpriteItem';
-import SpriteDuplicateGhost from '../layers/SpriteDuplicateGhost';
-import type { GridItemProps } from '../layers/gridItemProps';
-import DuplicateGhostHost from '../layers/DuplicateGhostHost';
-import {
-  useGridSelectionStore,
-  isElementInMarquee,
-} from '@stores/grid/useGridSelectionStore';
+import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { openPropertiesPanelForSelection } from '@stores/grid/usePanelHostStore';
 import { useUIStore } from '@stores/useUIStore';
 import { useSmartGuidesStore } from '@stores/grid/useSmartGuidesStore';
@@ -90,33 +69,12 @@ import {
 import { createDefaultCounterSettings } from '@src/types/key/keys';
 import type {
   KeyMappings,
-  KeyPosition,
   KeyCounterSettings,
   CounterAnimationBezier,
 } from '@src/types/key/keys';
 import { slotCanonical, slotDisplayName } from '@utils/keySlot';
 import { overlayApi } from '@api/modules/overlayApi';
 import { panelWindowApi } from '@api/modules/panelWindowApi';
-import type { StatItemPosition } from '@src/types/key/statItems';
-import { resolveImageSource } from '@utils/core/imageSource';
-import {
-  DEFAULT_IMAGE_MODE,
-  imageTransformToCss,
-} from '@src/types/key/imageLayer';
-import type { ReactiveSpritePosition } from '@src/types/key/sprites';
-import {
-  DEFAULT_ELEMENT_BG,
-  DEFAULT_ELEMENT_FONT,
-  DEFAULT_ELEMENT_RADIUS,
-  DEFAULT_ELEMENT_SHADOW_SPEC,
-  DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
-} from '@utils/core/elementDefaults';
-import { resolveElementBorder } from '@utils/core/elementBorder';
-import { gradientRingStyle, gradientToCss } from '@src/types/color';
-import {
-  elementShadowToCss,
-  resolveElementShadow,
-} from '@src/types/key/shadows';
 import {
   groupSelectedElements,
   ungroupSelectedElements,
@@ -128,25 +86,20 @@ import {
   subscribePreviewOverlay,
 } from '@src/renderer/editor/runtime/previewOverlay';
 import {
-  beginPluginInstancesEditSession,
-  endPluginInstancesEditSession,
-} from '@plugins/runtime/displayElement/instancesCommitQueue';
-import {
-  beginMixedGestureTransaction,
-  cancelUncommittedMixedGestureTransaction,
-} from '@plugins/runtime/displayElement/gestureTransaction';
-import { createNativePositionDragReceipt } from '@src/renderer/editor/runtime/elementIntent';
-import { createPluginPositionDragReceipt } from '@plugins/runtime/displayElement/pluginElementActions';
-import {
-  commitStableHandlerSlots,
-  getStableHandlers,
-  type PendingHandlerSlotMap,
-  type StableHandlerSlotMap,
-} from './stableHandlerSlots';
+  buildMixedSelectionMenuItems,
+  gridAddTypeForMenuItem,
+  isStableNativeSelection,
+  shouldOpenMixedSelectionMenu,
+} from './gridContextMenuModel';
+import DuplicateElementGhost from './DuplicateElementGhost';
+import NativeGridElements from './NativeGridElements';
+import GridSelectionOverlays from '../overlays/GridSelectionOverlays';
+import { executeNativeContextMenuAction } from './nativeContextMenuActions';
+import { useSelectedElementDragLifecycle } from '@hooks/Grid/useSelectedElementDragLifecycle';
 
 type ToolbarAddRequest = {
   id: number;
-  type: 'key' | 'stat' | 'graph' | 'knob' | 'sprite';
+  type: NativeElementType;
 } | null;
 
 interface GridProps {
@@ -171,14 +124,6 @@ interface GridProps {
   onToolbarAddConsumed: (() => void) | undefined;
   isNoteSettingOpen: boolean;
   setIsNoteSettingOpen: (open: boolean) => void;
-}
-
-function getStatTypeLabel(type: string): string {
-  if (type === 'kps') return 'KPS';
-  if (type === 'kpsAvg') return 'AVG';
-  if (type === 'kpsMax') return 'MAX';
-  if (type === 'total') return 'Total';
-  return String(type || '');
 }
 
 const Grid = ({
@@ -294,86 +239,6 @@ const Grid = ({
   const pluginElements = usePluginDisplayElementStore(
     (state) => state.elements,
   );
-  const selectedDragGestureIdRef = useRef<string | null>(null);
-  const selectedDragPositionReceiptRef = useRef<ReturnType<
-    typeof createPluginPositionDragReceipt
-  > | null>(null);
-
-  const selectedDragNativeReceiptRef = useRef<ReturnType<
-    typeof createNativePositionDragReceipt
-  > | null>(null);
-
-  const moveSelectedElementsDrag = (deltaX: number, deltaY: number) => {
-    const move = () => moveSelectedElements(deltaX, deltaY, undefined, false);
-    const receipt = selectedDragPositionReceiptRef.current;
-    const movePlugins = () => {
-      if (receipt) receipt.apply(move);
-      else move();
-    };
-    const nativeReceipt = selectedDragNativeReceiptRef.current;
-    if (nativeReceipt) nativeReceipt.apply(movePlugins);
-    else movePlugins();
-  };
-
-  const beginSelectedPluginInstancesDrag = () => {
-    const gestureId = crypto.randomUUID();
-    selectedDragGestureIdRef.current = gestureId;
-    freezeSelectionForGesture();
-    const frozenSelection = useGridSelectionStore.getState().selectedElements;
-    const nativeReceipt = createNativePositionDragReceipt(
-      frozenSelection.flatMap(({ type, id }) =>
-        type === 'plugin' ? [] : [{ type, id }],
-      ),
-    );
-    selectedDragNativeReceiptRef.current = nativeReceipt;
-    const selectedPluginElementIds = new Set(
-      frozenSelection
-        .filter((element) => element.type === 'plugin')
-        .map((element) => element.id),
-    );
-    const tokens = new Map<string, string>();
-    const positionReceipt = createPluginPositionDragReceipt(
-      selectedPluginElementIds,
-    );
-    selectedDragPositionReceiptRef.current = positionReceipt;
-    usePluginDisplayElementStore
-      .getState()
-      .elements.filter((element) =>
-        selectedPluginElementIds.has(element.fullId),
-      )
-      .forEach((element) => {
-        if (!tokens.has(element.pluginId)) {
-          tokens.set(
-            element.pluginId,
-            beginPluginInstancesEditSession(element.pluginId, gestureId),
-          );
-        }
-      });
-    if (tokens.size > 0) {
-      beginMixedGestureTransaction(gestureId, [...tokens.keys()]);
-    }
-    return (commit = true) => {
-      if (!commit) {
-        nativeReceipt.rollback();
-        cancelUncommittedMixedGestureTransaction(gestureId, {
-          discardPendingSave: true,
-          beforeDiscard: positionReceipt.rollback,
-        });
-      }
-      tokens.forEach((token, pluginId) => {
-        endPluginInstancesEditSession(pluginId, token);
-      });
-      // 종료 경로가 혼합 커밋을 타지 않은 경우 staged 잔존으로 barrier가
-      // 영구 대기하지 않도록 미커밋 staged만 정산
-      cancelUncommittedMixedGestureTransaction(gestureId);
-      if (selectedDragGestureIdRef.current === gestureId) {
-        selectedDragGestureIdRef.current = null;
-        selectedDragPositionReceiptRef.current = null;
-        selectedDragNativeReceiptRef.current = null;
-      }
-    };
-  };
-
   // 내장 통계 요소(Stat Items) 위치 정보
   const canonicalStatPositions = useStatItemStore((state) => state.positions);
   const canonicalGraphPositions = useGraphItemStore((state) => state.positions);
@@ -415,13 +280,16 @@ const Grid = ({
     keyMappings,
     positions,
   });
-  const commitSelectedElementsDrag = () => {
-    // 동결 집합은 훅이 소유한다 - 여기서 인자를 넘기지 않아도 시작 시점
-    // 대상으로 정산된다
-    syncSelectedElementsToOverlay(
-      selectedDragGestureIdRef.current ?? undefined,
-    );
-  };
+  const {
+    beginSelectedElementsDrag: beginSelectedPluginInstancesDrag,
+    commitSelectedElementsDrag,
+    moveSelectedElementsDrag,
+  } = useSelectedElementDragLifecycle({
+    freezeSelectionForGesture,
+    syncSelectedElementsToOverlay,
+    moveSelectedElements: (deltaX, deltaY) =>
+      moveSelectedElements(deltaX, deltaY, undefined, false),
+  });
 
   // 마퀴 선택 훅 사용
   const { isMarqueeSelecting: _isMarqueeSelecting, startMarqueeSelection } =
@@ -509,11 +377,6 @@ const Grid = ({
     x: number;
     y: number;
   } | null>(null);
-  const keyRefs = useRef<(HTMLElement | null)[]>([]);
-  const statRefs = useRef<(HTMLElement | null)[]>([]);
-  const graphRefs = useRef<(HTMLElement | null)[]>([]);
-  const knobRefs = useRef<(HTMLElement | null)[]>([]);
-  const spriteRefs = useRef<(HTMLElement | null)[]>([]);
   const gridRef = useRef<HTMLDivElement | null>(null);
   const [duplicateState, setDuplicateState] = useState<DuplicateState | null>(
     null,
@@ -523,89 +386,27 @@ const Grid = ({
     y: number;
   } | null>(null);
   const lastMousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const mixedSelectionMenuItems = (() => {
-    const items: ListItem[] = [
-      { id: 'delete', label: t('contextMenu.deleteSelected') },
-      { id: 'duplicate', label: t('contextMenu.duplicateSelected') },
-    ];
-
-    if (selectedElements.length >= 2) {
-      // 선택된 요소들의 그룹 상태 확인
-      const modeKeyPos = positions[selectedKeyType] || [];
-      const modeStatPos =
-        useStatItemStore.getState().positions[selectedKeyType] || [];
-      const modeGraphPos =
-        useGraphItemStore.getState().positions[selectedKeyType] || [];
-      const modeKnobPos =
-        useKnobItemStore.getState().positions[selectedKeyType] || [];
-      const modeSpritePos =
-        useSpriteStore.getState().positions[selectedKeyType] || [];
-
-      let anyInGroup = false;
-      let allInSameGroup = true;
-      let firstGroupId;
-      let first = true;
-
-      const modeGroupIds = new Set(
-        (useLayerGroupStore.getState().layerGroups[selectedKeyType] || []).map(
-          (group) => group.id,
-        ),
-      );
-      selectedElements.forEach((el) => {
-        let gid;
-        if (el.type === 'key') {
-          gid = modeKeyPos.find((position) => position.id === el.id)?.groupId;
-        } else if (el.type === 'stat') {
-          gid = modeStatPos.find((position) => position.id === el.id)?.groupId;
-        } else if (el.type === 'graph') {
-          gid = modeGraphPos.find((position) => position.id === el.id)?.groupId;
-        } else if (el.type === 'knob') {
-          gid = modeKnobPos.find((position) => position.id === el.id)?.groupId;
-        } else if (el.type === 'sprite') {
-          gid =
-            modeSpritePos.find((position) => position.id === el.id)?.groupId ??
-            undefined;
-        } else if (el.type === 'plugin') {
-          // 플러그인 소속도 그룹 메뉴 판정에 포함 - 모드 def가 있는 것만 유효
-          const pluginGroupId = usePluginDisplayElementStore
-            .getState()
-            .elements.find((candidate) => candidate.fullId === el.id)?.groupId;
-          gid =
-            pluginGroupId && modeGroupIds.has(pluginGroupId)
-              ? pluginGroupId
-              : undefined;
+  const mixedSelectionMenuItems = buildMixedSelectionMenuItems(
+    selectedElements,
+    selectedElements.length >= 2
+      ? {
+          mode: selectedKeyType,
+          keyPositions: positions[selectedKeyType] || [],
+          statPositions:
+            useStatItemStore.getState().positions[selectedKeyType] || [],
+          graphPositions:
+            useGraphItemStore.getState().positions[selectedKeyType] || [],
+          knobPositions:
+            useKnobItemStore.getState().positions[selectedKeyType] || [],
+          spritePositions:
+            useSpriteStore.getState().positions[selectedKeyType] || [],
+          pluginElements: usePluginDisplayElementStore.getState().elements,
+          modeGroups:
+            useLayerGroupStore.getState().layerGroups[selectedKeyType] || [],
         }
-        if (gid) anyInGroup = true;
-        if (first) {
-          firstGroupId = gid;
-          first = false;
-        } else if (gid !== firstGroupId) allInSameGroup = false;
-      });
-
-      if (anyInGroup && allInSameGroup && firstGroupId) {
-        // 모두 같은 그룹 → 그룹 해제만
-        items.push({ id: 'ungroupSelected', label: t('contextMenu.ungroup') });
-      } else if (!anyInGroup) {
-        // 그룹 없음 → 그룹화만
-        items.push({
-          id: 'groupSelected',
-          label: t('contextMenu.groupSelected'),
-        });
-      } else {
-        // 혼합 → 둘 다
-        items.push({
-          id: 'groupSelected',
-          label: t('contextMenu.groupSelected'),
-        });
-        items.push({ id: 'ungroupSelected', label: t('contextMenu.ungroup') });
-      }
-    }
-
-    items.push({ id: 'bringToFront', label: t('contextMenu.bringToFront') });
-    items.push({ id: 'sendToBack', label: t('contextMenu.sendToBack') });
-
-    return items;
-  })();
+      : null,
+    t,
+  );
 
   const openMixedSelectionContextMenu = (
     x: number,
@@ -617,12 +418,6 @@ const Grid = ({
     contextRef.current = referenceNode || null;
     setContextPosition({ x, y });
     setIsContextOpen(true);
-  };
-
-  const shouldOpenMixedSelectionMenu = (clickedId: string) => {
-    if (selectedElements.length <= 1) return false;
-    if (!selectedElements.some((el) => el.id === clickedId)) return false;
-    return true;
   };
 
   // 클라이언트 좌표를 그리드 좌표로 변환 (줌/팬 반영)
@@ -661,26 +456,57 @@ const Grid = ({
     setDuplicateCursor(null);
   };
 
+  const beginDuplicateKey = (sourceIndex: number) => {
+    const sourceSlot =
+      useKeyStore.getState().keyMappings[selectedKeyType]?.[sourceIndex];
+    const position =
+      useKeyStore.getState().canonicalPositions[selectedKeyType]?.[
+        sourceIndex
+      ] || null;
+    if (!position || typeof sourceSlot === 'undefined') return;
+
+    const clonedNoteColor =
+      position.noteColor &&
+      typeof position.noteColor === 'object' &&
+      position.noteColor !== null
+        ? { ...position.noteColor }
+        : position.noteColor;
+    const clonedCounter: KeyCounterSettings | null = position.counter
+      ? {
+          ...position.counter,
+          fill: { ...position.counter.fill },
+          ...(position.counter.animation
+            ? {
+                animation: {
+                  ...position.counter.animation,
+                  bezier: [
+                    ...position.counter.animation.bezier,
+                  ] as CounterAnimationBezier,
+                },
+              }
+            : {}),
+        }
+      : null;
+    const currentMousePos = lastMousePosRef.current;
+    computeSnappedCursorFromClient(currentMousePos.x, currentMousePos.y);
+    setDuplicateState({
+      elementType: 'key',
+      sourceIndex,
+      slot: sourceSlot,
+      keyName: slotDisplayName(sourceSlot),
+      position: {
+        ...position,
+        noteColor: clonedNoteColor,
+        counter: clonedCounter ?? createDefaultCounterSettings(),
+      },
+    });
+    setDuplicateCursor(null);
+  };
+
   const duplicateSelectedFromContextMenu = async () => {
     copySelectedElements();
     await pasteElements().catch(reportElementOpError);
   };
-
-  // 외부 선택 입력도 canonical native id 경계에서 재검증
-  const isStableNativeSelection = (el: {
-    type: string;
-    id: string;
-  }): el is {
-    type: 'key' | 'stat' | 'graph' | 'knob' | 'sprite';
-    id: string;
-  } =>
-    (el.type === 'key' ||
-      el.type === 'stat' ||
-      el.type === 'graph' ||
-      el.type === 'knob' ||
-      el.type === 'sprite') &&
-    el.id.length > 0 &&
-    isNativeElementId(el.id);
 
   const moveSelectedToFront = async () => {
     if (selectedElements.length === 0) return;
@@ -695,13 +521,7 @@ const Grid = ({
         mode: selectedKeyType,
         targets: orderStableZTargetsForBatch(
           selectedElements.map((element) => ({
-            type: element.type as
-              | 'key'
-              | 'stat'
-              | 'graph'
-              | 'knob'
-              | 'sprite'
-              | 'plugin',
+            type: element.type as NativeElementType | 'plugin',
             id: element.id,
           })),
         ),
@@ -726,13 +546,7 @@ const Grid = ({
         mode: selectedKeyType,
         targets: orderStableZTargetsForBatch(
           selectedElements.map((element) => ({
-            type: element.type as
-              | 'key'
-              | 'stat'
-              | 'graph'
-              | 'knob'
-              | 'sprite'
-              | 'plugin',
+            type: element.type as NativeElementType | 'plugin',
             id: element.id,
           })),
         ),
@@ -847,10 +661,7 @@ const Grid = ({
   }, []);
 
   // 요소 클릭 시 그룹 멤버 자동 선택
-  const selectElementWithGroup = (
-    type: 'key' | 'stat' | 'graph' | 'knob' | 'sprite',
-    index: number,
-  ) => {
+  const selectElementWithGroup = (type: NativeElementType, index: number) => {
     if (isContextOpen) {
       setIsContextOpen(false);
       setContextPosition(null);
@@ -889,12 +700,26 @@ const Grid = ({
     setSelectedElements(nextSelection);
   };
 
-  // 더블클릭 편집 진입 — 대상이 다중 선택의 멤버면 선택을 보존해 배치 편집으로,
-  // 아니면 해당 요소(+그룹)만 선택해 단일 편집으로 property 페이지를 연다
-  const openElementEditor = (
-    type: 'key' | 'stat' | 'graph' | 'knob' | 'sprite',
+  const toggleNativeElementSelection = (
+    type: NativeElementType,
     index: number,
   ) => {
+    const elementId =
+      type === 'key'
+        ? positions[selectedKeyType][index].id
+        : type === 'stat'
+        ? useStatItemStore.getState().positions[selectedKeyType][index].id
+        : type === 'graph'
+        ? useGraphItemStore.getState().positions[selectedKeyType][index].id
+        : type === 'sprite'
+        ? useSpriteStore.getState().positions[selectedKeyType][index].id
+        : useKnobItemStore.getState().positions[selectedKeyType][index].id;
+    toggleSelection({ type, id: elementId, index });
+  };
+
+  // 더블클릭 편집 진입 — 대상이 다중 선택의 멤버면 선택을 보존해 배치 편집으로,
+  // 아니면 해당 요소(+그룹)만 선택해 단일 편집으로 property 페이지를 연다
+  const openElementEditor = (type: NativeElementType, index: number) => {
     const { selectedElements: currentSelection } =
       useGridSelectionStore.getState();
     const positionsForType =
@@ -920,7 +745,7 @@ const Grid = ({
 
   // 요소 컨텍스트 메뉴 열기
   const openElementContextMenu = (
-    type: 'key' | 'stat' | 'graph' | 'knob' | 'sprite',
+    type: NativeElementType,
     index: number,
     clientX: number,
     clientY: number,
@@ -944,7 +769,10 @@ const Grid = ({
     // TypeError가 나고 에러 바운더리가 없어 앱이 통째로 언마운트된다.
     // id가 없으면 혼합 선택 판정 자체가 성립하지 않으므로 그냥 건너뛴다
     const clickedId = clickedPosition?.id;
-    if (clickedId && shouldOpenMixedSelectionMenu(clickedId)) {
+    if (
+      clickedId &&
+      shouldOpenMixedSelectionMenu(selectedElements, clickedId)
+    ) {
       openMixedSelectionContextMenu(clientX, clientY, ref);
       return;
     }
@@ -958,590 +786,6 @@ const Grid = ({
     contextRef.current = ref;
     setContextPosition({ x: clientX, y: clientY });
     setIsContextOpen(true);
-  };
-
-  // 자식에게 넘기는 콜백 참조를 요소별로 한 번만 만든다.
-  //
-  // 인라인 화살표를 그대로 넘기면 렌더마다 새 함수라 DraggableKey의 React.memo가
-  // 항상 깨진다. 그러면 값 하나가 바뀌는 프리뷰에도 화면의 모든 요소가 다시 그려진다
-  // (실측 키 100개 기준 3.13ms -> 0.35ms, 200개 7.32ms -> 0.62ms).
-  // 참조는 고정하고 실제 동작은 매 렌더 최신 구현으로 갈아끼워 값은 항상 최신을 본다
-  const handlerSlotsRef = useRef<StableHandlerSlotMap>(new Map());
-
-  // 최신 구현 교체는 커밋 시점에만. 렌더 중에 바꾸면 React가 그 렌더를 버렸을 때
-  // 화면에는 이전 트리가 붙어 있는데 이벤트만 폐기된 렌더의 클로저를 호출한다
-  const pendingImplRef = useRef<PendingHandlerSlotMap>(new Map());
-  pendingImplRef.current.clear();
-
-  const stableHandlers = <
-    T extends Record<string, (...args: never[]) => unknown>,
-  >(
-    id: string,
-    impl: T,
-  ): T =>
-    getStableHandlers(
-      handlerSlotsRef.current,
-      pendingImplRef.current,
-      id,
-      impl,
-    );
-
-  useLayoutEffect(() => {
-    commitStableHandlerSlots(handlerSlotsRef.current, pendingImplRef.current);
-  });
-
-  const renderKeys = () => {
-    if (!positions[selectedKeyType]) return null;
-
-    return positions[selectedKeyType].map(
-      (position: KeyPosition, index: number) => {
-        const handlers = stableHandlers(position.id, {
-          onPositionChange: (
-            _targetIndex: number,
-            dx: number,
-            dy: number,
-            elementId: string,
-          ) => commitElementPosition('key', elementId, dx, dy),
-          onClick: () => {
-            selectElementWithGroup('key', index);
-            // 마지막 선택 키 좌표 저장 (Shift+클릭 범위 선택용)
-            const pos = positions[selectedKeyType]?.[index];
-            if (pos) {
-              setLastSelectedKeyBounds({
-                x: pos.dx,
-                y: pos.dy,
-                width: pos.width || 60,
-                height: pos.height || 60,
-              });
-            }
-          },
-          onDoubleClick: () => openElementEditor('key', index),
-          onCtrlClick: () => {
-            // 다중 선택: 기존 선택 유지하면서 추가/제거
-            toggleSelection({
-              type: 'key',
-              id: positions[selectedKeyType][index].id,
-              index,
-            });
-            // 마지막 선택 키 좌표 저장 (Shift+클릭 범위 선택용)
-            const pos = positions[selectedKeyType]?.[index];
-            if (pos) {
-              setLastSelectedKeyBounds({
-                x: pos.dx,
-                y: pos.dy,
-                width: pos.width || 60,
-                height: pos.height || 60,
-              });
-            }
-          },
-          onShiftClick: () => {
-            // 좌표 기반 범위 선택
-            if (!lastSelectedKeyBounds) {
-              // 이전 선택이 없으면 단일 선택처럼 동작
-              clearSelection();
-              toggleSelection({
-                type: 'key',
-                id: positions[selectedKeyType][index].id,
-                index,
-              });
-              const pos = positions[selectedKeyType]?.[index];
-              if (pos) {
-                setLastSelectedKeyBounds({
-                  x: pos.dx,
-                  y: pos.dy,
-                  width: pos.width || 60,
-                  height: pos.height || 60,
-                });
-              }
-              return;
-            }
-
-            const clickedPos = positions[selectedKeyType]?.[index];
-            if (!clickedPos) return;
-
-            // 두 키 사이의 사각형 영역 계산
-            const clickedBounds = {
-              x: clickedPos.dx,
-              y: clickedPos.dy,
-              width: clickedPos.width || 60,
-              height: clickedPos.height || 60,
-            };
-
-            const minX = Math.min(lastSelectedKeyBounds.x, clickedBounds.x);
-            const maxX = Math.max(
-              lastSelectedKeyBounds.x + lastSelectedKeyBounds.width,
-              clickedBounds.x + clickedBounds.width,
-            );
-            const minY = Math.min(lastSelectedKeyBounds.y, clickedBounds.y);
-            const maxY = Math.max(
-              lastSelectedKeyBounds.y + lastSelectedKeyBounds.height,
-              clickedBounds.y + clickedBounds.height,
-            );
-
-            const rangeRect = {
-              left: minX,
-              top: minY,
-              width: maxX - minX,
-              height: maxY - minY,
-            };
-
-            // 범위 내 모든 키 선택
-            const newSelectedElements = [];
-            positions[selectedKeyType]?.forEach((pos, i) => {
-              const elementBounds = {
-                x: pos.dx,
-                y: pos.dy,
-                width: pos.width || 60,
-                height: pos.height || 60,
-              };
-              if (isElementInMarquee(elementBounds, rangeRect)) {
-                newSelectedElements.push({
-                  type: 'key',
-                  id: pos.id,
-                  index: i,
-                });
-              }
-            });
-
-            // 범위 내 플러그인 요소도 선택
-            pluginElements.forEach((el) => {
-              const belongsToCurrentTab =
-                !el.tabId || el.tabId === selectedKeyType;
-              if (belongsToCurrentTab && el.measuredSize) {
-                const elementBounds = {
-                  x: el.position.x,
-                  y: el.position.y,
-                  width: el.measuredSize.width,
-                  height: el.measuredSize.height,
-                };
-                if (isElementInMarquee(elementBounds, rangeRect)) {
-                  newSelectedElements.push({
-                    type: 'plugin',
-                    id: el.fullId,
-                  });
-                }
-              }
-            });
-
-            // 범위 내 통계 요소도 선택
-            (statPositions?.[selectedKeyType] || []).forEach((pos, i) => {
-              if (!pos || pos.hidden) return;
-              const elementBounds = {
-                x: pos.dx,
-                y: pos.dy,
-                width: pos.width || 60,
-                height: pos.height || 60,
-              };
-              if (isElementInMarquee(elementBounds, rangeRect)) {
-                newSelectedElements.push({
-                  type: 'stat',
-                  id: pos.id,
-                  index: i,
-                });
-              }
-            });
-
-            // 범위 내 그래프 요소도 선택
-            (graphPositions?.[selectedKeyType] || []).forEach((pos, i) => {
-              if (!pos || pos.hidden) return;
-              const elementBounds = {
-                x: pos.dx,
-                y: pos.dy,
-                width: pos.width || 200,
-                height: pos.height || 100,
-              };
-              if (isElementInMarquee(elementBounds, rangeRect)) {
-                newSelectedElements.push({
-                  type: 'graph',
-                  id: pos.id,
-                  index: i,
-                });
-              }
-            });
-
-            // 범위 내 노브 요소도 선택
-            (knobPositions?.[selectedKeyType] || []).forEach((pos, i) => {
-              if (!pos || pos.hidden) return;
-              const elementBounds = {
-                x: pos.dx,
-                y: pos.dy,
-                width: pos.width || 80,
-                height: pos.height || 80,
-              };
-              if (isElementInMarquee(elementBounds, rangeRect)) {
-                newSelectedElements.push({
-                  type: 'knob',
-                  id: pos.id,
-                  index: i,
-                });
-              }
-            });
-
-            // 범위 내 스프라이트 요소도 선택
-            (spritePositions?.[selectedKeyType] || []).forEach((pos, i) => {
-              if (!pos || pos.hidden) return;
-              const elementBounds = {
-                x: pos.dx,
-                y: pos.dy,
-                width: pos.width || 200,
-                height: pos.height || 200,
-              };
-              if (isElementInMarquee(elementBounds, rangeRect)) {
-                newSelectedElements.push({
-                  type: 'sprite',
-                  id: pos.id,
-                  index: i,
-                });
-              }
-            });
-
-            setSelectedElements(newSelectedElements);
-          },
-          onMultiDrag: moveSelectedElementsDrag,
-          onMultiDragStart: beginSelectedPluginInstancesDrag,
-          onMultiDragEnd: commitSelectedElementsDrag,
-          onEraserClick: () => {
-            void deleteElementById('key', position.id).catch(
-              reportElementOpError,
-            );
-          },
-          onContextMenu: (e: React.MouseEvent) => {
-            openElementContextMenu(
-              'key',
-              index,
-              e.clientX,
-              e.clientY,
-              keyRefs.current[index] || null,
-            );
-          },
-          setReferenceRef: (node: HTMLElement | null) => {
-            keyRefs.current[index] = node;
-          },
-        });
-
-        return (
-          <DraggableKey
-            key={position.id}
-            index={index}
-            elementId={position.id}
-            position={position}
-            keyName={slotDisplayName(
-              keyMappings[selectedKeyType]?.[index] ?? '',
-            )}
-            zIndex={position.zIndex ?? index}
-            isSelected={selectedElements.some(
-              (el) => el.type === 'key' && el.id === position.id,
-            )}
-            selectedElements={selectedElements}
-            activeTool={activeTool}
-            zoom={zoom}
-            panX={panX}
-            panY={panY}
-            isViewportTransforming={isTransforming}
-            counterEnabled={keyCounterEnabled}
-            counterPreviewValue={0}
-            {...handlers}
-          />
-        );
-      },
-    );
-  };
-
-  const renderStatItems = () => {
-    const items = statPositions?.[selectedKeyType] || [];
-    if (!items.length) return null;
-
-    const handleStatPositionChange = (
-      index: number,
-      dx: number,
-      dy: number,
-      elementId: string,
-    ) => {
-      commitElementPosition('stat', elementId, dx, dy);
-    };
-
-    return items.map((position: StatItemPosition, index: number) => {
-      const handlers = stableHandlers(position.id, {
-        onPositionChange: handleStatPositionChange,
-        onClick: () => {
-          selectElementWithGroup('stat', index);
-        },
-        onDoubleClick: () => openElementEditor('stat', index),
-        onCtrlClick: () => {
-          toggleSelection({
-            type: 'stat',
-            id: useStatItemStore.getState().positions[selectedKeyType][index]
-              .id,
-            index,
-          });
-        },
-        onShiftClick: () => {
-          // 통계 요소는 범위 선택 대상이 아니므로 Ctrl+클릭과 동일하게 처리
-          toggleSelection({
-            type: 'stat',
-            id: useStatItemStore.getState().positions[selectedKeyType][index]
-              .id,
-            index,
-          });
-        },
-        onMultiDrag: moveSelectedElementsDrag,
-        onMultiDragStart: beginSelectedPluginInstancesDrag,
-        onMultiDragEnd: commitSelectedElementsDrag,
-        onEraserClick: () => {
-          void deleteElementById('stat', position.id).catch(
-            reportElementOpError,
-          );
-        },
-        onContextMenu: (e: React.MouseEvent) => {
-          openElementContextMenu(
-            'stat',
-            index,
-            e.clientX,
-            e.clientY,
-            statRefs.current[index] || null,
-          );
-        },
-        setReferenceRef: (node: HTMLElement | null) => {
-          statRefs.current[index] = node;
-        },
-      });
-
-      return (
-        <DraggableKey
-          key={position.id}
-          index={index}
-          elementId={position.id}
-          anchorKind="stat"
-          position={position}
-          keyName={getStatTypeLabel(position.statType)}
-          zIndex={position.zIndex ?? index}
-          isSelected={selectedElements.some(
-            (el) => el.type === 'stat' && el.id === position.id,
-          )}
-          selectedElements={selectedElements}
-          activeTool={activeTool}
-          zoom={zoom}
-          panX={panX}
-          panY={panY}
-          isViewportTransforming={isTransforming}
-          counterEnabled={true}
-          counterPreviewValue={0}
-          {...handlers}
-        />
-      );
-    });
-  };
-
-  // 네이티브 요소 잎 렌더 - 그래프·노브·스프라이트는 상호작용 계약이 같아
-  // 컴포넌트와 스토어만 갈아 끼운다. 선택 토글은 프리즈된 index를 스토어에서
-  // 다시 읽어 id를 확정한다 (렌더 시점 배열이 아니라 최신 문서 기준)
-  const renderNativeItems = <T extends { id: string; zIndex?: number | null }>(
-    elementType: 'graph' | 'knob' | 'sprite',
-    items: readonly T[] | undefined,
-    Component: React.ComponentType<GridItemProps<T>>,
-    idAtIndex: (index: number) => string,
-    refs: React.MutableRefObject<(HTMLElement | null)[]>,
-  ) => {
-    if (!items?.length) return null;
-
-    const handlePositionChange = (
-      _index: number,
-      dx: number,
-      dy: number,
-      elementId: string,
-    ) => {
-      commitElementPosition(elementType, elementId, dx, dy);
-    };
-
-    const toggleAtIndex = (index: number) => {
-      toggleSelection({ type: elementType, id: idAtIndex(index), index });
-    };
-
-    return items.map((position, index) => (
-      <Component
-        key={position.id}
-        index={index}
-        elementId={position.id}
-        position={position}
-        onPositionChange={handlePositionChange}
-        zIndex={position.zIndex ?? index}
-        onClick={() => {
-          selectElementWithGroup(elementType, index);
-        }}
-        onDoubleClick={() => openElementEditor(elementType, index)}
-        onCtrlClick={() => toggleAtIndex(index)}
-        onShiftClick={() => toggleAtIndex(index)}
-        isSelected={selectedElements.some(
-          (el) => el.type === elementType && el.id === position.id,
-        )}
-        selectedElements={selectedElements}
-        onMultiDrag={moveSelectedElementsDrag}
-        onMultiDragStart={beginSelectedPluginInstancesDrag}
-        onMultiDragEnd={commitSelectedElementsDrag}
-        activeTool={activeTool}
-        onEraserClick={() => {
-          void deleteElementById(elementType, position.id).catch(
-            reportElementOpError,
-          );
-        }}
-        onContextMenu={(e) => {
-          openElementContextMenu(
-            elementType,
-            index,
-            e.clientX,
-            e.clientY,
-            refs.current[index] || null,
-          );
-        }}
-        zoom={zoom}
-        panX={panX}
-        panY={panY}
-        isViewportTransforming={isTransforming}
-        setReferenceRef={(node) => {
-          refs.current[index] = node;
-        }}
-      />
-    ));
-  };
-
-  // 고스트는 실제 요소와 같은 기본 립을 그린다. 링 배경은 전역 규칙이 아닌
-  // 인라인으로 - 고스트는 data-*-element가 아니라 전역 게이트를 안 탄다
-  const renderGhostBorderRing = (suppressDefault: boolean) => {
-    const border = resolveElementBorder({}, false, { suppressDefault });
-    if (!border.gradient || border.width <= 0) return null;
-    return (
-      <span
-        aria-hidden="true"
-        style={{
-          ...gradientRingStyle(border.gradient, border.width),
-          background: gradientToCss(border.gradient),
-          pointerEvents: 'none',
-        }}
-      />
-    );
-  };
-
-  const renderDuplicateGhost = () => {
-    if (!duplicateState || !duplicateCursor) return null;
-
-    if (duplicateState.elementType === 'sprite') {
-      return (
-        <SpriteDuplicateGhost
-          position={duplicateState.position as ReactiveSpritePosition}
-          cursor={duplicateCursor}
-          zoom={zoom}
-        />
-      );
-    }
-
-    if (duplicateState.elementType === 'graph') {
-      return (
-        <DuplicateGhostHost
-          width={duplicateState.position?.width || 200}
-          height={duplicateState.position?.height || 100}
-          cursor={duplicateCursor}
-          surfaceStyle={{
-            background: DEFAULT_ELEMENT_BG,
-            border: 'none',
-            borderRadius: `${DEFAULT_ELEMENT_RADIUS}px`,
-            overflow: 'hidden',
-          }}
-        >
-          {renderGhostBorderRing(false)}
-        </DuplicateGhostHost>
-      );
-    }
-
-    // sprite는 위에서 분기 완료 - 남은 타입은 키형 공통 필드를 공유한다
-    const {
-      width = 60,
-      height = 60,
-      inactiveImage,
-      activeImage,
-      imageFit,
-      idleImageFit,
-      imageMode,
-      idleImageTransform,
-      className,
-      shadow,
-      activeShadow,
-    } = duplicateState.position as Exclude<
-      DuplicateState['position'],
-      ReactiveSpritePosition
-    >;
-    const { keyName } = duplicateState;
-    const previewImage =
-      resolveImageSource(inactiveImage) ||
-      resolveImageSource(activeImage) ||
-      '';
-    // 고스트는 기본 외형(저자 의도)이되 이미지 배치만 원본 키를 따른다 - replace만
-    // 표면을 대체하므로 립·배경 억제도 그때만
-    const ghostImageReplaces =
-      Boolean(previewImage) && (imageMode ?? DEFAULT_IMAGE_MODE) === 'replace';
-    const backgroundColor = ghostImageReplaces
-      ? 'transparent'
-      : DEFAULT_ELEMENT_BG;
-    const previewShadow = elementShadowToCss(
-      resolveElementShadow({
-        active: false,
-        shadow,
-        activeShadow,
-        defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
-        defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
-        suppressDefault: ghostImageReplaces,
-      }),
-    );
-    // keyName은 호출부에서 slotDisplayName으로 합성된 표시 라벨
-    const displayName = keyName || '';
-
-    return (
-      <DuplicateGhostHost
-        width={width}
-        height={height}
-        cursor={duplicateCursor}
-        className={className}
-        surfaceStyle={{
-          backgroundColor,
-          borderRadius: `${DEFAULT_ELEMENT_RADIUS}px`,
-          border: 'none',
-          boxShadow: previewShadow,
-          overflow: ghostImageReplaces ? 'hidden' : 'visible',
-        }}
-      >
-        {renderGhostBorderRing(ghostImageReplaces)}
-        {previewImage ? (
-          <img
-            src={previewImage}
-            alt=""
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: (idleImageFit ||
-                imageFit ||
-                'cover') as React.CSSProperties['objectFit'],
-              transform: idleImageTransform
-                ? imageTransformToCss(idleImageTransform)
-                : undefined,
-              display: 'block',
-              pointerEvents: 'none',
-              userSelect: 'none',
-            }}
-            draggable={false}
-          />
-        ) : (
-          <div
-            className="flex items-center justify-center h-full font-bold leading-none text-safe-inline"
-            style={{
-              color: `var(--key-text-color, ${DEFAULT_ELEMENT_FONT})`,
-              willChange: 'auto',
-              contain: 'layout style paint',
-            }}
-          >
-            {displayName}
-          </div>
-        )}
-      </DuplicateGhostHost>
-    );
   };
 
   // 그리드 좌클릭 핸들러 (빈 공간에서 드래그로 마퀴 선택 시작)
@@ -1647,32 +891,34 @@ const Grid = ({
           data-dmn-user-css-scope=""
           style={gridViewportStyles.scale}
         >
-          {renderKeys()}
-          {renderStatItems()}
-          {renderNativeItems(
-            'graph',
-            graphPositions?.[selectedKeyType],
-            GraphItem,
-            (index) =>
-              useGraphItemStore.getState().positions[selectedKeyType][index].id,
-            graphRefs,
-          )}
-          {renderNativeItems(
-            'knob',
-            knobPositions?.[selectedKeyType],
-            KnobItem,
-            (index) =>
-              useKnobItemStore.getState().positions[selectedKeyType][index].id,
-            knobRefs,
-          )}
-          {renderNativeItems(
-            'sprite',
-            spritePositions?.[selectedKeyType],
-            SpriteItem,
-            (index) =>
-              useSpriteStore.getState().positions[selectedKeyType][index].id,
-            spriteRefs,
-          )}
+          <NativeGridElements
+            mode={selectedKeyType}
+            keyPositions={positions[selectedKeyType]}
+            keyMappings={keyMappings[selectedKeyType]}
+            statPositions={statPositions?.[selectedKeyType] || []}
+            graphPositions={graphPositions?.[selectedKeyType] || []}
+            knobPositions={knobPositions?.[selectedKeyType] || []}
+            spritePositions={spritePositions?.[selectedKeyType] || []}
+            pluginElements={pluginElements}
+            selectedElements={selectedElements}
+            activeTool={activeTool}
+            zoom={zoom}
+            panX={panX}
+            panY={panY}
+            isViewportTransforming={isTransforming}
+            keyCounterEnabled={keyCounterEnabled}
+            lastSelectedKeyBounds={lastSelectedKeyBounds}
+            onSelectElement={selectElementWithGroup}
+            onToggleElement={toggleNativeElementSelection}
+            onClearSelection={clearSelection}
+            onSetSelectedElements={setSelectedElements}
+            onSetLastSelectedKeyBounds={setLastSelectedKeyBounds}
+            onMoveSelection={moveSelectedElementsDrag}
+            onMultiDragStart={beginSelectedPluginInstancesDrag}
+            onMultiDragEnd={commitSelectedElementsDrag}
+            onOpenElementEditor={openElementEditor}
+            onOpenElementContextMenu={openElementContextMenu}
+          />
           {/* Outside 카운터 미리보기 레이어 */}
           {keyCounterEnabled && (
             <KeyCounterPreviewLayer
@@ -1685,7 +931,11 @@ const Grid = ({
             positions={statPositions?.[selectedKeyType] || []}
             selectedElements={selectedElements}
           />
-          {renderDuplicateGhost()}
+          <DuplicateElementGhost
+            duplicate={duplicateState}
+            cursor={duplicateCursor}
+            zoom={zoom}
+          />
           <PluginElementsRenderer
             windowType="main"
             activeTool={activeTool}
@@ -1703,7 +953,8 @@ const Grid = ({
                 setDuplicateState(null);
                 setDuplicateCursor(null);
               }
-              if (!shouldOpenMixedSelectionMenu(elementId)) return false;
+              if (!shouldOpenMixedSelectionMenu(selectedElements, elementId))
+                return false;
               openMixedSelectionContextMenu(
                 clientX,
                 clientY,
@@ -1721,191 +972,29 @@ const Grid = ({
       <SmartGuidesOverlay zoom={zoom} panX={panX} panY={panY} />
       {/* 마퀴 선택 오버레이 */}
       <MarqueeSelectionOverlay zoom={zoom} panX={panX} panY={panY} />
-      {/* 선택된 요소 표시 - 그룹 리사이즈 중에는 개별 테두리 숨김 (흔들림 방지) */}
-      {selectedElements.map((el, _idx) => {
-        // 온캔버스 그라데이션 편집 중에는 선택 테두리 숨김 (축·스톱만 표시)
-        if (hasGradientEditSession) return null;
-        // 그룹 리사이즈 중에는 개별 요소 테두리 숨김 (스냅으로 인한 흔들림 방지)
-        if (selectedElements.length > 1 && previewElementBounds) {
-          return null;
-        }
-
-        // 다중 선택 시 리사이즈 불가능한 요소는 파란 선 대신 주황색 선으로 표시됨 (GroupResizeHandles에서 처리)
-        if (selectedElements.length > 1) {
-          const isResizable = isElementResizable(
-            el,
-            positions,
-            statPositions,
-            graphPositions,
-            knobPositions,
-            selectedKeyType,
-            pluginElements,
-          );
-          if (!isResizable) {
-            return null; // 주황색 선은 GroupResizeHandles에서 표시
-          }
-        }
-
-        const bounds = getElementBounds(
-          el,
-          positions,
-          statPositions,
-          graphPositions,
-          knobPositions,
-          selectedKeyType,
-          pluginElements,
-          spritePositions,
-        );
-        if (!bounds) return null;
-
-        // 단일 선택이고 프리뷰 bounds가 있으면 프리뷰 bounds 사용 (드래그 중 파란 선도 함께 이동)
-        let displayBounds = bounds;
-        if (selectedElements.length === 1 && previewBounds) {
-          displayBounds = previewBounds;
-        }
-
-        return (
-          <div
-            key={el.id}
-            style={{
-              position: 'absolute',
-              left: displayBounds.x * zoom + panX - SELECTION_BORDER_WIDTH,
-              top: displayBounds.y * zoom + panY - SELECTION_BORDER_WIDTH,
-              width: displayBounds.width * zoom + SELECTION_BORDER_WIDTH * 2,
-              height: displayBounds.height * zoom + SELECTION_BORDER_WIDTH * 2,
-              border: `${SELECTION_BORDER_WIDTH}px solid var(--ui-selection-border)`,
-              borderRadius: '4px',
-              pointerEvents: 'none',
-              zIndex: 'var(--z-canvas-selection-outline)',
-            }}
-          />
-        );
-      })}
-      {/* 단일 선택 시 리사이즈 핸들 표시 */}
-      {selectedElements.length === 1 &&
-        (() => {
-          const el = selectedElements[0];
-          let bounds = getElementBounds(
-            el,
-            positions,
-            statPositions,
-            graphPositions,
-            knobPositions,
-            selectedKeyType,
-            pluginElements,
-            spritePositions,
-          );
-          const elementId = el.id;
-
-          if (el.type === 'plugin') {
-            // 플러그인 요소 - resizable 속성 확인
-            const pluginEl = pluginElements.find((p) => p.fullId === el.id);
-            if (!pluginEl || !pluginEl.measuredSize) {
-              return null;
-            }
-
-            // definitions에서 해당 플러그인의 resizable 설정 확인
-            const definitions =
-              usePluginDisplayElementStore.getState().definitions;
-            const definition = pluginEl.definitionId
-              ? definitions.get(pluginEl.definitionId)
-              : null;
-
-            // resizable이 true인 경우에만 리사이즈 핸들 표시
-            if (!definition?.resizable) return null;
-
-            bounds = getElementBounds(
-              el,
-              positions,
-              statPositions,
-              graphPositions,
-              knobPositions,
-              selectedKeyType,
-              pluginElements,
-              spritePositions,
-            );
-          }
-
-          if (!bounds || !elementId) return null;
-
-          if (hasGradientEditSession) return null;
-          // 자세 편집 중에는 자세 프레임이 핸들을 맡는다 - 상자 핸들과 겹치지 않게
-          if (hasSpritePoseSession) return null;
-
-          // 기준점 표식이 프리셋 자리에 앉아 있으면 그 자리 핸들은 표식에 자리를 내준다.
-          // 표식 히트 영역이 핸들을 덮어 어차피 잡히지 않고, 비율 고정이라 다른 핸들로 충분하다
-          const spriteAtRest =
-            el.type === 'sprite'
-              ? spritePositions[selectedKeyType]?.find(
-                  (candidate) => candidate.id === el.id,
-                ) ?? null
-              : null;
-          const occupiedHandle =
-            spriteAtRest &&
-            Math.abs(spriteAtRest.idleTransform.x) < 1e-6 &&
-            Math.abs(spriteAtRest.idleTransform.y) < 1e-6
-              ? matchSpriteAnchorPreset(spriteAtRest.pivot)
-              : null;
-
-          return (
-            <ResizeHandles
-              bounds={bounds}
-              previewBounds={previewBounds}
-              zoom={zoom}
-              panX={panX}
-              panY={panY}
-              onResizeStart={handleResizeStart}
-              onResize={handleResize}
-              onResizeEnd={handleResizeComplete}
-              elementId={elementId}
-              getOtherElements={getOtherElements}
-              // 스프라이트는 그림 레이어라 늘리지 않는다
-              lockAspect={isAspectLockedElement(el)}
-              occupiedHandle={occupiedHandle}
-            />
-          );
-        })()}
-      {/* 다중 선택 시 그룹 리사이즈 핸들 표시 */}
-      {selectedElements.length > 1 && !hasGradientEditSession && (
-        <GroupResizeHandles
-          selectedElements={selectedElements}
-          positions={positions}
-          statPositions={statPositions}
-          graphPositions={graphPositions}
-          knobPositions={knobPositions}
-          spritePositions={spritePositions}
-          selectedKeyType={selectedKeyType}
-          pluginElements={pluginElements}
-          zoom={zoom}
-          panX={panX}
-          panY={panY}
-          previewGroupBounds={previewGroupBounds}
-          onGroupResizeStart={handleResizeStart}
-          onGroupResize={(result) => handleGroupResize(result)}
-          onGroupResizeEnd={handleGroupResizeComplete}
-          getOtherElements={getOtherElements}
-        />
-      )}
-      {/* 온캔버스 그라데이션 각도 핸들 — 피커가 그라데이션 형식일 때만 표시 */}
-      <GradientAxisOverlay
+      <GridSelectionOverlays
+        selectedElements={selectedElements}
         positions={positions}
         statPositions={statPositions}
         graphPositions={graphPositions}
         knobPositions={knobPositions}
-        selectedElements={selectedElements}
-        selectedKeyType={selectedKeyType}
-        zoom={zoom}
-        panX={panX}
-        panY={panY}
-      />
-      {/* 온캔버스 스프라이트 핸들 - 선택 중엔 기준점, 자세 편집 중엔 자세 프레임 */}
-      <SpriteCanvasHandles
         spritePositions={spritePositions}
-        selectedElements={selectedElements}
-        selectedKeyType={selectedKeyType}
+        mode={selectedKeyType}
+        pluginElements={pluginElements}
         zoom={zoom}
         panX={panX}
         panY={panY}
+        hasGradientEditSession={hasGradientEditSession}
+        hasSpritePoseSession={hasSpritePoseSession}
+        previewBounds={previewBounds}
+        previewGroupBounds={previewGroupBounds}
+        previewElementBounds={previewElementBounds}
+        onResizeStart={handleResizeStart}
+        onResize={handleResize}
+        onResizeEnd={handleResizeComplete}
+        onGroupResize={handleGroupResize}
+        onGroupResizeEnd={handleGroupResizeComplete}
+        getOtherElements={getOtherElements}
       />
       {/* 우클릭 리스트 팝업 */}
       <div className="relative">
@@ -1964,7 +1053,7 @@ const Grid = ({
             // 메뉴가 열린 동안의 재정렬·삭제를 액션 시점에 재해석.
             // 모드 밖으로 이동한 대상은 소실로 취급한다
             const resolveContextTarget = (
-              targetType: 'key' | 'stat' | 'graph' | 'knob' | 'sprite',
+              targetType: NativeElementType,
             ): number | null => {
               if (!contextElementId) return null;
               const locator = resolveElementById(targetType, contextElementId);
@@ -1973,135 +1062,29 @@ const Grid = ({
                 : null;
             };
 
-            if (contextType === 'stat') {
-              const statIndex = resolveContextTarget('stat');
-
-              if (id === 'delete') {
-                if (contextElementId) {
-                  void deleteElementById('stat', contextElementId).catch(
-                    reportElementOpError,
-                  );
-                }
-              } else if (id === 'duplicate') {
-                if (statIndex != null) beginDuplicateStat(statIndex);
-              } else if (id === 'bringToFront') {
-                if (contextElementId) {
-                  void commitStableLayerZOrder({
-                    mode: selectedKeyType,
-                    targets: [{ type: 'stat', id: contextElementId }],
-                    action: 'front',
-                  }).catch(reportElementOpError);
-                }
-              } else if (id === 'sendToBack') {
-                if (contextElementId) {
-                  void commitStableLayerZOrder({
-                    mode: selectedKeyType,
-                    targets: [{ type: 'stat', id: contextElementId }],
-                    action: 'back',
-                  }).catch(reportElementOpError);
-                }
-              }
-
-              setIsContextOpen(false);
-              setContextPosition(null);
-              return;
-            }
-
-            if (contextType === 'graph') {
-              const graphIndex = resolveContextTarget('graph');
-
-              if (id === 'delete') {
-                if (contextElementId) {
-                  void deleteElementById('graph', contextElementId).catch(
-                    reportElementOpError,
-                  );
-                }
-              } else if (id === 'duplicate') {
-                if (graphIndex != null) beginDuplicateGraph(graphIndex);
-              } else if (id === 'bringToFront') {
-                if (contextElementId) {
-                  void commitStableLayerZOrder({
-                    mode: selectedKeyType,
-                    targets: [{ type: 'graph', id: contextElementId }],
-                    action: 'front',
-                  }).catch(reportElementOpError);
-                }
-              } else if (id === 'sendToBack') {
-                if (contextElementId) {
-                  void commitStableLayerZOrder({
-                    mode: selectedKeyType,
-                    targets: [{ type: 'graph', id: contextElementId }],
-                    action: 'back',
-                  }).catch(reportElementOpError);
-                }
-              }
-
-              setIsContextOpen(false);
-              setContextPosition(null);
-              return;
-            }
-
-            if (contextType === 'sprite') {
-              const spriteIndex = resolveContextTarget('sprite');
-              if (id === 'delete') {
-                if (contextElementId) {
-                  void deleteElementById('sprite', contextElementId).catch(
-                    reportElementOpError,
-                  );
-                }
-              } else if (id === 'duplicate') {
-                if (spriteIndex != null) beginDuplicateSprite(spriteIndex);
-              } else if (id === 'bringToFront') {
-                if (contextElementId) {
-                  void commitStableLayerZOrder({
-                    mode: selectedKeyType,
-                    targets: [{ type: 'sprite', id: contextElementId }],
-                    action: 'front',
-                  }).catch(reportElementOpError);
-                }
-              } else if (id === 'sendToBack') {
-                if (contextElementId) {
-                  void commitStableLayerZOrder({
-                    mode: selectedKeyType,
-                    targets: [{ type: 'sprite', id: contextElementId }],
-                    action: 'back',
-                  }).catch(reportElementOpError);
-                }
-              }
-
-              setIsContextOpen(false);
-              setContextPosition(null);
-              return;
-            }
-
-            if (contextType === 'knob') {
-              const knobIndex = resolveContextTarget('knob');
-              if (id === 'delete') {
-                if (contextElementId) {
-                  void deleteElementById('knob', contextElementId).catch(
-                    reportElementOpError,
-                  );
-                }
-              } else if (id === 'duplicate') {
-                if (knobIndex != null) beginDuplicateKnob(knobIndex);
-              } else if (id === 'bringToFront') {
-                if (contextElementId) {
-                  void commitStableLayerZOrder({
-                    mode: selectedKeyType,
-                    targets: [{ type: 'knob', id: contextElementId }],
-                    action: 'front',
-                  }).catch(reportElementOpError);
-                }
-              } else if (id === 'sendToBack') {
-                if (contextElementId) {
-                  void commitStableLayerZOrder({
-                    mode: selectedKeyType,
-                    targets: [{ type: 'knob', id: contextElementId }],
-                    action: 'back',
-                  }).catch(reportElementOpError);
-                }
-              }
-
+            if (
+              contextType === 'stat' ||
+              contextType === 'graph' ||
+              contextType === 'knob' ||
+              contextType === 'sprite'
+            ) {
+              const targetType = contextType;
+              const targetIndex = resolveContextTarget(targetType);
+              executeNativeContextMenuAction({
+                menuItemId: id,
+                type: targetType,
+                mode: selectedKeyType,
+                elementId: contextElementId,
+                resolvedIndex: targetIndex,
+                onDuplicate: (resolvedIndex) => {
+                  if (targetType === 'stat') beginDuplicateStat(resolvedIndex);
+                  else if (targetType === 'graph')
+                    beginDuplicateGraph(resolvedIndex);
+                  else if (targetType === 'sprite')
+                    beginDuplicateSprite(resolvedIndex);
+                  else beginDuplicateKnob(resolvedIndex);
+                },
+              });
               setIsContextOpen(false);
               setContextPosition(null);
               return;
@@ -2154,79 +1137,11 @@ const Grid = ({
               return;
             }
 
-            // 기본 메뉴 처리
-            if (id === 'delete') {
-              if (contextElementId) {
-                void deleteElementById('key', contextElementId).catch(
-                  reportElementOpError,
-                );
-              }
-            } else if (id === 'duplicate') {
-              const keyIndex = resolveContextTarget('key');
-              const sourceSlot =
-                keyIndex != null
-                  ? useKeyStore.getState().keyMappings[selectedKeyType]?.[
-                      keyIndex
-                    ]
-                  : undefined;
-              const displayLabel = slotDisplayName(sourceSlot ?? '');
-              const position =
-                keyIndex != null
-                  ? useKeyStore.getState().canonicalPositions[
-                      selectedKeyType
-                    ]?.[keyIndex] || null
-                  : null;
-              if (position && typeof sourceSlot !== 'undefined') {
-                const clonedNoteColor =
-                  position.noteColor &&
-                  typeof position.noteColor === 'object' &&
-                  position.noteColor !== null
-                    ? { ...position.noteColor }
-                    : position.noteColor;
-                const clonedCounter: KeyCounterSettings | null =
-                  position.counter
-                    ? {
-                        ...position.counter,
-                        fill: { ...position.counter.fill },
-                        ...(position.counter.animation
-                          ? {
-                              animation: {
-                                ...position.counter.animation,
-                                bezier: [
-                                  ...position.counter.animation.bezier,
-                                ] as CounterAnimationBezier,
-                              },
-                            }
-                          : {}),
-                      }
-                    : null;
-                const initialCursor = null;
-                // 현재 실제 마우스 위치를 사용 (메뉴를 클릭한 시점의 위치)
-                const currentMousePos = lastMousePosRef.current;
-                const _snapped = computeSnappedCursorFromClient(
-                  currentMousePos.x,
-                  currentMousePos.y,
-                );
-                setDuplicateState({
-                  elementType: 'key',
-                  sourceIndex: keyIndex,
-                  // 배치 시 재조회 금지 - 고스트를 따라다니는 동안의 재정렬이
-                  // 다른 키를 복제하게 만든다
-                  slot: sourceSlot,
-                  keyName: displayLabel,
-                  position: {
-                    ...position,
-                    noteColor: clonedNoteColor,
-                    counter: clonedCounter ?? createDefaultCounterSettings(),
-                  },
-                });
-                setDuplicateCursor(initialCursor);
-              }
-            } else if (id === 'counterReset') {
-              const menuIndex = resolveContextTarget('key');
+            const keyIndex = resolveContextTarget('key');
+            if (id === 'counterReset') {
               const slot =
-                menuIndex != null
-                  ? keyMappings[selectedKeyType]?.[menuIndex] ?? ''
+                keyIndex != null
+                  ? keyMappings[selectedKeyType]?.[keyIndex] ?? ''
                   : '';
               const displayName = slotDisplayName(slot);
               showConfirm(
@@ -2235,7 +1150,6 @@ const Grid = ({
                   // 확인 시점 재해석 - 모달이 떠 있는 동안의 재바인딩 반영
                   const confirmIndex = resolveContextTarget('key');
                   if (confirmIndex == null) return;
-                  // 카운터 리셋 커맨드의 key 인자 = canonical (계약 §7)
                   const globalKey = slotCanonical(
                     useKeyStore.getState().keyMappings[selectedKeyType]?.[
                       confirmIndex
@@ -2252,38 +1166,15 @@ const Grid = ({
                 },
                 { confirmText: t('confirm.reset') },
               );
-            } else if (id === 'bringToFront') {
-              if (contextElementId) {
-                void commitStableLayerZOrder({
-                  mode: selectedKeyType,
-                  targets: [{ type: 'key', id: contextElementId }],
-                  action: 'front',
-                }).catch(reportElementOpError);
-              }
-            } else if (id === 'bringForward') {
-              if (contextElementId) {
-                void commitStableLayerZOrder({
-                  mode: selectedKeyType,
-                  targets: [{ type: 'key', id: contextElementId }],
-                  action: 'forward',
-                }).catch(reportElementOpError);
-              }
-            } else if (id === 'sendBackward') {
-              if (contextElementId) {
-                void commitStableLayerZOrder({
-                  mode: selectedKeyType,
-                  targets: [{ type: 'key', id: contextElementId }],
-                  action: 'backward',
-                }).catch(reportElementOpError);
-              }
-            } else if (id === 'sendToBack') {
-              if (contextElementId) {
-                void commitStableLayerZOrder({
-                  mode: selectedKeyType,
-                  targets: [{ type: 'key', id: contextElementId }],
-                  action: 'back',
-                }).catch(reportElementOpError);
-              }
+            } else {
+              executeNativeContextMenuAction({
+                menuItemId: id,
+                type: 'key',
+                mode: selectedKeyType,
+                elementId: contextElementId,
+                resolvedIndex: keyIndex,
+                onDuplicate: beginDuplicateKey,
+              });
             }
             setIsContextOpen(false);
             setContextPosition(null);
@@ -2351,18 +1242,7 @@ const Grid = ({
             }
 
             // 기본 메뉴 처리
-            const addType =
-              id === 'add'
-                ? 'key'
-                : id === 'addStat'
-                ? 'stat'
-                : id === 'addGraph'
-                ? 'graph'
-                : id === 'addKnob'
-                ? 'knob'
-                : id === 'addSprite'
-                ? 'sprite'
-                : null;
+            const addType = gridAddTypeForMenuItem(id);
             if (addType && gridAddLocalPos) {
               addCanvasElementAt(
                 canvasActions,

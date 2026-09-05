@@ -283,6 +283,69 @@ describe('렌더 DOM 계약', () => {
     });
   });
 
+  describe('Key·Stat 공유 face DOM', () => {
+    it('border ring → image → label 순서를 공유하고 이미지 실패 시 label을 복구한다', () => {
+      const imagePosition: KeyElementPosition = {
+        ...basePosition,
+        inactiveImage: 'data:image/png;base64,aW1hZ2U=',
+        imageMode: 'overlay',
+      };
+      act(() => {
+        root.render(
+          <>
+            <Key
+              keyName="A"
+              globalKey="KeySharedFaceImage"
+              position={imagePosition}
+            />
+            <StatItem statType="kps" position={imagePosition} label="KPS" />
+          </>,
+        );
+      });
+
+      const faces = [
+        ...host.querySelectorAll<HTMLElement>('[data-key-element="true"]'),
+      ];
+      expect(faces).toHaveLength(2);
+      expect(
+        faces.map((face) =>
+          [...face.children].map((child) => {
+            if (child.hasAttribute('data-gradient-border-ring')) return 'ring';
+            if (child.hasAttribute('data-key-image-layer')) return 'image';
+            return 'label';
+          }),
+        ),
+      ).toEqual([
+        ['ring', 'image', 'label'],
+        ['ring', 'image', 'label'],
+      ]);
+
+      act(() => {
+        faces.forEach((face) => {
+          face
+            .querySelector<HTMLImageElement>('[data-key-image-layer]')
+            ?.dispatchEvent(new Event('error'));
+        });
+      });
+
+      expect(host.querySelector('[data-key-image-layer]')).toBeNull();
+      expect(
+        [
+          ...host.querySelectorAll<HTMLElement>('[data-key-element="true"]'),
+        ].map((face) =>
+          [...face.children].map((child) =>
+            child.hasAttribute('data-gradient-border-ring') ? 'ring' : 'label',
+          ),
+        ),
+      ).toEqual([
+        ['ring', 'label'],
+        ['ring', 'label'],
+      ]);
+      expect(host.textContent).toContain('A');
+      expect(host.textContent).toContain('KPS');
+    });
+  });
+
   describe('오버레이 KnobItem', () => {
     it('data 속성·노브 변수를 싣고 회전 입력이 active로 전환한다', () => {
       act(() => {

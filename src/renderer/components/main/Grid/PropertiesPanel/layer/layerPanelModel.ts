@@ -9,18 +9,7 @@ import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
 import type { PluginPanelElementView } from '@src/types/plugin/api';
 import type { LayerGroupDef } from '@src/types/layerGroups';
 import type { LayerItem, DisplayItem } from '../types';
-import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import { isPluginVisibleInMode } from '@utils/layerGroupUtils';
-
-// 요소 종류별 분기 없이 행을 선택 요소로 변환 - 새 종류가 늘어도 여기 한 곳만 지나간다
-export function layerItemToSelectedElement(item: LayerItem): SelectedElement {
-  if (item.type === 'plugin') return { type: 'plugin', id: item.id };
-  return {
-    type: item.type,
-    id: item.id,
-    ...(item.index !== undefined ? { index: item.index } : {}),
-  };
-}
 
 // ============================================================================
 // layerItems 생성

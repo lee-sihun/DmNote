@@ -63,6 +63,23 @@ const unregisterLenisInstance = (instance: Lenis) => {
   }
 };
 
+/**
+ * 목록을 조금씩 밀어 흐르게 한다 (드래그 가장자리 자동 스크롤)
+ * scrollTop을 직접 건드리면 Lenis가 자기 목표점으로 되돌린다. 매 프레임 부르는
+ * 경로라 restoreLenisScroll과 달리 resize는 하지 않는다 - 레이아웃은 그대로다
+ */
+export const scrollLenisBy = (wrapper: HTMLElement, delta: number) => {
+  const instance = lenisByWrapper.get(wrapper);
+  if (!instance) {
+    wrapper.scrollTop += delta;
+    return;
+  }
+  instance.scrollTo(wrapper.scrollTop + delta, {
+    immediate: true,
+    force: true,
+  });
+};
+
 // 문서 간 DOM 이동 뒤 브라우저 스크롤과 Lenis 목표점을 함께 맞춘다
 export const restoreLenisScroll = (wrapper: HTMLElement, top: number) => {
   const instance = lenisByWrapper.get(wrapper);

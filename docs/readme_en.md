@@ -13,7 +13,7 @@
   </p>
   
   [![GitHub release](https://img.shields.io/github/release/DmNote-App/DmNote.svg?logo=github)](https://github.com/DmNote-App/DmNote/releases)
-  [![GitHub downloads](https://img.shields.io/github/downloads/DmNote-App/DmNote/total.svg?logo=github)](https://github.com/DmNote-App/DmNote/releases/download/2.0.1/DM.NOTE.v.2.0.1.zip)
+  [![GitHub downloads](https://img.shields.io/github/downloads/DmNote-App/DmNote/total.svg?logo=github)](https://github.com/DmNote-App/DmNote/releases/download/2.0.2/DM.NOTE.v.2.0.2.zip)
   [![GitHub license](https://img.shields.io/github/license/DmNote-App/DmNote.svg?logo=github)](https://github.com/DmNote-App/DmNote/blob/main/LICENSE)
 </div>
 
@@ -30,7 +30,7 @@ It works just as well with any other game, and the setup is simple enough to put
 **Supported** · Windows 10/11 · macOS
 On Linux, try the [community fork](https://github.com/northernorca/DmNote).
 
-[Download DM NOTE v2.0.1](https://github.com/DmNote-App/DmNote/releases/download/2.0.1/DM.NOTE.v.2.0.1.zip)
+[Download DM NOTE v2.0.2](https://github.com/DmNote-App/DmNote/releases/download/2.0.2/DM.NOTE.v.2.0.2.zip)
 
 [Code signing policy](../CODE_SIGNING_POLICY.md)
 
@@ -48,7 +48,7 @@ Five interface languages, shortcuts, settings reset, and auto-update round it ou
 
 Grab the latest build from the download link above, unzip it, and run it.
 
-<!-- macOS needs a few permissions first. Check the [macOS installation and permission guide](https://github.com/DmNote-App/DmNote/blob/main/docs/mac_guide_en.md). -->
+macOS needs a few permissions first. Check the [macOS installation and permission guide](https://github.com/DmNote-App/DmNote/blob/main/docs/mac_guide_en.md).
 
 Settings live in the `%appdata%/com.dmnote.desktop` folder.
 
@@ -131,16 +131,16 @@ Contributions are always welcome. See the [contributing guide](../CONTRIBUTING.m
 <table>
   <tbody>
     <tr>
-      <td align="center" valign="top" width="14.28%"><a href="https://github.com/lee-sihun"><img src="https://avatars.githubusercontent.com/u/111095268?v=4?s=100" width="100px;" alt="이시훈"/><br /><sub><b>이시훈</b></sub></a><br /><a href="#maintenance-lee-sihun" title="Maintenance">🚧</a> <a href="https://github.com/DmNote-App/DmNote/commits?author=lee-sihun" title="Code">💻</a> <a href="#ideas-lee-sihun" title="Ideas, Planning, & Feedback">🤔</a></td>
-      <td align="center" valign="top" width="14.28%"><a href="https://github.com/eun-yeon"><img src="https://avatars.githubusercontent.com/u/173552527?v=4?s=100" width="100px;" alt="연우"/><br /><sub><b>연우</b></sub></a><br /><a href="#maintenance-eun-yeon" title="Maintenance">🚧</a> <a href="#design-eun-yeon" title="Design">🎨</a> <a href="#ideas-eun-yeon" title="Ideas, Planning, & Feedback">🤔</a></td>
-      <td align="center" valign="top" width="14.28%"><a href="https://github.com/mohong2"><img src="https://avatars.githubusercontent.com/u/150683765?v=4?s=100" width="100px;" alt="mo_hong"/><br /><sub><b>mo_hong</b></sub></a><br /><a href="#translation-mohong2" title="Translation">🌍</a></td>
-      <td align="center" valign="top" width="14.28%"><a href="https://github.com/LSVoiid"><img src="https://avatars.githubusercontent.com/u/187824877?v=4?s=100" width="100px;" alt="LSVoiid"/><br /><sub><b>LSVoiid</b></sub></a><br /><a href="#translation-LSVoiid" title="Translation">🌍</a> <a href="https://github.com/DmNote-App/DmNote/commits?author=LSVoiid" title="Documentation">📖</a></td>
-      <td align="center" valign="top" width="14.28%"><a href="https://github.com/kahyou22"><img src="https://avatars.githubusercontent.com/u/136758821?v=4?s=100" width="100px;" alt="문주"/><br /><sub><b>문주</b></sub></a><br /><a href="https://github.com/DmNote-App/DmNote/commits?author=kahyou22" title="Code">💻</a></td>
-      <td align="center" valign="top" width="14.28%"><a href="https://github.com/dustingusius"><img src="https://avatars.githubusercontent.com/u/128625716?v=4?s=100" width="100px;" alt="dustingusius"/><br /><sub><b>dustingusius</b></sub></a><br /><a href="#translation-dustingusius" title="Translation">🌍</a></td>
-      <td align="center" valign="top" width="14.28%"><a href="https://github.com/dotoritos-kim"><img src="https://avatars.githubusercontent.com/u/14037015?v=4?s=100" width="100px;" alt="Dotoritos"/><br /><sub><b>Dotoritos</b></sub></a><br /><a href="https://github.com/DmNote-App/DmNote/commits?author=dotoritos-kim" title="Code">💻</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/lee-sihun"><img src="https://avatars.githubusercontent.com/u/111095268?v=4&s=200" width="100" alt="이시훈"/><br /><sub><b>이시훈</b></sub></a><br /><a href="#maintenance-lee-sihun" title="Maintenance"><img src="https://github.githubassets.com/images/icons/emoji/unicode/1f6a7.png?v8" width="20" align="absmiddle" alt="🚧"/></a> <a href="https://github.com/DmNote-App/DmNote/commits?author=lee-sihun" title="Code"><img src="https://github.githubassets.com/images/icons/emoji/unicode/1f4bb.png?v8" width="20" align="absmiddle" alt="💻"/></a> <a href="#ideas-lee-sihun" title="Ideas, Planning, & Feedback"><img src="https://github.githubassets.com/images/icons/emoji/unicode/1f914.png?v8" width="20" align="absmiddle" alt="🤔"/></a><br /><img width="1" height="1" hspace="30" align="left" alt=""/></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/eun-yeon"><img src="https://avatars.githubusercontent.com/u/173552527?v=4&s=200" width="100" alt="연우"/><br /><sub><b>연우</b></sub></a><br /><a href="#maintenance-eun-yeon" title="Maintenance"><img src="https://github.githubassets.com/images/icons/emoji/unicode/1f6a7.png?v8" width="20" align="absmiddle" alt="🚧"/></a> <a href="#design-eun-yeon" title="Design"><img src="https://github.githubassets.com/images/icons/emoji/unicode/1f3a8.png?v8" width="20" align="absmiddle" alt="🎨"/></a> <a href="#ideas-eun-yeon" title="Ideas, Planning, & Feedback"><img src="https://github.githubassets.com/images/icons/emoji/unicode/1f914.png?v8" width="20" align="absmiddle" alt="🤔"/></a><br /><img width="1" height="1" hspace="30" align="left" alt=""/></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/mohong2"><img src="https://avatars.githubusercontent.com/u/150683765?v=4&s=200" width="100" alt="mo_hong"/><br /><sub><b>mo_hong</b></sub></a><br /><a href="#translation-mohong2" title="Translation"><img src="https://github.githubassets.com/images/icons/emoji/unicode/1f30d.png?v8" width="20" align="absmiddle" alt="🌍"/></a><br /><img width="1" height="1" hspace="30" align="left" alt=""/></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/LSVoiid"><img src="https://avatars.githubusercontent.com/u/187824877?v=4&s=200" width="100" alt="LSVoiid"/><br /><sub><b>LSVoiid</b></sub></a><br /><a href="#translation-LSVoiid" title="Translation"><img src="https://github.githubassets.com/images/icons/emoji/unicode/1f30d.png?v8" width="20" align="absmiddle" alt="🌍"/></a> <a href="https://github.com/DmNote-App/DmNote/commits?author=LSVoiid" title="Documentation"><img src="https://github.githubassets.com/images/icons/emoji/unicode/1f4d6.png?v8" width="20" align="absmiddle" alt="📖"/></a><br /><img width="1" height="1" hspace="30" align="left" alt=""/></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/kahyou22"><img src="https://avatars.githubusercontent.com/u/136758821?v=4&s=200" width="100" alt="문주"/><br /><sub><b>문주</b></sub></a><br /><a href="https://github.com/DmNote-App/DmNote/commits?author=kahyou22" title="Code"><img src="https://github.githubassets.com/images/icons/emoji/unicode/1f4bb.png?v8" width="20" align="absmiddle" alt="💻"/></a><br /><img width="1" height="1" hspace="30" align="left" alt=""/></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/dustingusius"><img src="https://avatars.githubusercontent.com/u/128625716?v=4&s=200" width="100" alt="dustingusius"/><br /><sub><b>dustingusius</b></sub></a><br /><a href="#translation-dustingusius" title="Translation"><img src="https://github.githubassets.com/images/icons/emoji/unicode/1f30d.png?v8" width="20" align="absmiddle" alt="🌍"/></a><br /><img width="1" height="1" hspace="30" align="left" alt=""/></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/dotoritos-kim"><img src="https://avatars.githubusercontent.com/u/14037015?v=4&s=200" width="100" alt="Dotoritos"/><br /><sub><b>Dotoritos</b></sub></a><br /><a href="https://github.com/DmNote-App/DmNote/commits?author=dotoritos-kim" title="Code"><img src="https://github.githubassets.com/images/icons/emoji/unicode/1f4bb.png?v8" width="20" align="absmiddle" alt="💻"/></a><br /><img width="1" height="1" hspace="30" align="left" alt=""/></td>
     </tr>
     <tr>
-      <td align="center" valign="top" width="14.28%"><a href="https://github.com/KGH1113"><img src="https://avatars.githubusercontent.com/u/123816263?v=4?s=100" width="100px;" alt="KGH1113"/><br /><sub><b>KGH1113</b></sub></a><br /><a href="https://github.com/DmNote-App/DmNote/commits?author=KGH1113" title="Code">💻</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/KGH1113"><img src="https://avatars.githubusercontent.com/u/123816263?v=4&s=200" width="100" alt="KGH1113"/><br /><sub><b>KGH1113</b></sub></a><br /><a href="https://github.com/DmNote-App/DmNote/commits?author=KGH1113" title="Code"><img src="https://github.githubassets.com/images/icons/emoji/unicode/1f4bb.png?v8" width="20" align="absmiddle" alt="💻"/></a><br /><img width="1" height="1" hspace="30" align="left" alt=""/></td>
     </tr>
   </tbody>
 </table>

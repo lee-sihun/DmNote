@@ -56,7 +56,7 @@ import {
 } from '@src/types/key/sprites';
 import type { EditorBoundsV1 } from '@src/types/editor';
 import type { CanonicalReactiveSpritePosition } from '@src/types/editor';
-import { PANEL_ROOT_CLASS, PANEL_HEADER_CLASS } from '../panelChrome';
+import { PANEL_ROOT_CLASS } from '../panelChrome';
 import {
   PropertyRow,
   PropertySection,
@@ -79,7 +79,7 @@ import { usePickerItemMenu } from '@hooks/usePickerItemMenu';
 import EditSessionBoundary from '../EditSessionBoundary';
 import SpritePoseEditorPopup from './SpritePoseEditorPopup';
 import SpriteImagePreviewCard from './SpriteImagePreviewCard';
-import PanelRenameTitle from '../PanelRenameTitle';
+import SinglePanelRenameHeader from './SinglePanelRenameHeader';
 
 // 계약과 동일한 cubic-bezier 문자열만 저장 (transitionEasing은 문자열 그대로 CSS로 간다)
 const SPRITE_EASING_PRESETS: ReadonlyArray<{ label: string; value: string }> = [
@@ -1236,20 +1236,21 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
 
   return (
     <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
-      <div className={PANEL_HEADER_CLASS}>
-        <PanelRenameTitle
-          title={spriteTitle}
-          isRenaming={isRenaming}
-          renameValue={renameValue}
-          setRenameValue={setRenameValue}
-          renameInputRef={renameInputRef}
-          renameCancelledRef={renameCancelledRef}
-          onRenameCommit={handleRenameCommit}
-          onRenameCancel={handleRenameCancel}
-          onRenameStart={handleRenameStart}
-          renameLabel={t('contextMenu.rename') || 'Rename'}
-        />
-      </div>
+      <SinglePanelRenameHeader
+        title={spriteTitle}
+        titleClassName="text-fg text-label truncate max-w-[100px] cursor-default"
+        renameButtonTitle={
+          isRenaming ? '' : t('contextMenu.rename') || 'Rename'
+        }
+        isRenaming={isRenaming}
+        renameInputRef={renameInputRef}
+        renameValue={renameValue}
+        setRenameValue={setRenameValue}
+        renameCancelledRef={renameCancelledRef}
+        handleRenameCommit={handleRenameCommit}
+        handleRenameCancel={handleRenameCancel}
+        handleRenameStart={handleRenameStart}
+      />
 
       <div className="flex-1 properties-panel-overlay-scroll">
         <div
