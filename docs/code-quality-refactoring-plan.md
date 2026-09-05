@@ -322,6 +322,8 @@ Rust 선언의 signature/attribute 대조에서 나타난 production 차이는 t
 
 ### 추가 분류 후보
 
+후속 실행 순서와 완료 기준은 [소스 폴더 분류 후속 계획](source-organization-plan.md)에 정리했다. 아래 표는 최초 검토 기록이며, 낮은 우선순위로 분류한 영역도 후속 계획의 검토 범위에 포함한다.
+
 아래 파일 수는 직속 파일 수이며, 분류안은 아직 적용하지 않았다. 같은 책임의 구현·타입·테스트를 함께 이동하고, 파일 수 자체를 강제 상한으로 삼지 않는다.
 
 | 우선순위 | 폴더 (`src/renderer/` 기준) | 파일 | 테스트 | 추가 분류 판단 |
@@ -499,3 +501,7 @@ Rust 선언의 signature/attribute 대조에서 나타난 production 차이는 t
 | `src-tauri/src/state/store/sound_assets` | 2 | 2 | 0 | 2 |
 | `src-tauri/src/state/window` | 6 | 6 | 0 | 9 |
 | `src-tauri/src/state/window/panel_drag` | 3 | 3 | 1 | 3 |
+
+## 2026-09-05 소스 폴더 후속 분류 완료
+
+`refactor/runtime-safety-and-structure`에서 309개 소스 파일을 책임별로 이동했다. 전체 소스 1,224개와 strict 대상 69개를 유지했고, 폴더는 143개에서 186개로 변경됐다. 직속 파일 최대는 41개에서 23개로 줄었다. 기존 전수 통계는 이동 전 기록으로 보존한다. 최종 폴더별 통계·유지 판단·파일 이동표는 [분류 결과](source-organization-report.md), 실행 검증과 알려진 한계는 [후속 계획의 실행 기록](source-organization-plan.md#실행-기록)을 따른다.
