@@ -5,6 +5,8 @@
 > 조사 기준: 로컬 `main`의 `198bf32df28755f131bfa5cbb96115949dffde9c`, GitHub 설정·실행 기록, 공식 문서와 프로젝트 워크플로
 >
 > 초기 제안과 판단 근거를 보존한다. `ci/pr-quality-pipeline` 브랜치에서 PR·main·주간·릴리즈 검증과 ruleset 적용 파일을 구현했다. 현재 운영 방식과 병합 후 설정은 [CI 운영 안내](./ci-operations.md)를 따른다. GitHub ruleset은 아직 활성화하지 않았다.
+>
+> Windows pilot에서 전체 `cargo test`의 네이티브 프로세스 충돌이 드러나, 후속 검토 대상으로 두었던 `cargo-nextest`를 Windows에 먼저 적용했다. 테스트별 프로세스 격리를 사용하며 기존 테스트와 ASIO 구성은 유지한다. 근거와 적용 범위는 운영 안내에 기록했다.
 
 ## 1. 권장 운영 방식
 

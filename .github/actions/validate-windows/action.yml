@@ -17,6 +17,21 @@ runs:
       with:
         workspace: ${{ inputs.workspace }}
         cache-key: windows-asio-${{ inputs.extended == 'true' && 'release' || 'debug' }}
+    - name: nextest 준비
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $version = '0.9.143'
+        $archive = Join-Path $env:RUNNER_TEMP 'cargo-nextest.zip'
+        $destination = Join-Path $env:RUNNER_TEMP 'dmnote-nextest'
+        Invoke-WebRequest "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-$version/cargo-nextest-$version-x86_64-pc-windows-msvc.zip" -OutFile $archive
+        if ((Get-FileHash $archive -Algorithm SHA256).Hash -ne 'c670ba18e8731fd2eff33a47af33a0fa53d1afa6d0678344e82dc6f8fc7344ac') {
+          throw 'nextest SHA256 불일치'
+        }
+        Expand-Archive $archive -DestinationPath $destination -Force
+        Remove-Item $archive
+        $destination >> $env:GITHUB_PATH
+        & (Join-Path $destination 'cargo-nextest.exe') nextest --version
     - shell: bash
       working-directory: ${{ inputs.workspace }}
       run: npm ci --no-audit --no-fund
@@ -27,12 +42,7 @@ runs:
     - name: ASIO 전체 Rust 테스트
       shell: bash
       working-directory: ${{ inputs.workspace }}/src-tauri
-      run: cargo test --all-targets --locked --features asio-backend -- --test-threads=1 --nocapture
-    - name: Windows 충돌 진단
-      if: failure()
-      shell: pwsh
-      run: |
-        Get-WinEvent -FilterHashtable @{LogName='Application'; Id=1000; StartTime=(Get-Date).AddMinutes(-30)} -ErrorAction SilentlyContinue | Format-List Message
+      run: cargo nextest run --all-targets --locked --features asio-backend --no-fail-fast --no-tests=fail --retries 0
     - name: PR 앱 빌드
       working-directory: ${{ inputs.workspace }}
       shell: bash
@@ -49,7 +59,7 @@ runs:
       shell: bash
       run: |
         cargo clippy --all-targets --locked -- -D warnings
-        cargo test --all-targets --locked
+        cargo nextest run --all-targets --locked --no-fail-fast --no-tests=fail --retries 0
         cargo test --doc --locked
         cargo test --doc --locked --features asio-backend
     - name: ASIO 미사용 배포 빌드

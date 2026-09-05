@@ -21,6 +21,8 @@ CI는 `.node-version`의 Node 22.23.2와 `rust-toolchain.toml`의 Rust 1.93.0을
 
 `CI Gate`는 필수 job의 실패·취소·누락·예상하지 못한 skip을 성공으로 처리하지 않는다. Draft의 성공은 빠른 검사의 성공이며, Draft 상태에서는 병합할 수 없다. 수동·주간 전체 검증은 `Full Validation Gate`, main의 빠른 검사는 `Main Quality`로 표시해 PR 필수 체크와 구분한다.
 
+Windows의 전체 Rust 테스트는 `cargo-nextest` 0.9.143으로 테스트마다 별도 프로세스에서 실행한다. 첫 `cargo test` pilot에서 오디오 테스트 이후 `STATUS_ACCESS_VIOLATION`이 발생했으며, 사용 중인 CPAL 0.17.3의 공유 WASAPI 객체 수명에 [동일한 증상의 보고](https://github.com/RustAudio/cpal/issues/1302)가 있다. [프로세스별 테스트 격리](https://nexte.st/docs/design/why-process-per-test/)로 테스트 간 네이티브 전역 상태를 분리하며 테스트 코드·검사 범위는 유지한다. 자동 재시도는 0이고, 한 테스트가 실패해도 나머지 결과를 수집한 뒤 job은 실패한다. nextest 공식 바이너리의 버전과 SHA256을 고정한다. CPAL 자체의 수명 문제를 수정한 것은 아니므로 해당 라이브러리 갱신 시 재검토한다.
+
 ## 주간·수동 검증
 
 [Weekly Validation](../.github/workflows/ci-weekly.yml)은 매주 월요일 04:23 KST(일요일 19:23 UTC)에 전체 검증과 의존성 보고를 실행한다. GitHub schedule은 지연될 수 있으며 기본 브랜치에 workflow가 있어야 동작한다.
