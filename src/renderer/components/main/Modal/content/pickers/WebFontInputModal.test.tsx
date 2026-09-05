@@ -1,13 +1,39 @@
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  settleDeferredContent,
-  stubAnimationFrame,
-} from '@src/renderer/__tests__/deferredContentHarness';
+import { stubAnimationFrame } from '@src/renderer/__tests__/deferredContentHarness';
 import WebFontInputModal from './WebFontInputModal';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+const loadFont = vi.fn<FontFaceSet['load']>().mockResolvedValue([]);
+let originalFonts: PropertyDescriptor | undefined;
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  loadFont.mockClear();
+  originalFonts = Object.getOwnPropertyDescriptor(document, 'fonts');
+  Object.defineProperty(document, 'fonts', {
+    configurable: true,
+    value: { load: loadFont },
+  });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+  if (originalFonts) {
+    Object.defineProperty(document, 'fonts', originalFonts);
+  } else {
+    Reflect.deleteProperty(document, 'fonts');
+  }
+});
+
+const settleDeferredContent = async () => {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1);
+    await vi.advanceTimersByTimeAsync(1);
+  });
+};
 
 describe('WebFontInputModal 편집기 마운트', () => {
   let host: HTMLDivElement;
@@ -150,6 +176,25 @@ describe('WebFontInputModal 저장 거절', () => {
       submit?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
   };
+
+  it('초안 미리보기는 디바운스 후 폰트 로드를 요청한다', async () => {
+    await renderWithOutcome(false);
+    expect(loadFont).not.toHaveBeenCalled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(350);
+    });
+    expect(loadFont).toHaveBeenCalledWith('400 16px "DmnWebFontDraftPreview"');
+  });
+
+  it('미리보기 대기 중 닫으면 폰트를 요청하거나 스타일을 남기지 않는다', async () => {
+    await renderWithOutcome(false);
+    await act(async () => root.render(null));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(350);
+    });
+    expect(loadFont).not.toHaveBeenCalled();
+    expect(document.getElementById('webfont-draft-preview')).toBeNull();
+  });
 
   it('저장이 거절되면 편집 중이던 CSS를 그대로 남긴다', async () => {
     await renderWithOutcome(false);
