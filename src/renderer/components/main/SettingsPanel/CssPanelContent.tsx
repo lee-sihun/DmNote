@@ -19,6 +19,8 @@ import {
   PANEL_ROW_NAME_INACTIVE_CLASS,
   PANEL_SECTION_CLASS,
   PANEL_STATUS_BADGE_CLASS,
+  PANEL_TOKEN_CHIP_CLASS,
+  PANEL_TOKEN_REMOVE_CLASS,
 } from '@components/main/SettingsPanel/panelChrome';
 import { SettingToggleRow } from '@components/main/common/SettingRow';
 import { SETTINGS_LABEL_CLASS, SETTINGS_ROW_CLASS } from '@utils/cardRecipes';
@@ -32,6 +34,7 @@ import type {
   CustomCssHistoryItem,
 } from '@src/types/plugin/api';
 import { cssApi } from '@api/modules/cssApi';
+import { useSingleFlightAction } from '@hooks/useSingleFlightAction';
 
 const CSS_HISTORY_ERROR_CODES: ReadonlySet<string> = new Set([
   'PATH_NOT_AUTHORIZED',
@@ -46,6 +49,7 @@ const CSS_HISTORY_ERROR_CODES: ReadonlySet<string> = new Set([
 interface CssPanelContentProps {
   useCustomCSS: boolean;
   customCSSPath: string | null;
+  customCSSContent: string;
   onToggleCustomCSS: () => void;
   showAlert: (msg: string) => void;
   onClose: () => void;
@@ -59,12 +63,14 @@ let cssHistoryCache: CustomCssHistoryItem[] | null = null;
 const CssPanelContent = ({
   useCustomCSS,
   customCSSPath,
+  customCSSContent,
   onToggleCustomCSS,
   showAlert,
   onClose,
   onHistoryCountChange,
 }: CssPanelContentProps) => {
   const { t } = useTranslation();
+  const hasEmbeddedCSS = !customCSSPath && customCSSContent.length > 0;
 
   const [history, setHistory] = React.useState<CustomCssHistoryItem[]>(
     cssHistoryCache ?? [],
@@ -111,10 +117,28 @@ const CssPanelContent = ({
     void refreshHistory();
   }, [onHistoryCountChange, refreshHistory]);
 
+  // 파일 없는 원문만 비운다 - reset은 마스터 토글까지 꺼서 누른 순간 부작용처럼 보인다
+  const { run: handleRemoveEmbedded, pending: isRemoving } =
+    useSingleFlightAction(async () => {
+      if (!hasEmbeddedCSS || loadingNewRef.current || pendingPathRef.current)
+        return;
+      try {
+        const result = await cssApi.setContent('');
+        if (!result.success) {
+          showAlert(t('settings.cssEmbeddedRemoveFailed'));
+        }
+      } catch (error) {
+        console.error('Failed to remove embedded CSS', error);
+        showAlert(t('settings.cssEmbeddedRemoveFailed'));
+      }
+    });
+
+  const isChangingCSS = isRemoving || isLoadingNew || pendingPath !== null;
+
   // 성공 시 스토어 갱신은 css:content 이벤트 구독(useAppBootstrap)에 일임
   // 응답으로 직접 쓰면 더 최신 이벤트를 이전 응답이 되덮을 수 있음
   const handleActivate = async (item: CustomCssHistoryItem): Promise<void> => {
-    if (pendingPathRef.current) return;
+    if (pendingPathRef.current || loadingNewRef.current || isRemoving) return;
     if (item.path === customCSSPath) return;
     pendingPathRef.current = item.path;
     setPendingPath(item.path);
@@ -152,7 +176,7 @@ const CssPanelContent = ({
   };
 
   const handleLoadNew = async (): Promise<void> => {
-    if (loadingNewRef.current) return;
+    if (loadingNewRef.current || pendingPathRef.current || isRemoving) return;
     loadingNewRef.current = true;
     setIsLoadingNew(true);
     try {
@@ -187,21 +211,52 @@ const CssPanelContent = ({
             checked={useCustomCSS}
             onToggle={onToggleCustomCSS}
           />
-          {/* 적용 중인 파일 - 전체 경로는 툴팁 */}
+          {/* 현재 CSS - 파일이면 이름(경로는 툴팁), 파일 없는 원문이면 제거 가능한 토큰 칩 */}
           <div className={`${SETTINGS_ROW_CLASS} gap-[10px]`}>
             <span className={`${SETTINGS_LABEL_CLASS} shrink-0`}>
-              {t('settings.cssActiveFile')}
+              {t('settings.cssSource')}
             </span>
-            <span
-              className={`text-body truncate min-w-0 ${
-                useCustomCSS ? 'text-fg-muted' : 'text-fg-disabled'
-              }`}
-              title={customCSSPath || undefined}
-            >
-              {customCSSPath && customCSSPath.length > 0
-                ? pathBaseName(customCSSPath)
-                : t('settings.noCssFile')}
-            </span>
+            {hasEmbeddedCSS ? (
+              <span
+                className={`${PANEL_TOKEN_CHIP_CLASS} ${
+                  useCustomCSS ? 'text-fg' : 'text-fg-disabled'
+                }`}
+                title={t('settings.cssEmbeddedDescription')}
+              >
+                <span className="truncate">{t('settings.cssEmbedded')}</span>
+                <button
+                  type="button"
+                  aria-label={t('settings.cssEmbeddedRemove')}
+                  onClick={() => void handleRemoveEmbedded()}
+                  disabled={isChangingCSS}
+                  className={PANEL_TOKEN_REMOVE_CLASS}
+                >
+                  <svg
+                    viewBox="0 0 10 10"
+                    width="9"
+                    height="9"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M1.5 1.5l7 7M8.5 1.5l-7 7" />
+                  </svg>
+                </button>
+              </span>
+            ) : (
+              <span
+                className={`text-body truncate min-w-0 ${
+                  useCustomCSS ? 'text-fg-muted' : 'text-fg-disabled'
+                }`}
+                title={customCSSPath || undefined}
+              >
+                {customCSSPath && customCSSPath.length > 0
+                  ? pathBaseName(customCSSPath)
+                  : t('settings.noCssFile')}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -263,9 +318,9 @@ const CssPanelContent = ({
                           event.stopPropagation();
                           void handleActivate(item);
                         }}
-                        disabled={!available || pendingPath !== null}
+                        disabled={!available || isChangingCSS}
                         className={`${PANEL_PILL_CLASS} ${
-                          available && pendingPath === null
+                          available && !isChangingCSS
                             ? FILL_QUIET_CLASS
                             : FILL_QUIET_DISABLED_CLASS
                         }`}
@@ -285,9 +340,9 @@ const CssPanelContent = ({
       <div className={PANEL_FOOTER_CLASS}>
         <button
           onClick={() => void handleLoadNew()}
-          disabled={isLoadingNew}
+          disabled={isChangingCSS}
           className={`flex-[2] ${PANEL_FOOTER_BUTTON_CLASS} ${
-            isLoadingNew ? FILL_DISABLED_CLASS : FILL_INTERACTIVE_CLASS
+            isChangingCSS ? FILL_DISABLED_CLASS : FILL_INTERACTIVE_CLASS
           }`}
         >
           {t('settings.loadCss')}

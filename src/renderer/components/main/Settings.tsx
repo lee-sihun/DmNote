@@ -142,6 +142,7 @@ const Settings = ({
     useCustomCSS,
     setUseCustomCSS,
     customCSSPath,
+    customCSSContent,
     useCustomJS,
     setUseCustomJS,
     jsPlugins,
@@ -1429,6 +1430,7 @@ const Settings = ({
                   <CssPanelContent
                     useCustomCSS={useCustomCSS}
                     customCSSPath={customCSSPath}
+                    customCSSContent={customCSSContent}
                     onToggleCustomCSS={handleToggleCustomCSS}
                     showAlert={(msg: string) => showAlert?.(msg)}
                     onClose={() => setActiveSettingsPanel(null)}
