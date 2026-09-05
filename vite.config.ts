@@ -2,7 +2,6 @@ import { defineConfig, type Rollup } from 'vite';
 import react from '@vitejs/plugin-react';
 import svgr from 'vite-plugin-svgr';
 import path from 'path';
-import { visualizer } from 'rollup-plugin-visualizer';
 import analyzer from 'rollup-plugin-analyzer';
 import removeConsole from './vite-plugin-remove-console.js';
 import pkg from './package.json';
@@ -19,7 +18,7 @@ const onRollupWarning: Rollup.WarningHandlerWithDefault = (warning, warn) => {
   warn(warning);
 };
 
-export default defineConfig(() => {
+export default defineConfig(async () => {
   const projectRoot = __dirname;
   const rendererRoot = path.resolve(projectRoot, 'src/renderer');
   const windowsRoot = path.resolve(rendererRoot, 'windows');
@@ -67,7 +66,7 @@ export default defineConfig(() => {
           summaryOnly: true,
         }),
       isAnalyze &&
-        visualizer({
+        (await import('rollup-plugin-visualizer')).visualizer({
           filename: path.resolve(projectRoot, 'dist', 'stats.html'),
           template: 'treemap',
           gzipSize: true,
