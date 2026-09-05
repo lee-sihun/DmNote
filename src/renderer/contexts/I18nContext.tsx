@@ -213,12 +213,10 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const changeLocale = (next: SupportedLocale) => {
+  const changeLocale = async (next: SupportedLocale): Promise<void> => {
+    await settingsApi.update({ language: next });
     setLocaleState(next);
     safeLocalStorageSet(STORAGE_KEY, next);
-    settingsApi.update({ language: next }).catch((error) => {
-      console.error('Failed to update language', error);
-    });
   };
 
   const t = function translate(

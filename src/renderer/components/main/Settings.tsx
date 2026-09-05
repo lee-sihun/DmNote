@@ -1,4 +1,6 @@
-import React, { startTransition, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { useSingleFlightAction } from '@hooks/useSingleFlightAction';
+import { trackEditorWrite } from '@src/renderer/editor/runtime/editorWriteBarrier';
 import { useLenis } from '@hooks/useLenis';
 import { useTranslation } from '@contexts/useTranslation';
 import { useSettingsStore } from '@stores/useSettingsStore';
@@ -93,7 +95,7 @@ interface SettingsProps {
   showAlert: (msg: string, confirmText?: string) => void;
   showConfirm: (
     msg: string,
-    onConfirm: () => void,
+    onConfirm: () => void | Promise<void>,
     options?: {
       onCancel?: () => void;
       confirmText?: string;
@@ -264,6 +266,7 @@ const Settings = ({
           if (!pendingKeySoundOutputRef.current) setKeySoundOutput(result);
         } catch (error) {
           console.error('Failed to set key sound output backend', error);
+          showAlert(t('common.saveFailed'));
           if (!pendingKeySoundOutputRef.current) {
             try {
               const authoritative = await keySoundOutputApi.getState();
@@ -417,6 +420,7 @@ const Settings = ({
     } catch (error) {
       setAlwaysOnTop(!next);
       console.error('Failed to toggle always-on-top', error);
+      showAlert(t('common.saveFailed'));
     }
   };
 
@@ -428,6 +432,7 @@ const Settings = ({
     } catch (error) {
       setOverlayLocked(!next);
       console.error('Failed to toggle overlay lock', error);
+      showAlert(t('common.saveFailed'));
     }
   };
 
@@ -439,6 +444,7 @@ const Settings = ({
     } catch (error) {
       setUseCustomCSS(!next);
       console.error('Failed to toggle custom CSS', error);
+      showAlert(t('common.saveFailed'));
     }
   };
 
@@ -450,6 +456,7 @@ const Settings = ({
     } catch (error) {
       setUseCustomJS(!next);
       console.error('Failed to toggle custom JS', error);
+      showAlert(t('common.saveFailed'));
     }
   };
 
@@ -630,37 +637,41 @@ const Settings = ({
     setPendingPluginId(pluginId);
 
     try {
-      // 실제 플러그인 네임스페이스 추출 (@id 또는 파일명 기반)
-      const pluginNamespace: string = extractPluginId(
-        plugin.content,
-        plugin.name,
-      );
-      const pluginStorageNamespace = `${pluginNamespace}/`;
+      await trackEditorWrite(
+        (async () => {
+          // 실제 플러그인 네임스페이스 추출 (@id 또는 파일명 기반)
+          const pluginNamespace: string = extractPluginId(
+            plugin.content,
+            plugin.name,
+          );
+          const pluginStorageNamespace = `${pluginNamespace}/`;
 
-      // 네임스페이스를 prefix로 사용하는 데이터가 있는지 확인
-      // 백엔드에서 자동으로 "plugin_data_" 를 붙이므로 순수 네임스페이스만 전달
-      const hasData: boolean = await pluginApi.storage.hasData(
-        pluginStorageNamespace,
-      );
-      console.warn(
-        '[PluginRemove] namespace=',
-        pluginNamespace,
-        'hasData=',
-        hasData,
-      );
+          // 네임스페이스를 prefix로 사용하는 데이터가 있는지 확인
+          // 백엔드에서 자동으로 "plugin_data_" 를 붙이므로 순수 네임스페이스만 전달
+          const hasData: boolean = await pluginApi.storage.hasData(
+            pluginStorageNamespace,
+          );
+          console.warn(
+            '[PluginRemove] namespace=',
+            pluginNamespace,
+            'hasData=',
+            hasData,
+          );
 
-      if (hasData) {
-        setPluginToDelete({
-          id: pluginId,
-          name: plugin.name,
-          namespace: pluginNamespace,
-        });
-        setDataDeleteModalOpen(true);
-      } else {
-        removingPluginRef.current = null;
-        setPendingPluginId(null);
-        await removePluginOnly(pluginId);
-      }
+          if (hasData) {
+            setPluginToDelete({
+              id: pluginId,
+              name: plugin.name,
+              namespace: pluginNamespace,
+            });
+            setDataDeleteModalOpen(true);
+          } else {
+            removingPluginRef.current = null;
+            setPendingPluginId(null);
+            await removePluginOnly(pluginId);
+          }
+        })(),
+      );
     } catch (error) {
       console.error('Failed to check plugin data', error);
       showAlert?.(t('settings.jsPluginRemoveFailed'));
@@ -713,6 +724,7 @@ const Settings = ({
       const result: JsRemoveResult = await jsApi.remove(pluginId);
       if (!result.success) {
         showAlert?.(t('settings.jsPluginRemoveFailed'));
+        return;
       }
 
       // 2) 그 다음 스토리지 정리 → 클린업 중 재생성된 값까지 함께 제거
@@ -746,6 +758,7 @@ const Settings = ({
     } catch (error) {
       setNoteEffect(!next);
       console.error('Failed to toggle note effect', error);
+      showAlert(t('common.saveFailed'));
     }
   };
 
@@ -770,12 +783,15 @@ const Settings = ({
     if (isMacOS || angleModeChangeRef.current) return;
     angleModeChangeRef.current = true;
     const apply = async (): Promise<void> => {
-      setAngleMode(val);
+      let saved = false;
       try {
         await settingsApi.update({ angleMode: val });
+        saved = true;
+        setAngleMode(val);
         await appApi.restart();
       } catch (error) {
         console.error('Failed to change angle mode', error);
+        showAlert(t(saved ? 'common.restartFailed' : 'common.saveFailed'));
       } finally {
         angleModeChangeRef.current = false;
       }
@@ -807,6 +823,7 @@ const Settings = ({
           confirmedResizeAnchorRef.current = requested;
         } catch (error) {
           console.error('Failed to set overlay anchor', error);
+          showAlert(t('common.saveFailed'));
           if (!pendingResizeAnchorRef.current) {
             setOverlayResizeAnchor(confirmedResizeAnchorRef.current);
           }
@@ -824,6 +841,7 @@ const Settings = ({
     } catch (error) {
       setTrayEnabled(!next);
       console.error('Failed to toggle tray mode', error);
+      showAlert(t('common.saveFailed'));
     }
   };
 
@@ -835,6 +853,7 @@ const Settings = ({
     } catch (error) {
       setAutoUpdateEnabled(!next);
       console.error('Failed to toggle auto update', error);
+      showAlert(t('common.saveFailed'));
     }
   };
 
@@ -843,15 +862,27 @@ const Settings = ({
     const next = !obsStatus.running;
     setObsStatus((prev) => ({ ...prev, running: next }));
     obsTogglingRef.current = true;
+    let commandCompleted = false;
     try {
-      const status = next ? await obsApi.start() : await obsApi.stop();
-      setObsStatus(status);
-      await settingsApi.update({ obsModeEnabled: next });
+      await trackEditorWrite(
+        (async () => {
+          const status = next ? await obsApi.start() : await obsApi.stop();
+          commandCompleted = true;
+          setObsStatus(status);
+          await settingsApi.update({ obsModeEnabled: next });
+        })(),
+      );
     } catch (error) {
       console.error('Failed to toggle OBS mode', error);
-      setObsStatus((prev) => ({ ...prev, running: !next }));
+      if (!commandCompleted) {
+        setObsStatus((prev) => ({ ...prev, running: !next }));
+      }
       showAlert?.(
-        next ? t('settings.obsStartFailed') : t('settings.obsStopFailed'),
+        commandCompleted
+          ? t('common.saveFailed')
+          : next
+          ? t('settings.obsStartFailed')
+          : t('settings.obsStopFailed'),
       );
     } finally {
       obsTogglingRef.current = false;
@@ -881,6 +912,7 @@ const Settings = ({
           setObsStatus(status);
         } catch (error) {
           console.error('Failed to regenerate OBS token', error);
+          showAlert(t('common.actionFailed'));
         } finally {
           regeneratingObsTokenRef.current = false;
         }
@@ -908,6 +940,7 @@ const Settings = ({
     } catch (error) {
       setDeveloperModeEnabled(!next);
       console.error('Failed to toggle developer mode', error);
+      showAlert(t('common.saveFailed'));
     }
   };
 
@@ -919,6 +952,7 @@ const Settings = ({
     } catch (error) {
       setKeyCounterEnabled(!next);
       console.error('Failed to toggle key counter', error);
+      showAlert(t('common.saveFailed'));
     }
   };
 
@@ -967,6 +1001,7 @@ const Settings = ({
         }
       } catch (error) {
         console.error('Failed to reset presets', error);
+        showAlert(t('common.actionFailed'));
       } finally {
         resetAllRef.current = false;
       }
@@ -984,12 +1019,16 @@ const Settings = ({
     }
   };
 
-  const handleLanguageChange = (val: string): void => {
-    startTransition(() => {
-      setLanguage(val);
-      void i18n.changeLanguage(val as SupportedLocale);
+  const { run: handleLanguageChange, pending: languagePending } =
+    useSingleFlightAction(async (val: string) => {
+      try {
+        await i18n.changeLanguage(val as SupportedLocale);
+        setLanguage(val);
+      } catch (error) {
+        console.error('Failed to change language', error);
+        showAlert(t('common.saveFailed'));
+      }
     });
-  };
 
   const requestedBackend = keySoundOutput?.requested;
   const requestedAsioDriver =
@@ -1274,6 +1313,7 @@ const Settings = ({
                   options={LANGUAGE_OPTIONS}
                   value={language}
                   onChange={handleLanguageChange}
+                  disabled={languagePending}
                   placeholder={t('settings.selectLanguage')}
                   align="right"
                 />

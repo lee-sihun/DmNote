@@ -235,7 +235,7 @@ export default function App() {
   }, [developerModeEnabled]);
 
   const { t } = useTranslation();
-  const confirmCallbackRef = useRef<(() => void) | null>(null);
+  const confirmCallbackRef = useRef<(() => void | Promise<void>) | null>(null);
   const cancelCallbackRef = useRef<(() => void) | null>(null);
   const [alertState, setAlertState] = useState(() => ({
     isOpen: false,
@@ -444,7 +444,7 @@ export default function App() {
 
   const showConfirm = (
     message: string,
-    onConfirm: () => void,
+    onConfirm: () => void | Promise<void>,
     options?: {
       onCancel?: () => void;
       confirmText?: string;
@@ -480,11 +480,16 @@ export default function App() {
     cancelCallbackRef.current = null;
   };
 
-  // 닫은 뒤 콜백 실행 — 콜백이 동기적으로 새 다이얼로그를 열어도 닫히지 않게
-  const handleAlertConfirm = () => {
+  // 닫은 뒤 콜백 실행, 콜백이 연 새 다이얼로그는 유지
+  const handleAlertConfirm = async () => {
     const callback = confirmCallbackRef.current;
     closeAlert();
-    callback?.();
+    try {
+      await callback?.();
+    } catch (error) {
+      console.error('Failed to complete confirmed action', error);
+      showAlert(t('common.actionFailed'));
+    }
   };
 
   // 노트 설정 모달 수명 - 퇴장 모션이 도는 동안 마운트를 유지한다.

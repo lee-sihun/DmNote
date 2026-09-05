@@ -93,7 +93,7 @@ describe('플러그인 onMount 오류 격리', () => {
     act(() => {
       root.render(
         <I18nContext.Provider
-          value={{ locale: 'ko', setLocale: () => {}, t: (key) => key }}
+          value={{ locale: 'ko', setLocale: async () => {}, t: (key) => key }}
         >
           <div data-testid="healthy-sibling">healthy</div>
           <PluginElement element={element} windowType="overlay" />
