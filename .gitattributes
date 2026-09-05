@@ -11,3 +11,9 @@ distribution/windows/assets/plugin/v-archive.js text eol=lf
 
 # 릴리즈 본문 생성 스크립트는 Windows 러너에서도 LF 유지 (본문 바이트를 플랫폼 무관하게)
 scripts/*.js text eol=lf
+
+# CI 메타데이터와 검사 스크립트의 플랫폼 공통 줄바꿈
+.github/** text eol=lf
+scripts/ci/** text eol=lf
+rust-toolchain.toml text eol=lf
+.node-version text eol=lf

@@ -1,0 +1,53 @@
+name: Weekly Validation
+on:
+  schedule:
+    - cron: '23 19 * * 0'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full:
+    uses: ./.github/workflows/ci.yml
+    with:
+      validation_ref: ${{ github.sha }}
+      extended: true
+  dependencies:
+    name: 의존성 점검
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-node
+      - uses: ./.github/actions/setup-native
+        with:
+          cache-key: audit
+      - run: npm ci --no-audit --no-fund
+      - run: cargo install cargo-audit --version 0.22.2 --locked
+      - name: npm 취약점 보고서
+        id: npm-audit
+        continue-on-error: true
+        run: npm audit --json > npm-audit.json
+      - name: Cargo 취약점 보고서
+        id: cargo-audit
+        continue-on-error: true
+        run: cargo audit --file src-tauri/Cargo.lock --json > cargo-audit.json
+      - name: 점검 상태 기록
+        if: ${{ !cancelled() }}
+        env:
+          NPM_AUDIT: ${{ steps.npm-audit.outcome }}
+          CARGO_AUDIT: ${{ steps.cargo-audit.outcome }}
+        run: |
+          echo "npm audit: $NPM_AUDIT" >> "$GITHUB_STEP_SUMMARY"
+          echo "cargo audit: $CARGO_AUDIT" >> "$GITHUB_STEP_SUMMARY"
+          echo '초기 기준선 수집: 취약점·조회 실패는 첨부 보고서와 단계 로그에서 확인' >> "$GITHUB_STEP_SUMMARY"
+      - name: 보고서 검증과 기준선 요약
+        if: ${{ !cancelled() }}
+        run: node --experimental-strip-types scripts/ci/auditReports.ts
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ !cancelled() }}
+        with:
+          name: dependency-audits
+          path: '*-audit.json'
+          retention-days: 14
