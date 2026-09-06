@@ -10,6 +10,8 @@ import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
 import GroupResizeHandles from './GroupResizeHandles';
 import type { GroupResizeHandle, GroupResizeResult } from './groupResizePlan';
 import { isBoundsWithinEditorLimits } from './resizeLimits';
+import type { GroupRotationFrame } from './rotatedGroupResize';
+import { projectSpriteResize } from '@utils/sprite/resizeProjection';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -133,6 +135,8 @@ describe('GroupResizeHandles 세션', () => {
     onResize = vi.fn<(result: GroupResizeResult) => void>(),
     onEnd = vi.fn<() => void>(),
     getOtherElements,
+    rotationFrame,
+    previewGroupBounds,
   }: {
     strategy?: 'legacy' | 'frame';
     zoom?: number;
@@ -140,6 +144,8 @@ describe('GroupResizeHandles 세션', () => {
     onResize?: (result: GroupResizeResult) => void;
     onEnd?: () => void;
     getOtherElements?: (excludeIds: string[]) => SmartGuideElementBounds[];
+    rotationFrame?: GroupRotationFrame;
+    previewGroupBounds?: GroupRotationFrame['bounds'];
   } = {}) => {
     act(() => {
       root.render(
@@ -155,6 +161,8 @@ describe('GroupResizeHandles 세션', () => {
           selectedKeyType="mode"
           pluginElements={[]}
           zoom={zoom}
+          rotationFrame={rotationFrame}
+          previewGroupBounds={previewGroupBounds}
           onGroupResizeStart={onStart}
           onGroupResize={onResize}
           onGroupResizeEnd={onEnd}
@@ -171,6 +179,73 @@ describe('GroupResizeHandles 세션', () => {
     )!;
     act(() => handle.dispatchEvent(mouse('mousedown', 100, 100)));
   };
+
+  it('회전 프레임의 틀·핸들·커서와 동결한 로컬 드래그 축이 함께 돈다', () => {
+    const rotationFrame = {
+      bounds: { x: 0, y: 0, width: 100, height: 80 },
+      rotation: 90,
+    };
+    const onResize = vi.fn();
+    const getOtherElements = vi.fn(() => []);
+    renderHandles({ rotationFrame, zoom: 2, onResize, getOtherElements });
+    const outline = host.querySelector<HTMLElement>(
+      '[data-group-resize-outline]',
+    )!;
+    const east = host.querySelector<HTMLElement>(
+      '[data-group-resize-handle="e"]',
+    )!;
+    expect(outline.style.transform).toBe('rotate(90deg)');
+    expect(Number.parseFloat(east.style.left) + 9).toBeCloseTo(100, 8);
+    expect(Number.parseFloat(east.style.top) + 9).toBeCloseTo(180.5, 8);
+    expect(east.firstElementChild?.getAttribute('style')).toContain(
+      'rotate(90deg)',
+    );
+    startResize('e');
+    expect(mocks.lockCustomCursor).toHaveBeenCalledWith(
+      'ns-resize',
+      expect.any(MouseEvent),
+    );
+
+    renderHandles({
+      rotationFrame: { ...rotationFrame, rotation: 0 },
+      zoom: 2,
+      onResize,
+      getOtherElements,
+    });
+    act(() => document.dispatchEvent(mouse('mousemove', 100, 140)));
+    const result = onResize.mock.calls.at(-1)![0] as GroupResizeResult;
+    expect(result.groupBounds.x).toBeCloseTo(-10, 8);
+    expect(result.groupBounds.y).toBeCloseTo(2, 8);
+    expect(result.groupBounds.width).toBe(120);
+    expect(result.groupBounds.height).toBe(96);
+    expect(
+      result.elementBounds.map(({ bounds }) => [bounds.width, bounds.height]),
+    ).toEqual([
+      [48, 48],
+      [48, 48],
+    ]);
+    expect(getOtherElements).not.toHaveBeenCalled();
+    expect(mocks.smartGuidesState.clearGuides).toHaveBeenCalled();
+    act(() => document.dispatchEvent(mouse('mouseup', 100, 140)));
+  });
+
+  it('회전 프레임의 프리뷰는 world 논리 bounds를 다시 AABB로 바꾸지 않고 표시한다', () => {
+    renderHandles({
+      rotationFrame: {
+        bounds: { x: 0, y: 0, width: 100, height: 80 },
+        rotation: 45,
+      },
+      previewGroupBounds: { x: -10, y: 2, width: 120, height: 96 },
+    });
+    const outline = host.querySelector<HTMLElement>(
+      '[data-group-resize-outline]',
+    )!;
+    expect(outline.style.left).toBe('-12px');
+    expect(outline.style.top).toBe('0px');
+    expect(outline.style.width).toBe('124px');
+    expect(outline.style.height).toBe('100px');
+    expect(outline.style.transform).toBe('rotate(45deg)');
+  });
 
   it('move마다 최신 store를 읽고 zoom·grid snap을 적용하며 primary modifier는 smart snap을 막는다', () => {
     const onResize = vi.fn();
@@ -313,6 +388,7 @@ describe('GroupResizeHandles 스프라이트 최소 크기·비율 고정', () =
     spritePositions: SpritePositions,
     onGroupResize: (result: GroupResizeResult) => void,
     getOtherElements: () => SmartGuideElementBounds[] = () => [],
+    rotationFrame?: GroupRotationFrame,
   ) => {
     act(() => {
       root.render(
@@ -326,6 +402,7 @@ describe('GroupResizeHandles 스프라이트 최소 크기·비율 고정', () =
           graphPositions={{}}
           knobPositions={{}}
           spritePositions={spritePositions}
+          rotationFrame={rotationFrame}
           selectedKeyType="4key"
           pluginElements={[]}
           onGroupResize={onGroupResize}
@@ -342,6 +419,69 @@ describe('GroupResizeHandles 스프라이트 최소 크기·비율 고정', () =
     )!;
     act(() => handle.dispatchEvent(mouse('mousedown', x, y)));
   };
+
+  it('회전한 그룹은 스프라이트 자세 이동값이 잘리기 전에 전체 배율을 제한한다', () => {
+    const first = makeCanonicalSpritePosition({
+      id: SPRITE_A,
+      dx: 0,
+      dy: 0,
+      width: 100,
+      height: 50,
+      idleTransform: { x: 1500, y: -100, rotation: 179, scale: 1 },
+      poses: [
+        {
+          poseId: 'pose',
+          triggers: [],
+          transform: { x: 20, y: -1800, rotation: -179, scale: 1 },
+          imageOverride: null,
+          imageOverrideMetrics: null,
+        },
+      ],
+    });
+    const second = makeCanonicalSpritePosition({
+      id: SPRITE_B,
+      dx: 150,
+      dy: 30,
+      width: 50,
+      height: 50,
+    });
+    const unrelated = makeCanonicalSpritePosition({
+      id: 'unselected',
+      idleTransform: { x: 2000, y: 0, rotation: 0, scale: 1 },
+    });
+    const onResize = vi.fn<(result: GroupResizeResult) => void>();
+    renderSprites({ '4key': [first, second, unrelated] }, onResize, () => [], {
+      bounds: { x: 0, y: 0, width: 200, height: 100 },
+      rotation: 90,
+    });
+    pressHandle('e', 100, 100);
+    act(() => document.dispatchEvent(mouse('mousemove', 100, 300)));
+    act(() => document.dispatchEvent(mouse('mouseup', 100, 300)));
+    const result = onResize.mock.lastCall![0];
+    const scale = 2000 / 1800;
+    result.elementBounds.forEach(({ bounds }, index) => {
+      const position = [first, second][index];
+      expect(bounds.width / position.width).toBeCloseTo(scale, 12);
+      expect(bounds.height / position.height).toBeCloseTo(scale, 12);
+      const projected = projectSpriteResize(position, {
+        dx: bounds.x,
+        dy: bounds.y,
+        width: bounds.width,
+        height: bounds.height,
+      });
+      expect(projected.idleTransform.x).toBeCloseTo(
+        position.idleTransform.x * scale,
+        9,
+      );
+      expect(projected.poses[0]?.transform.y ?? 0).toBeCloseTo(
+        (position.poses[0]?.transform.y ?? 0) * scale,
+        9,
+      );
+      expect(projected.idleTransform.rotation).toBe(
+        position.idleTransform.rotation,
+      );
+    });
+  });
 
   // 그룹 리사이즈 한 번을 돌리고 마지막 onGroupResize 결과를 돌려준다
   const dragGroup = (

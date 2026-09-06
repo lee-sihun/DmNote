@@ -3,9 +3,15 @@ import ResizeHandles from '../handles/ResizeHandles';
 import GroupResizeHandles from '../handles/GroupResizeHandles';
 import GradientAxisOverlay from '../handles/GradientAxisHandle';
 import SpriteCanvasHandles from '../handles/SpriteCanvasHandles';
+import NativeRotateHandle from '../handles/NativeRotateHandle';
+import SpriteRotateHandle from '../handles/SpriteRotateHandle';
+import SelectionRotateHandle from '../handles/SelectionRotateHandle';
+import { useSelectionRotationFrame } from '@hooks/Grid/useSelectionRotationFrame';
+import { isRotatableElementType } from '../handles/rotatableElement';
 import { SELECTION_BORDER_WIDTH } from '../handles/selectionOutline';
 import {
   getElementBounds,
+  getElementRotation,
   isAspectLockedElement,
   isElementResizable,
   type Bounds,
@@ -68,26 +74,29 @@ const GridSelectionOverlays = ({
   onGroupResizeEnd,
   getOtherElements,
 }: GridSelectionOverlaysProps) => {
-  const selectionOutlines: ReactNode[] = [];
-  const hideOutlinesForGroupPreview =
-    selectedElements.length > 1 && previewElementBounds !== null;
-  if (!hasGradientEditSession && !hideOutlinesForGroupPreview) {
-    selectedElements.forEach((element) => {
-      if (
-        selectedElements.length > 1 &&
-        !isElementResizable(
+  const selectionFrame = useSelectionRotationFrame();
+  // 공통 틀이 없는 회전 혼합 선택은 개별 윤곽만 표시하고 그룹 리사이즈는 닫는다
+  const rotatedWithoutFrame =
+    selectedElements.length > 1 &&
+    !selectionFrame &&
+    selectedElements.some(
+      (element) =>
+        getElementRotation(
           element,
           positions,
           statPositions,
           graphPositions,
           knobPositions,
           mode,
-          pluginElements,
-        )
-      ) {
-        return;
-      }
-
+          spritePositions,
+        ) !== 0,
+    );
+  const selectionOutlines: ReactNode[] = [];
+  if (
+    !hasGradientEditSession &&
+    (selectedElements.length === 1 || rotatedWithoutFrame)
+  ) {
+    selectedElements.forEach((element) => {
       const bounds = getElementBounds(
         element,
         positions,
@@ -101,16 +110,34 @@ const GridSelectionOverlays = ({
       if (!bounds) return;
       const displayBounds =
         selectedElements.length === 1 && previewBounds ? previewBounds : bounds;
+      const outlineLeft =
+        displayBounds.x * zoom + panX - SELECTION_BORDER_WIDTH;
+      const outlineTop = displayBounds.y * zoom + panY - SELECTION_BORDER_WIDTH;
+      const outlineWidth =
+        displayBounds.width * zoom + SELECTION_BORDER_WIDTH * 2;
+      const outlineHeight =
+        displayBounds.height * zoom + SELECTION_BORDER_WIDTH * 2;
+      // 선택 틀과 핸들은 회전한 얼굴을 추종
+      const rotation = getElementRotation(
+        element,
+        positions,
+        statPositions,
+        graphPositions,
+        knobPositions,
+        mode,
+        spritePositions,
+      );
       selectionOutlines.push(
         <div
           key={element.id}
           data-grid-selection-outline=""
           style={{
             position: 'absolute',
-            left: displayBounds.x * zoom + panX - SELECTION_BORDER_WIDTH,
-            top: displayBounds.y * zoom + panY - SELECTION_BORDER_WIDTH,
-            width: displayBounds.width * zoom + SELECTION_BORDER_WIDTH * 2,
-            height: displayBounds.height * zoom + SELECTION_BORDER_WIDTH * 2,
+            left: outlineLeft,
+            top: outlineTop,
+            width: outlineWidth,
+            height: outlineHeight,
+            ...(rotation !== 0 ? { transform: `rotate(${rotation}deg)` } : {}),
             border: `${SELECTION_BORDER_WIDTH}px solid var(--ui-selection-border)`,
             borderRadius: '4px',
             pointerEvents: 'none',
@@ -135,6 +162,17 @@ const GridSelectionOverlays = ({
         spritePositions,
       )
     : null;
+  const singleRotation = singleElement
+    ? getElementRotation(
+        singleElement,
+        positions,
+        statPositions,
+        graphPositions,
+        knobPositions,
+        mode,
+        spritePositions,
+      )
+    : 0;
   // 자세 편집 중에는 자세 프레임이 핸들을 맡는다 - 상자 핸들과 겹치지 않게
   const showSingleResizeHandles = Boolean(
     singleElement &&
@@ -185,28 +223,84 @@ const GridSelectionOverlays = ({
           // 스프라이트는 그림 레이어라 늘리지 않는다
           lockAspect={isAspectLockedElement(singleElement)}
           occupiedHandle={occupiedHandle}
+          rotation={singleRotation}
         />
       )}
-      {selectedElements.length > 1 && !hasGradientEditSession && (
-        <GroupResizeHandles
-          selectedElements={selectedElements}
-          positions={positions}
-          statPositions={statPositions}
-          graphPositions={graphPositions}
-          knobPositions={knobPositions}
-          spritePositions={spritePositions}
-          selectedKeyType={mode}
-          pluginElements={pluginElements}
+      {showSingleResizeHandles &&
+        singleElement &&
+        singleBounds &&
+        isRotatableElementType(singleElement.type) && (
+          <NativeRotateHandle
+            elementType={singleElement.type}
+            elementId={singleElement.id}
+            bounds={previewBounds ?? singleBounds}
+            rotation={singleRotation}
+            zoom={zoom}
+            panX={panX}
+            panY={panY}
+          />
+        )}
+      {selectedElements.length > 1 &&
+        !hasGradientEditSession &&
+        !rotatedWithoutFrame && (
+          <GroupResizeHandles
+            selectedElements={selectedElements}
+            positions={positions}
+            statPositions={statPositions}
+            graphPositions={graphPositions}
+            knobPositions={knobPositions}
+            spritePositions={spritePositions}
+            selectedKeyType={mode}
+            pluginElements={pluginElements}
+            zoom={zoom}
+            panX={panX}
+            panY={panY}
+            previewGroupBounds={previewGroupBounds}
+            rotationFrame={
+              selectionFrame &&
+              (selectionFrame.rotation !== 0 ||
+                selectionFrame.snapshot.hasRotatedContent ||
+                selectionFrame.snapshot.entries.some(
+                  (entry) =>
+                    entry.type === 'sprite' &&
+                    (entry.idleTransform.x !== 0 ||
+                      entry.idleTransform.y !== 0 ||
+                      entry.idleTransform.scale !== 1),
+                ))
+                ? {
+                    bounds: selectionFrame.bounds,
+                    rotation: selectionFrame.rotation,
+                  }
+                : undefined
+            }
+            onGroupResizeStart={onResizeStart}
+            onGroupResize={onGroupResize}
+            onGroupResizeEnd={onGroupResizeEnd}
+            getOtherElements={getOtherElements}
+          />
+        )}
+      {showSingleResizeHandles && spriteAtRest && singleBounds && (
+        <SpriteRotateHandle
+          elementId={spriteAtRest.id}
+          mode={mode}
+          bounds={previewBounds ?? singleBounds}
+          rotation={spriteAtRest.rotation ?? 0}
           zoom={zoom}
           panX={panX}
           panY={panY}
-          previewGroupBounds={previewGroupBounds}
-          onGroupResizeStart={onResizeStart}
-          onGroupResize={onGroupResize}
-          onGroupResizeEnd={onGroupResizeEnd}
-          getOtherElements={getOtherElements}
         />
       )}
+      {selectedElements.length > 1 &&
+        !hasGradientEditSession &&
+        !previewElementBounds &&
+        selectionFrame && (
+          <SelectionRotateHandle
+            frame={selectionFrame}
+            zoom={zoom}
+            panX={panX}
+            panY={panY}
+          />
+        )}
       <GradientAxisOverlay
         positions={positions}
         statPositions={statPositions}

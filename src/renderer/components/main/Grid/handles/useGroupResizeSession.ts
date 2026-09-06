@@ -30,6 +30,11 @@ import {
   type ElementBounds,
   type SelectedElement,
 } from './groupResizeUtils';
+import {
+  calculateRotatedGroupResizePlan,
+  spriteGroupScaleLimit,
+  type GroupRotationFrame,
+} from './rotatedGroupResize';
 
 interface GroupResizeData extends Bounds {
   elementBounds: ElementBounds[];
@@ -46,6 +51,8 @@ interface ResizeState {
   minGroupWidth: number;
   minGroupHeight: number;
   handle?: GroupResizeHandle;
+  rotationFrame?: GroupRotationFrame;
+  maxSpriteScale?: number;
 }
 
 interface UseGroupResizeSessionOptions {
@@ -55,9 +62,11 @@ interface UseGroupResizeSessionOptions {
   statPositions: CanonicalEditorDocumentV1['statPositions'];
   graphPositions: CanonicalEditorDocumentV1['graphPositions'];
   knobPositions: CanonicalEditorDocumentV1['knobPositions'];
+  spritePositions?: CanonicalEditorDocumentV1['spritePositions'];
   selectedKeyType: string;
   pluginElements: PluginDisplayElementInternal[];
   zoom: number;
+  rotationFrame?: GroupRotationFrame;
   onGroupResizeStart?: (handle: GroupResizeHandle) => void;
   onGroupResize?: (result: GroupResizeResult) => void;
   onGroupResizeEnd?: () => void;
@@ -88,9 +97,11 @@ export const useGroupResizeSession = ({
   statPositions,
   graphPositions,
   knobPositions,
+  spritePositions,
   selectedKeyType,
   pluginElements,
   zoom,
+  rotationFrame,
   onGroupResizeStart,
   onGroupResize,
   onGroupResizeEnd,
@@ -174,6 +185,22 @@ export const useGroupResizeSession = ({
         GROUP_RESIZE_MIN_SIZE,
       ),
       handle,
+      rotationFrame: rotationFrame
+        ? {
+            bounds: { ...rotationFrame.bounds },
+            rotation: rotationFrame.rotation,
+          }
+        : undefined,
+      maxSpriteScale: rotationFrame
+        ? spriteGroupScaleLimit(
+            (spritePositions?.[selectedKeyType] ?? []).filter((position) =>
+              resizableElementBounds.some(
+                ({ element }) =>
+                  element.type === 'sprite' && element.id === position.id,
+              ),
+            ),
+          )
+        : undefined,
     };
 
     let resizeStarted = false;
@@ -190,6 +217,8 @@ export const useGroupResizeSession = ({
         nonResizableElementBounds,
         minGroupWidth,
         minGroupHeight,
+        rotationFrame: startRotationFrame,
+        maxSpriteScale,
       } = resizeRef.current;
       if (!activeHandle || !startGroupBounds) return;
 
@@ -204,31 +233,42 @@ export const useGroupResizeSession = ({
       const sizeMatchGuidesEnabled = gridSettings?.sizeMatchGuides !== false;
       const selectedIds = selectedElements.map((element) => element.id);
 
-      const smartSnap = suppressSmartSnap
-        ? ({ type: 'suppressed' } as const)
-        : getOtherElements && alignmentGuidesEnabled
-        ? ({
-            type: 'enabled',
-            otherElements: getOtherElements(selectedIds),
-            spacingGuidesEnabled,
-            sizeMatchGuidesEnabled,
-          } as const)
-        : ({ type: 'unchanged' } as const);
-      const plan = calculateGroupResizePlan({
-        handle: activeHandle,
-        startMouseX,
-        startMouseY,
-        pointerX: moveEvent.clientX,
-        pointerY: moveEvent.clientY,
-        zoom,
-        snapSize,
-        startGroupBounds,
-        startElementBounds,
-        nonResizableElementBounds,
-        minGroupWidth,
-        minGroupHeight,
-        smartSnap,
-      });
+      const smartSnap =
+        suppressSmartSnap || startRotationFrame
+          ? ({ type: 'suppressed' } as const)
+          : getOtherElements && alignmentGuidesEnabled
+          ? ({
+              type: 'enabled',
+              otherElements: getOtherElements(selectedIds),
+              spacingGuidesEnabled,
+              sizeMatchGuidesEnabled,
+            } as const)
+          : ({ type: 'unchanged' } as const);
+      const plan = startRotationFrame
+        ? calculateRotatedGroupResizePlan({
+            rotationFrame: startRotationFrame,
+            handle: activeHandle,
+            startElementBounds,
+            deltaX: (moveEvent.clientX - startMouseX) / zoom,
+            deltaY: (moveEvent.clientY - startMouseY) / zoom,
+            snapSize,
+            maxSpriteScale,
+          })
+        : calculateGroupResizePlan({
+            handle: activeHandle,
+            startMouseX,
+            startMouseY,
+            pointerX: moveEvent.clientX,
+            pointerY: moveEvent.clientY,
+            zoom,
+            snapSize,
+            startGroupBounds,
+            startElementBounds,
+            nonResizableElementBounds,
+            minGroupWidth,
+            minGroupHeight,
+            smartSnap,
+          });
 
       applyGuidePlan(smartGuidesStore, plan.guides);
 

@@ -435,3 +435,34 @@ export function getNonResizableElementIds(
     )
     .map((element) => element.id);
 }
+
+// 요소 배치 회전(도). 자세 회전은 별도 채널이며 플러그인은 0
+export function getElementRotation(
+  element: SelectedElement,
+  positions: CanonicalEditorDocumentV1['keyPositions'],
+  statPositions: CanonicalEditorDocumentV1['statPositions'],
+  graphPositions: CanonicalEditorDocumentV1['graphPositions'],
+  knobPositions: CanonicalEditorDocumentV1['knobPositions'],
+  selectedKeyType: string,
+  spritePositions?: CanonicalEditorDocumentV1['spritePositions'],
+): number {
+  const collection =
+    element.type === 'key'
+      ? positions
+      : element.type === 'stat'
+      ? statPositions
+      : element.type === 'graph'
+      ? graphPositions
+      : element.type === 'knob'
+      ? knobPositions
+      : element.type === 'sprite'
+      ? spritePositions
+      : null;
+  const pos = collection?.[selectedKeyType]?.find(
+    (candidate) => candidate.id === element.id,
+  );
+  const rotation = pos?.rotation;
+  return typeof rotation === 'number' && Number.isFinite(rotation)
+    ? rotation
+    : 0;
+}

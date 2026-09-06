@@ -46,6 +46,7 @@ import BatchShadowSection from './BatchShadowSection';
 import BatchTypographySection, {
   type BatchTypographyKeyData,
 } from './BatchTypographySection';
+import SelectionRotationInput from './SelectionRotationInput';
 
 export { BATCH_STYLE_SOUND_PAGE_KEY } from './BatchSoundSection';
 
@@ -297,6 +298,10 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             isMixed={getMixedValueSize((pos) => pos.height, 60).isMixed}
           />
         </PropertyRow>
+
+        <SelectionRotationInput
+          label={t('propertiesPanel.rotation') || '회전'}
+        />
       </PropertySection>
 
       {afterSizeContent ? (
