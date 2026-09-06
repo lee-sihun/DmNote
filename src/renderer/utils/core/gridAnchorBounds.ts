@@ -1,4 +1,5 @@
 import type { GradientAnchorBounds } from '@stores/grid/useGradientEditStore';
+import { borderBoxSize } from '@utils/dom/borderBoxSize';
 
 // 마커 transform 행렬의 스케일 - 줌·팬 콘텐츠 루트는 회전이 없어 a·b로 충분
 const markerScaleOf = (marker: HTMLElement): number | null => {
@@ -18,6 +19,7 @@ const markerScaleOf = (marker: HTMLElement): number | null => {
  */
 export const gridAnchorBoundsFor = (
   element: HTMLElement,
+  rotation = 0,
 ): GradientAnchorBounds | null => {
   const marker = element.closest<HTMLElement>('[data-dmn-grid-space]');
   if (!marker) return null;
@@ -26,6 +28,18 @@ export const gridAnchorBoundsFor = (
   const scale = markerScaleOf(marker);
   if (scale === null) return null;
   const markerRect = marker.getBoundingClientRect();
+  if (rotation !== 0) {
+    const { width, height } = borderBoxSize(element, getComputedStyle(element));
+    if (width <= 0 || height <= 0) return null;
+    // AABB의 중심은 보존하고 치수는 회전 전 페인트 박스에서 읽는다
+    return {
+      x: (rect.left + rect.width / 2 - markerRect.left) / scale - width / 2,
+      y: (rect.top + rect.height / 2 - markerRect.top) / scale - height / 2,
+      width,
+      height,
+      rotation,
+    };
+  }
   return {
     x: (rect.left - markerRect.left) / scale,
     y: (rect.top - markerRect.top) / scale,

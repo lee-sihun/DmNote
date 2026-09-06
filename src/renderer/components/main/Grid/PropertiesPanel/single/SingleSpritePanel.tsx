@@ -64,6 +64,7 @@ import {
   TABS,
   TabType,
 } from '../index';
+import RotationInputRow from '../RotationInputRow';
 import Dropdown from '@components/main/common/Dropdown';
 import ListAddRow from '@components/main/common/ListAddRow';
 import PopupExit from '@components/main/Modal/PopupExit';
@@ -889,6 +890,7 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
         positionId: effectivePosition.id,
         poseId: editingPose.poseId,
         origin: { dx: effectivePosition.dx, dy: effectivePosition.dy },
+        rotation: effectivePosition.rotation ?? 0,
         width: effectivePosition.width,
         height: effectivePosition.height,
         pivot: effectivePosition.pivot,
@@ -1336,6 +1338,14 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
                   decimalScale={1}
                 />
               </PropertyRow>
+
+              <RotationInputRow
+                label={t('propertiesPanel.rotation') || '회전'}
+                value={position.rotation ?? 0}
+                onPreview={(rotation) => previewFields({ rotation })}
+                onChange={(rotation) => commitFields({ rotation })}
+                onCancel={() => editGestureController.cancel()}
+              />
 
               {/* 기준점 - 회전·배율 축이자 자세 이미지의 고정점. 위치·크기와 같은 한 줄 행.
                   9점 프리셋은 캔버스 표식 드래그의 자석 스냅이 맡는다 */}

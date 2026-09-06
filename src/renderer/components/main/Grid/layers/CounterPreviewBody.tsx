@@ -18,6 +18,7 @@ export interface CounterPreviewPosition {
   width?: number;
   height?: number;
   hidden?: boolean;
+  rotation?: number;
   counter?: unknown;
   className?: string;
   useInlineStyles?: boolean;
@@ -77,6 +78,7 @@ const CounterPreviewBody = ({
     undefined,
     'counterFill',
     { x: dx, y: dy },
+    position.rotation,
   );
 
   const style = computeOutsideStyle(
@@ -86,6 +88,7 @@ const CounterPreviewBody = ({
     width,
     height,
     counterSettings.gap,
+    position.rotation,
   );
   const fill = toCssRgba(fillColor, '#FFFFFF');
 

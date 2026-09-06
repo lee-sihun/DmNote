@@ -1,3 +1,4 @@
+import { elementRotationTransform } from '@utils/core/rotation';
 import React from 'react';
 import {
   useGridElementInteraction,
@@ -161,7 +162,9 @@ const SpriteItem = ({
 
   if (position.hidden) return null;
 
-  const rootTransform = `translate(calc(${renderDx}px + var(--key-offset-x, 0px)), calc(${renderDy}px + var(--key-offset-y, 0px)))`;
+  const rootTransform = `translate(calc(${renderDx}px + var(--key-offset-x, 0px)), calc(${renderDy}px + var(--key-offset-y, 0px)))${elementRotationTransform(
+    position.rotation,
+  )}`;
 
   return (
     <div
@@ -171,6 +174,7 @@ const SpriteItem = ({
         width: `${width}px`,
         height: `${height}px`,
         transform: rootTransform,
+        transformOrigin: '50% 50%',
         zIndex: position.zIndex ?? zIndex,
         // 그리드 안 승격 금지 - WebKit은 합성 자식이 생기면 스케일 컨테이너를
         // 레이어로 만들어 전체가 흐려진다
@@ -227,7 +231,7 @@ const SpriteItem = ({
                 undefined,
                 placement,
               ),
-              pointerEvents: 'none',
+              pointerEvents: 'auto',
               userSelect: 'none',
             }}
             onError={(event) => {

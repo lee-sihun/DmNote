@@ -21,12 +21,32 @@ export interface CursorSettings {
   is_macos: boolean;
 }
 
+const ROTATION_CURSORS = [
+  'rotate',
+  'rotate-45',
+  'rotate-90',
+  'rotate-135',
+  'rotate-180',
+  'rotate-225',
+  'rotate-270',
+  'rotate-315',
+] as const;
+
+export type RotationCursorType = (typeof ROTATION_CURSORS)[number];
+
+export const rotationCursorForAngle = (angle: number): RotationCursorType =>
+  ROTATION_CURSORS[((Math.round(angle / 45) % 8) + 8) % 8];
+
 /** 커서 타입 */
 export type CursorType =
   | 'ns-resize'
   | 'ew-resize'
   | 'nwse-resize'
-  | 'nesw-resize';
+  | 'nesw-resize'
+  | RotationCursorType;
+
+const isRotationCursor = (type: CursorType): type is RotationCursorType =>
+  type.startsWith('rotate');
 
 /** 캐시된 커서 설정 */
 let cachedSettings: CursorSettings | null = null;
@@ -38,6 +58,7 @@ const CURSOR_VAR_PREFIX = '--dmn-cursor-';
 const CURSOR_BODY_CLASS = 'dmn-custom-cursor';
 const CURSOR_OVERLAY_ID = 'dmn-cursor-overlay';
 const DEFAULT_CURSOR_BASE_SIZE = 24;
+const defaultRotateCursors = new Map<CursorType, string>();
 
 // 억제 중 도착한 핸들 enter의 보류 기록 - resume 시점에 적용
 interface PendingCursorHover {
@@ -111,6 +132,15 @@ function createCursorSvgMarkup(
   // 브라우저 최대 지원 크기는 128px이므로 제한
   const cursorSize = Math.min(128, Math.round(base_size * size));
   const hotspot = Math.round(cursorSize / 2);
+  if (isRotationCursor(type)) {
+    const rotationIndex = ROTATION_CURSORS.indexOf(type);
+    const path =
+      'M2.5 15H5A10 10 0 0 1 15 5V2.5L20.5 6L15 9.5V7A8 8 0 0 0 7 15H9.5L6 20.5Z';
+    const svg = `<svg width="${cursorSize}" height="${cursorSize}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="${path}" fill="${fill_color}" stroke="${outline_color}" stroke-width="1.5" stroke-linejoin="round" paint-order="stroke fill" transform="rotate(${
+      rotationIndex * 45
+    } 12 12)"/></svg>`;
+    return { svg, cursorSize, hotspot };
+  }
   const shadowLayers = [
     { dy: 4, opacity: 0.18 },
     { dy: 8, opacity: 0.12 },
@@ -161,7 +191,9 @@ function createCursorSvgMarkup(
 function createCursorSvg(type: CursorType, settings: CursorSettings): string {
   const { svg, hotspot } = createCursorSvgMarkup(type, settings);
   const encoded = encodeURIComponent(svg);
-  return `url("data:image/svg+xml,${encoded}") ${hotspot} ${hotspot}, ${type}`;
+  return `url("data:image/svg+xml,${encoded}") ${hotspot} ${hotspot}, ${
+    isRotationCursor(type) ? 'crosshair' : type
+  }`;
 }
 
 function cursorVarName(type: CursorType): string {
@@ -237,14 +269,23 @@ function handleWindowBlur(): void {
 
 function attachPointerListener(): void {
   if (overlayState.listenerAttached || typeof document === 'undefined') return;
-  document.addEventListener('mousemove', handlePointerMove, { passive: true });
+  // pointerdown 기본 동작을 막으면 호환 mousemove가 생략될 수 있다
+  document.addEventListener('pointermove', handlePointerMove, {
+    capture: true,
+    passive: true,
+  });
+  document.addEventListener('mousemove', handlePointerMove, {
+    capture: true,
+    passive: true,
+  });
   window.addEventListener('blur', handleWindowBlur);
   overlayState.listenerAttached = true;
 }
 
 function detachPointerListener(): void {
   if (!overlayState.listenerAttached || typeof document === 'undefined') return;
-  document.removeEventListener('mousemove', handlePointerMove);
+  document.removeEventListener('pointermove', handlePointerMove, true);
+  document.removeEventListener('mousemove', handlePointerMove, true);
   window.removeEventListener('blur', handleWindowBlur);
   overlayState.listenerAttached = false;
   if (overlayState.rafId !== null) {
@@ -330,6 +371,7 @@ export async function initializeCursorSystem(): Promise<void> {
       'ew-resize',
       'nwse-resize',
       'nesw-resize',
+      ...ROTATION_CURSORS,
     ];
     for (const type of cursorTypes) {
       const cursorUrl = createCursorSvg(type, cachedSettings);
@@ -395,6 +437,14 @@ export function clearPendingCustomCursorHover(apply?: () => void): void {
   overlayState.pendingHover = null;
 }
 
+export function updatePendingCustomCursorHover(
+  cursorType: CursorType,
+  apply: () => void,
+): void {
+  if (overlayState.pendingHover?.apply !== apply) return;
+  overlayState.pendingHover.type = cursorType;
+}
+
 /**
  * 이동 드래그 세션 동안 호버 커서 갱신을 중단합니다.
  * 시작 시점에 남아 있던 호버 상태도 함께 지웁니다.
@@ -451,7 +501,7 @@ export function lockCustomCursor(
 ): void {
   if (!isMac()) {
     // 비맥은 오버레이 대신 전역 고정 - 잡은 순간의 커서를 드래그 내내 유지
-    beginDragCursor(cursorType);
+    beginDragCursor(getCursor(cursorType));
     return;
   }
   overlayState.lockedType = cursorType;
@@ -476,6 +526,19 @@ export function unlockCustomCursor(event?: MouseEvent | PointerEvent): void {
  * - Windows/Linux: 기본 CSS 커서
  */
 export function getCursor(cursorType: CursorType): string {
+  if (isRotationCursor(cursorType)) {
+    let defaultRotateCursor = defaultRotateCursors.get(cursorType);
+    if (!defaultRotateCursor) {
+      defaultRotateCursor = createCursorSvg(
+        cursorType,
+        getDefaultCursorSettings(),
+      );
+      defaultRotateCursors.set(cursorType, defaultRotateCursor);
+    }
+    return isMac()
+      ? `var(${cursorVarName(cursorType)}, ${defaultRotateCursor})`
+      : defaultRotateCursor;
+  }
   if (!isMac()) {
     return cursorType;
   }

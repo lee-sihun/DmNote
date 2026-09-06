@@ -1,17 +1,14 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useLayoutEffect, useRef } from 'react';
 import { isMac } from '@utils/core/platform';
 import { snapToGrid } from '@hooks/Grid/utils';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import {
-  clearPendingCustomCursorHover,
   CursorType,
   getCursor,
-  isCustomCursorHoverSuspended,
   lockCustomCursor,
-  setCustomCursorHover,
-  setPendingCustomCursorHover,
   unlockCustomCursor,
 } from '@utils/grid/cursorUtils';
+import { useCustomCursorHover } from '@hooks/Grid/useCustomCursorHover';
 import {
   createRafLatestScheduler,
   type ContinuousInputStrategy,
@@ -26,6 +23,13 @@ import {
   type ScaleRange,
 } from './aspectResize';
 import { SELECTION_BORDER_CENTER } from './selectionOutline';
+import { rotatePointAround } from '@utils/core/rotation';
+import {
+  anchorRotatedResize,
+  constrainRotatedResize,
+  resizeCursorForHandle,
+  screenDeltaToLocal,
+} from './rotatedResize';
 
 /**
  * 8방향 리사이즈 핸들을 표시하는 컴포넌트
@@ -70,6 +74,8 @@ interface HandleProps {
   handle: HandleDef;
   centerX: number;
   centerY: number;
+  // 요소 회전(도) - 핸들 모양이 틀과 같은 각도로 돈다
+  rotation: number;
   onMouseDown: (e: React.MouseEvent, handle: HandleDef) => void;
 }
 
@@ -99,6 +105,8 @@ interface ResizeHandlesProps {
   lockAspect?: boolean;
   /** 다른 표식이 차지한 자리(정규화 좌표) - 그 자리 핸들은 그리지 않는다 */
   occupiedHandle?: { x: number; y: number } | null;
+  /** 요소 회전(도). 틀·핸들·드래그 축이 함께 돌고 저장 상자는 축 정렬 유지 */
+  rotation?: number;
 }
 
 interface ResizeState {
@@ -158,15 +166,11 @@ const HANDLES: HandleDef[] = [
 ];
 
 // 핸들 시각적 스타일 반환
-const getHandleStyle = (
-  type: string,
-  isHovered: boolean,
-): React.CSSProperties => {
+const getHandleStyle = (type: string): React.CSSProperties => {
   const baseStyle: React.CSSProperties = {
-    backgroundColor: isHovered ? 'var(--ui-selection)' : 'white',
+    backgroundColor: 'white',
     border: '1.5px solid var(--ui-selection-border-strong)',
     pointerEvents: 'none',
-    transition: 'background-color 0.15s ease',
   };
 
   if (type === 'corner') {
@@ -195,27 +199,15 @@ const getHandleStyle = (
   }
 };
 
-// 개별 핸들 컴포넌트 (호버 상태 관리)
-const Handle = ({ handle, centerX, centerY, onMouseDown }: HandleProps) => {
-  const [isHovered, setIsHovered] = useState(false);
-  const hoveredRef = useRef(false);
-  const pendingApplyRef = useRef<(() => void) | null>(null);
-
-  // 호버 중 unmount로 leave가 유실되면 남는 커서 오버레이·보류 기록 정리
-  useEffect(() => {
-    return () => {
-      if (pendingApplyRef.current) {
-        clearPendingCustomCursorHover(pendingApplyRef.current);
-        pendingApplyRef.current = null;
-      }
-      if (hoveredRef.current) setCustomCursorHover(null);
-    };
-  }, []);
-
-  const setHovered = (next: boolean) => {
-    hoveredRef.current = next;
-    setIsHovered(next);
-  };
+// 개별 핸들 컴포넌트
+const Handle = ({
+  handle,
+  centerX,
+  centerY,
+  rotation,
+  onMouseDown,
+}: HandleProps) => {
+  const hover = useCustomCursorHover(handle.cursor);
 
   const hitX = centerX - HANDLE_HIT_HALF;
   const hitY = centerY - HANDLE_HIT_HALF;
@@ -240,33 +232,16 @@ const Handle = ({ handle, centerX, centerY, onMouseDown }: HandleProps) => {
         justifyContent: 'center',
       }}
       onMouseDown={(e) => onMouseDown(e, handle)}
-      onPointerEnter={(e) => {
-        // 드래그 세션 중 enter는 즉시 적용하지 않고 보류 기록 - 릴리즈 후
-        // resume 시점에 포인터가 핸들 안이면 그 hover를 적용한다
-        if (isCustomCursorHoverSuspended()) {
-          const apply = () => {
-            pendingApplyRef.current = null;
-            setHovered(true);
-          };
-          pendingApplyRef.current = apply;
-          setPendingCustomCursorHover(handle.cursor, apply, e.nativeEvent);
-          return;
-        }
-        setHovered(true);
-        setCustomCursorHover(handle.cursor, e.nativeEvent);
-      }}
-      onPointerLeave={(e) => {
-        // 자기 보류 기록만 소거 - 다른 핸들의 pending은 건드리지 않는다
-        if (pendingApplyRef.current) {
-          clearPendingCustomCursorHover(pendingApplyRef.current);
-          pendingApplyRef.current = null;
-        }
-        setHovered(false);
-        setCustomCursorHover(null, e.nativeEvent);
-      }}
+      onPointerEnter={hover.onPointerEnter}
+      onPointerLeave={hover.onPointerLeave}
     >
       {/* 시각적 핸들 (히트 영역 중앙에 배치) */}
-      <div style={getHandleStyle(handle.type, isHovered)} />
+      <div
+        style={{
+          ...getHandleStyle(handle.type),
+          ...(rotation !== 0 ? { transform: `rotate(${rotation}deg)` } : {}),
+        }}
+      />
     </div>
   );
 };
@@ -285,6 +260,7 @@ const ResizeHandles = ({
   continuousInputStrategy = 'frame',
   lockAspect = false,
   occupiedHandle = null,
+  rotation = 0,
 }: ResizeHandlesProps) => {
   const resizeRef = useRef<ResizeState>({
     isResizing: false,
@@ -337,9 +313,15 @@ const ResizeHandles = ({
         startAspectRatio,
       } = resizeRef.current;
 
-      // 마우스 이동량 계산 (줌 보정)
-      const rawDeltaX = (moveEvent.clientX - startMouseX) / zoom;
-      const rawDeltaY = (moveEvent.clientY - startMouseY) / zoom;
+      // 마우스 이동량 계산 (줌 보정). 회전 요소는 틀의 로컬 축으로 되돌려
+      // 아래 축 정렬 수식을 그대로 쓴다
+      const screenDelta = screenDeltaToLocal(
+        (moveEvent.clientX - startMouseX) / zoom,
+        (moveEvent.clientY - startMouseY) / zoom,
+        rotation,
+      );
+      const rawDeltaX = screenDelta.x;
+      const rawDeltaY = screenDelta.y;
 
       // store에서 스냅 크기 가져오기
       const snapSize =
@@ -407,7 +389,12 @@ const ResizeHandles = ({
           const bottom = startBounds!.y + startBounds!.height;
           return bottom - snap(bottom - size);
         };
-        const range = aspectScaleRange(startBounds!, handle!, MIN_SIZE);
+        const range = aspectScaleRange(
+          startBounds!,
+          handle!,
+          MIN_SIZE,
+          rotation,
+        );
         const primaryScale = aspectScaleFromPrimary(
           startBounds!,
           primary,
@@ -421,6 +408,7 @@ const ResizeHandles = ({
           handle!,
           range,
           primaryScale.exact,
+          rotation,
         );
         const scaled = scaleBoundsAnchored(
           startBounds!,
@@ -479,13 +467,25 @@ const ResizeHandles = ({
         // dy === 1: newY = startBounds.y (상단 앵커 유지)
       }
 
+      // 회전 요소는 반대 변이 화면에서 고정되도록 중심 이동만 회전시킨다.
+      // 스마트 가이드는 논리 상자 변이 화면 변과 다르므로 회전 중엔 쓰지 않는다
+      const rotated = anchorRotatedResize(
+        startBounds!,
+        { x: newX, y: newY, width: newWidth, height: newHeight },
+        rotation,
+      );
+      const anchored =
+        rotation !== 0 && !keepAspect
+          ? constrainRotatedResize(startBounds!, rotated)
+          : rotated;
       const result: ResizeResult = {
-        x: newX,
-        y: newY,
-        width: newWidth,
-        height: newHeight,
+        x: anchored.x,
+        y: anchored.y,
+        width: anchored.width,
+        height: anchored.height,
         handle: handle!,
-        suppressSmartSnap: isMac() ? moveEvent.metaKey : moveEvent.ctrlKey,
+        suppressSmartSnap:
+          rotation !== 0 || (isMac() ? moveEvent.metaKey : moveEvent.ctrlKey),
         aspect,
       };
       const changed =
@@ -549,16 +549,34 @@ const ResizeHandles = ({
           handle.x !== occupiedHandle.x ||
           handle.y !== occupiedHandle.y,
       ).map((handle) => {
-        // 핸들 중심 위치 계산 (선택 테두리의 가장자리 중앙에 배치)
-        const centerX = selectionLeft + selectionWidth * handle.x;
-        const centerY = selectionTop + selectionHeight * handle.y;
+        // 핸들 중심 위치 계산 (선택 테두리의 가장자리 중앙에 배치). 회전 요소는
+        // 틀 중심 기준으로 같이 돌고 커서도 화면 방향에 맞춘다
+        const center = rotatePointAround(
+          {
+            x: selectionLeft + selectionWidth * handle.x,
+            y: selectionTop + selectionHeight * handle.y,
+          },
+          {
+            x: selectionLeft + selectionWidth / 2,
+            y: selectionTop + selectionHeight / 2,
+          },
+          rotation,
+        );
+        const rotatedHandle =
+          rotation === 0
+            ? handle
+            : {
+                ...handle,
+                cursor: resizeCursorForHandle(handle.dx, handle.dy, rotation),
+              };
 
         return (
           <Handle
             key={handle.id}
-            handle={handle}
-            centerX={centerX}
-            centerY={centerY}
+            handle={rotatedHandle}
+            centerX={center.x}
+            centerY={center.y}
+            rotation={rotation}
             onMouseDown={handleMouseDown}
           />
         );

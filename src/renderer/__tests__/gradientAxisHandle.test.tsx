@@ -128,6 +128,65 @@ describe('GradientAxisOverlay 드래그 로직', () => {
   const stopDot = (n: number) =>
     host.querySelector(`[aria-label="stop ${n}"]`) as HTMLElement;
 
+  it('회전 요소의 축·스톱은 페인트 방향을 따르고 드래그는 로컬 각도로 저장한다', () => {
+    act(() => {
+      root.render(
+        <GradientAxisOverlay
+          positions={
+            {
+              '4key': [
+                {
+                  id: ELEMENT_A_ID,
+                  dx: 100,
+                  dy: 100,
+                  width: 200,
+                  height: 100,
+                  rotation: 90,
+                },
+              ],
+            } as never
+          }
+          statPositions={{}}
+          selectedElements={[]}
+          selectedKeyType="4key"
+          zoom={1}
+          panX={0}
+          panY={0}
+          continuousInputStrategy="legacy"
+        />,
+      );
+    });
+    expect(parseFloat(axisAnchor('end').style.left)).toBeCloseTo(200);
+    expect(parseFloat(axisAnchor('end').style.top)).toBeCloseTo(250);
+    expect(parseFloat(stopDot(2).style.left)).toBeCloseTo(200);
+    expect(parseFloat(stopDot(2).style.top)).toBeCloseTo(234);
+    expect(strip().style.transform).toBe('translate(-50%, -50%) rotate(90deg)');
+    act(() => {
+      axisAnchor('end').dispatchEvent(
+        pointerEvent('pointerdown', {
+          pointerId: 40,
+          clientX: 200,
+          clientY: 250,
+        }),
+      );
+      window.dispatchEvent(
+        pointerEvent('pointermove', {
+          pointerId: 40,
+          clientX: 100,
+          clientY: 150,
+        }),
+      );
+      window.dispatchEvent(
+        pointerEvent('pointerup', {
+          pointerId: 40,
+          clientX: 100,
+          clientY: 150,
+        }),
+      );
+    });
+    expect(apply.mock.lastCall).toEqual([{ ...SPEC, angle: 180 }, true]);
+  });
+
   it('세션이 있으면 축 슬라이더·끝 앵커·스톱 점을 렌더한다', () => {
     expect(strip()).toBeTruthy();
     expect(axisAnchor('start')).toBeTruthy();

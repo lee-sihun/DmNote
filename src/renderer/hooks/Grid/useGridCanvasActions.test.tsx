@@ -97,6 +97,7 @@ const sprite = (id: string): ReactiveSpritePosition & { id: string } => ({
   groupId: null,
   className: null,
   useInlineStyles: null,
+  rotation: 0,
   baseImage: null,
   pivot: { ...CENTER_SPRITE_ANCHOR },
   idleTransform: { ...IDENTITY_SPRITE_TRANSFORM },

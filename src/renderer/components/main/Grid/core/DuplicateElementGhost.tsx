@@ -67,6 +67,7 @@ const DuplicateElementGhost = ({
         width={duplicate.position?.width || 200}
         height={duplicate.position?.height || 100}
         cursor={cursor}
+        rotation={duplicate.position?.rotation ?? 0}
         surfaceStyle={{
           background: DEFAULT_ELEMENT_BG,
           border: 'none',
@@ -120,6 +121,7 @@ const DuplicateElementGhost = ({
       width={width}
       height={height}
       cursor={cursor}
+      rotation={duplicate.position?.rotation ?? 0}
       className={className}
       surfaceStyle={{
         backgroundColor,

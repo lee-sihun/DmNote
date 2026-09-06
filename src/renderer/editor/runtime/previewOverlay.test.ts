@@ -73,4 +73,31 @@ describe('previewOverlay 로컬 세션 수명', () => {
       composePreviewPositions('spritePosition', canonical)['4key'][0],
     ).toEqual({ id: 'sprite-a', value: 0, remote: 7 });
   });
+
+  it('다수 ID patch 합성은 ID를 대상 수의 제곱만큼 다시 조회하지 않는다', () => {
+    let idReads = 0;
+    const positions = Array.from({ length: 200 }, (_, index) => ({
+      get id() {
+        idReads += 1;
+        return `sprite-${index}`;
+      },
+      value: 0,
+    }));
+    previewOverlay.applyLocalPatchByIds(
+      '11111111-1111-4111-8111-111111111111',
+      '4key',
+      positions.map(({ id }) => id).reverse(),
+      { value: 1 },
+      'spritePosition',
+    );
+    idReads = 0;
+
+    const rendered = composePreviewPositions('spritePosition', {
+      '4key': positions,
+    });
+
+    expect(idReads).toBeLessThanOrEqual(positions.length * 3);
+    expect(rendered['4key'].every(({ value }) => value === 1)).toBe(true);
+    expect(positions.every(({ value }) => value === 0)).toBe(true);
+  });
 });

@@ -897,6 +897,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             'graph',
             selectedGraphElements[0]?.id,
           )}
+          onStylePropertyPreview={stableStylePropertyPreviewHandler(
+            'graph',
+            selectedGraphElements[0]?.id,
+          )}
           onStylePropertyCommit={stableStylePropertyCommitHandler(
             'graph',
             selectedGraphElements[0]?.id,

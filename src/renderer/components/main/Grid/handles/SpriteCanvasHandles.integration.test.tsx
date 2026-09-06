@@ -65,6 +65,7 @@ const spriteFixture = (
 ): CanonicalReactiveSpritePosition => ({
   activation: 'whileHeld',
   pressDurationMs: 300,
+  rotation: 0,
   id: SPRITE_ID,
   dx: 0,
   dy: 0,

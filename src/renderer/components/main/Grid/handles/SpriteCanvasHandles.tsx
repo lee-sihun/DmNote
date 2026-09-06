@@ -24,7 +24,6 @@ import {
 } from '@src/types/key/sprites';
 import {
   DEG_TO_RAD,
-  RAD_TO_DEG,
   isSameSpriteAnchor,
   isSameSpriteTransform,
   spritePivotPx,
@@ -45,9 +44,17 @@ import {
   type SpritePosePivotHandleFrame,
 } from '@utils/sprite/spritePlacement';
 import { clamp } from '@utils/core/clamp';
+import { resolveRotationDrag } from '@utils/core/rotation';
+import { rotatePointAround } from '@utils/core/rotation';
 import { suppressNextClick } from '@utils/dom/suppressNextClick';
 import { createRafLatestScheduler } from '@utils/animation/rafLatestScheduler';
 import { beginDragCursor, endDragCursor } from '@utils/core/dragCursor';
+import {
+  getCursor,
+  lockCustomCursor,
+  unlockCustomCursor,
+  type RotationCursorType,
+} from '@utils/grid/cursorUtils';
 import { getActiveElement } from '@utils/dom/activeElement';
 import { isHTMLElementNode } from '@utils/dom/isElementNode';
 import {
@@ -55,13 +62,14 @@ import {
   tryAcquireDragSession,
 } from '@hooks/Grid/dragSession';
 import { SELECTION_BORDER_CENTER } from './selectionOutline';
+import RotateCornerHandles from './RotateCornerHandles';
 
 /**
  * 온캔버스 스프라이트 핸들.
  * 스프라이트가 선택돼 있으면 기준점 십자를 그리고 드래그로 옮긴다 (9점 자석 스냅,
  * Ctrl/Cmd로 해제). 기본 그림과 독립 상태는 제자리에 두고 연결 상태는 새 축을 따른다.
  * 자세 팝업이 열려 있으면 자세 이미지 프레임을 그린다: 본체 드래그 = 위치,
- * 위쪽 노브 = 회전(Shift 15° 스냅), 모서리 = 배율(기준점 중심).
+ * 모서리 바깥 = 회전(Shift 15° 스냅), 모서리 = 배율(기준점 중심)
  * 배치는 GradientAxisOverlay와 동일한 비스케일 오버레이 층 - zoom/pan을 직접 계산.
  * 드래그 계산은 전부 요소 로컬 px에서 하므로 도중에 팬·줌이 바뀌어도 포인터가
  * 가리키는 자리를 그대로 따라간다
@@ -133,6 +141,7 @@ interface HandleGeometry {
   session: SpritePoseHandleSession | null;
   sprite: ReactiveSpritePosition | null;
   origin: { dx: number; dy: number };
+  rotation: number;
   box: { width: number; height: number };
   imagePivot: SpriteAnchor;
   displayTransform: SpriteTransform;
@@ -162,16 +171,8 @@ const PIVOT_BRACKETS = (() => {
     `M${near + arm} ${far}H${near}V${far - arm}`,
   ].join('');
 })();
-const ROTATE_KNOB_OFFSET_PX = 22;
-const ROTATE_SNAP_DEG = 15;
 // 축과 겹친 모서리는 배율 방향이 정의되지 않아 잡지 않는다
 const MIN_SCALE_ARM_PX = 2;
-
-// atan2 차(-360~360도)를 최단 호 표현(-180~180]으로 접는다
-const wrapDegrees = (deg: number): number => {
-  const wrapped = ((deg + 540) % 360) - 180;
-  return wrapped === -180 ? 180 : wrapped;
-};
 
 const findCanonicalSprite = (
   mode: string,
@@ -305,6 +306,7 @@ const SpriteCanvasHandles = ({
   const box = session
     ? { width: session.width, height: session.height }
     : { width: sprite!.width, height: sprite!.height };
+  const rotation = session ? session.rotation ?? 0 : sprite!.rotation ?? 0;
   const visiblePendingBasePivot =
     !session &&
     pendingBasePivotLanding?.mode === selectedKeyType &&
@@ -323,10 +325,17 @@ const SpriteCanvasHandles = ({
     (session ? session.transform : sprite!.idleTransform);
   const axis = spritePivotPx({ ...box, pivot: axisPivot });
 
-  const toScreen = (local: Point): Point => ({
-    x: (origin.dx + local.x) * zoom + panX,
-    y: (origin.dy + local.y) * zoom + panY,
-  });
+  const toScreen = (local: Point): Point => {
+    const point = rotatePointAround(
+      local,
+      { x: box.width / 2, y: box.height / 2 },
+      rotation,
+    );
+    return {
+      x: (origin.dx + point.x) * zoom + panX,
+      y: (origin.dy + point.y) * zoom + panY,
+    };
+  };
   // 십자는 화면에서 실제로 회전이 일어나는 점 - 축에 이동값이 더해진다
   const pivotLocal = {
     x: axis.x + displayTransform.x,
@@ -337,6 +346,7 @@ const SpriteCanvasHandles = ({
     session,
     sprite,
     origin,
+    rotation,
     box,
     imagePivot,
     displayTransform,
@@ -347,9 +357,17 @@ const SpriteCanvasHandles = ({
   // 자세 편집 중에는 자세 프레임 선이 상자 그대로라 보정하지 않는다
   const frameInset = session ? 0 : SELECTION_BORDER_CENTER;
   const pivotAxisScreen = toScreen(pivotLocal);
+  const pivotInset = rotatePointAround(
+    {
+      x: (2 * axisPivot.x - 1) * frameInset,
+      y: (2 * axisPivot.y - 1) * frameInset,
+    },
+    { x: 0, y: 0 },
+    rotation,
+  );
   const pivotScreen = {
-    x: pivotAxisScreen.x + (2 * axisPivot.x - 1) * frameInset,
-    y: pivotAxisScreen.y + (2 * axisPivot.y - 1) * frameInset,
+    x: pivotAxisScreen.x + pivotInset.x,
+    y: pivotAxisScreen.y + pivotInset.y,
   };
 
   const posePlacement = session
@@ -375,11 +393,17 @@ const SpriteCanvasHandles = ({
     const hostRect = rootRef.current?.getBoundingClientRect();
     if (!hostRect) return null;
     const view = viewRef.current;
-    const liveOrigin = latestRef.current?.origin ?? origin;
-    return {
-      x: (clientX - hostRect.left - view.panX) / view.zoom - liveOrigin.dx,
-      y: (clientY - hostRect.top - view.panY) / view.zoom - liveOrigin.dy,
-    };
+    const live = latestRef.current;
+    const liveOrigin = live?.origin ?? origin;
+    const liveBox = live?.box ?? box;
+    return rotatePointAround(
+      {
+        x: (clientX - hostRect.left - view.panX) / view.zoom - liveOrigin.dx,
+        y: (clientY - hostRect.top - view.panY) / view.zoom - liveOrigin.dy,
+      },
+      { x: liveBox.width / 2, y: liveBox.height / 2 },
+      -(live?.rotation ?? rotation),
+    );
   };
 
   // 자세 프레임 - 배치 rect의 네 모서리에 자세 변환을 적용한 화면 폴리곤.
@@ -406,35 +430,6 @@ const SpriteCanvasHandles = ({
     });
   })();
 
-  // 회전 노브 - 프레임 윗변 중앙에서 바깥쪽으로 고정 거리
-  const rotateKnob = (() => {
-    if (!poseCorners) return null;
-    const top = {
-      x: (poseCorners[0].x + poseCorners[1].x) / 2,
-      y: (poseCorners[0].y + poseCorners[1].y) / 2,
-    };
-    const bottom = {
-      x: (poseCorners[2].x + poseCorners[3].x) / 2,
-      y: (poseCorners[2].y + poseCorners[3].y) / 2,
-    };
-    const ux = top.x - bottom.x;
-    const uy = top.y - bottom.y;
-    const length = Math.hypot(ux, uy);
-    if (length < 1e-3) {
-      return {
-        anchor: top,
-        knob: { x: top.x, y: top.y - ROTATE_KNOB_OFFSET_PX },
-      };
-    }
-    return {
-      anchor: top,
-      knob: {
-        x: top.x + (ux / length) * ROTATE_KNOB_OFFSET_PX,
-        y: top.y + (uy / length) * ROTATE_KNOB_OFFSET_PX,
-      },
-    };
-  })();
-
   const generationNow = () => useSpritePoseHandleStore.getState().generation;
   // 드래그 시작 때 잡은 세대가 아직 유효한지 - 자세 preview·커밋의 공통 전제
   const ownsSession = () => ownerGenerationRef.current === generationNow();
@@ -451,6 +446,7 @@ const SpriteCanvasHandles = ({
     return (
       current.dx === base.canonical.dx &&
       current.dy === base.canonical.dy &&
+      (current.rotation ?? 0) === (base.canonical.rotation ?? 0) &&
       current.width === base.frame.box.width &&
       current.height === base.frame.box.height &&
       isSameSpriteAnchor(current.pivot, base.frame.pivot) &&
@@ -464,6 +460,7 @@ const SpriteCanvasHandles = ({
     const grabbed = grabbedRef.current;
     if (!grabbed) return;
     endDragCursor(grabbed.el.ownerDocument);
+    if (dragRef.current?.kind === 'rotate') unlockCustomCursor();
     try {
       grabbed.el.releasePointerCapture(grabbed.pointerId);
     } catch {
@@ -598,7 +595,7 @@ const SpriteCanvasHandles = ({
     if (!live) return;
     // 소유권이 갈린 뒤의 move는 이미 취소된 preview를 되열 뿐이라 버린다
     if (!ownsSession()) return;
-    const { offset, rotation, scale } = SPRITE_CONSTRAINTS;
+    const { offset, scale } = SPRITE_CONSTRAINTS;
     let next: SpriteTransform;
     if (drag.kind === 'move') {
       next = {
@@ -615,19 +612,17 @@ const SpriteCanvasHandles = ({
         ),
       };
     } else if (drag.kind === 'rotate') {
-      const angle = Math.atan2(
-        local.y - drag.axisLocal.y,
-        local.x - drag.axisLocal.x,
-      );
-      let deg = wrapDegrees(
-        drag.baseTransform.rotation + (angle - drag.startAngle) * RAD_TO_DEG,
-      );
-      if (event.shiftKey) {
-        deg = wrapDegrees(Math.round(deg / ROTATE_SNAP_DEG) * ROTATE_SNAP_DEG);
-      }
       next = {
         ...drag.baseTransform,
-        rotation: clamp(deg, rotation.min, rotation.max),
+        rotation: resolveRotationDrag({
+          base: drag.baseTransform.rotation,
+          startAngle: drag.startAngle,
+          angle: Math.atan2(
+            local.y - drag.axisLocal.y,
+            local.x - drag.axisLocal.x,
+          ),
+          snap: event.shiftKey,
+        }),
       };
     } else {
       const distance = Math.hypot(
@@ -815,6 +810,7 @@ const SpriteCanvasHandles = ({
   const beginPoseDrag = (
     event: React.PointerEvent<Element>,
     kind: Exclude<DragKind, 'pivot'>,
+    rotationCursor: RotationCursorType = 'rotate',
   ) => {
     if (event.button !== 0 || dragRef.current || !session) return;
     settleFocusedField();
@@ -838,7 +834,15 @@ const SpriteCanvasHandles = ({
     event.preventDefault();
     event.stopPropagation();
     if (!tryAcquireDragSession()) return;
-    grab(event, kind === 'move' ? 'move' : 'grabbing');
+    grab(
+      event,
+      kind === 'rotate'
+        ? getCursor(rotationCursor)
+        : kind === 'move'
+        ? 'move'
+        : 'grabbing',
+    );
+    if (kind === 'rotate') lockCustomCursor(rotationCursor, event.nativeEvent);
     ownerGenerationRef.current = generationNow();
     dragRef.current = {
       kind,
@@ -903,11 +907,12 @@ const SpriteCanvasHandles = ({
       // 컨트롤러 소유권이 사라진 로컬 프리뷰는 새 조작보다 먼저 회수한다
       reclaimedOrphanPreview =
         editGestureController.discardOrphanedLocalPreviews();
-      // 상자 크기는 역변환의 분모라 표시 크기가 canonical과 다르면 기준점이 틀어진다
+      // 상자 크기·배치 각도가 canonical과 다르면 포인터 역변환이 달라진다
       if (
         !reclaimedOrphanPreview &&
         (live.box.width !== canonical.width ||
-          live.box.height !== canonical.height)
+          live.box.height !== canonical.height ||
+          live.rotation !== (canonical.rotation ?? 0))
       ) {
         refusePivotDrag('displayed box differs from canonical');
         return;
@@ -1003,14 +1008,6 @@ const SpriteCanvasHandles = ({
     justifyContent: 'center',
   });
   const pivotActive = pivotHover || dragPivot !== null;
-  const knobDotStyle: React.CSSProperties = {
-    width: 10,
-    height: 10,
-    borderRadius: '50%',
-    background: 'var(--ui-selection-border)',
-    border: '2px solid rgba(255, 255, 255, 0.9)',
-    boxShadow: '0 1px 4px rgba(0, 0, 0, 0.4)',
-  };
 
   return (
     <div
@@ -1020,6 +1017,16 @@ const SpriteCanvasHandles = ({
       // 핸들 조작이 자세 팝업의 바깥 클릭으로 읽히지 않게 한다
       data-dmn-canvas-editor-overlay="true"
     >
+      {poseCorners ? (
+        <RotateCornerHandles
+          corners={poseCorners}
+          innerReach={19}
+          label={t('propertiesPanel.spriteRotation') || '회전'}
+          onPointerDown={(event, cursor) =>
+            beginPoseDrag(event, 'rotate', cursor)
+          }
+        />
+      ) : null}
       <svg
         className="absolute inset-0 w-full h-full"
         aria-hidden="true"
@@ -1037,16 +1044,6 @@ const SpriteCanvasHandles = ({
               data-sprite-pose-frame="true"
               onPointerDown={(event) => beginPoseDrag(event, 'move')}
             />
-            {rotateKnob ? (
-              <line
-                x1={rotateKnob.anchor.x}
-                y1={rotateKnob.anchor.y}
-                x2={rotateKnob.knob.x}
-                y2={rotateKnob.knob.y}
-                stroke="var(--ui-selection-border)"
-                strokeWidth={1}
-              />
-            ) : null}
           </>
         ) : null}
       </svg>
@@ -1075,18 +1072,6 @@ const SpriteCanvasHandles = ({
             </div>
           ))
         : null}
-      {rotateKnob ? (
-        <div
-          role="button"
-          aria-label={t('propertiesPanel.spriteRotation') || '회전'}
-          onPointerDown={(event) => beginPoseDrag(event, 'rotate')}
-          className="pointer-events-auto"
-          style={knobStyle(rotateKnob.knob, 'grab')}
-          data-sprite-rotate-knob="true"
-        >
-          <div style={knobDotStyle} />
-        </div>
-      ) : null}
       {/* 기준점 표식 - 드래그로 옮긴다. 그림은 움직이지 않는다 */}
       <div
         role="button"

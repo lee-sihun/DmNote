@@ -175,7 +175,14 @@ export const useGradientAxisDragSession = ({
     clientX: number,
     clientY: number,
     end: GradientAxisEnd,
-  ): number => gradientAxisPointerAngle(clientX, clientY, end, clientOrigin());
+  ): number =>
+    gradientAxisPointerAngle(
+      clientX,
+      clientY,
+      end,
+      clientOrigin(),
+      geoRef.current?.rotation ?? 0,
+    );
 
   const angleFromClient = (
     clientX: number,

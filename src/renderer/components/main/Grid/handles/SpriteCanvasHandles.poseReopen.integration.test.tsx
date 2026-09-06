@@ -100,6 +100,7 @@ class ResizeObserverStub {
 const spriteFixture = (): CanonicalReactiveSpritePosition => ({
   activation: 'whileHeld',
   pressDurationMs: 300,
+  rotation: 0,
   id: SPRITE_ID,
   dx: 0,
   dy: 0,
@@ -395,7 +396,7 @@ describe('자세 핸들 저장 후 실제 팝업 닫기와 재개방', () => {
         const knob = container.querySelector<HTMLElement>(
           kind === 'scale'
             ? '[data-sprite-scale-knob]'
-            : '[data-sprite-rotate-knob]',
+            : '[data-rotate-corner="0"]',
         )!;
         target = knob;
         from = elementCenter(knob);

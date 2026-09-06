@@ -32,6 +32,7 @@ import type {
   EditorElementPropertyPatchV1,
   EditorPaintPropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
+  EditorStylePropertyPreviewPatchV1,
 } from '@src/types/editor';
 import { getStatTypeLabel } from '@utils/grid/statTypeLabel';
 import SingleGeometrySection from './SingleGeometrySection';
@@ -63,6 +64,7 @@ interface SingleGraphPanelProps {
   onInactiveImageCommit?: (inactiveImage: string) => void;
   onIdleTransparentCommit?: (idleTransparent: boolean) => void;
   onIdleImageFitCommit?: (idleImageFit: ImageFit) => void;
+  onStylePropertyPreview?: (patch: EditorStylePropertyPreviewPatchV1) => void;
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   onPaintPreview?: (patch: EditorPaintPropertyPatchV1) => void;
   onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
@@ -96,6 +98,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
   onInactiveImageCommit,
   onIdleTransparentCommit,
   onIdleImageFitCommit,
+  onStylePropertyPreview,
   onStylePropertyCommit,
   onPaintPreview,
   onPaintCommit,
@@ -151,6 +154,18 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
               kind="graph"
               onGeometryPreview={handleGeometryPreview}
               onGeometryCommit={handleGeometryCommit}
+              onRotationPreview={
+                onStylePropertyPreview
+                  ? (value) =>
+                      onStylePropertyPreview({ property: 'rotation', value })
+                  : undefined
+              }
+              onRotationCommit={
+                onStylePropertyCommit
+                  ? (value) =>
+                      onStylePropertyCommit({ property: 'rotation', value })
+                  : undefined
+              }
               t={t}
             />
 

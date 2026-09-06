@@ -18,6 +18,8 @@ import { makeCanonicalSpritePosition } from '@utils/sprite/spriteFixtures';
 
 vi.mock('@utils/core/platform', () => ({ isMac: () => false }));
 
+const selectionPointerDown = vi.hoisted(() => vi.fn());
+
 // 공용 상호작용 훅은 배럴이 아니라 소스 모듈을 직접 쓴다
 vi.mock('@hooks/Grid/useDraggable', () => ({
   useDraggable: () => ({
@@ -32,7 +34,7 @@ vi.mock('@hooks/Grid/useDraggable', () => ({
 
 vi.mock('@hooks/Grid/useSelectionDrag', () => ({
   useSelectionDrag: () => ({
-    handlePointerDown: () => {},
+    handlePointerDown: selectionPointerDown,
     movedDuringPressRef: { current: false },
     pressMovedRef: { current: false },
   }),
@@ -57,7 +59,17 @@ let root: Root;
 
 const renderSprite = (
   position: CanonicalReactiveSpritePosition,
-  options: { isSelected?: boolean; zoom?: number } = {},
+  options: Partial<
+    Pick<
+      React.ComponentProps<typeof SpriteItem>,
+      | 'isSelected'
+      | 'zoom'
+      | 'onClick'
+      | 'onContextMenu'
+      | 'onCtrlClick'
+      | 'onShiftClick'
+    >
+  > = {},
 ) => {
   act(() => {
     root.render(
@@ -66,9 +78,8 @@ const renderSprite = (
         elementId={SPRITE_ID}
         position={position}
         onPositionChange={() => {}}
-        isSelected={options.isSelected ?? false}
         activeTool="move"
-        zoom={options.zoom ?? 1}
+        {...options}
       />,
     );
   });
@@ -79,6 +90,27 @@ const idleGhost = () =>
   container.querySelector<HTMLImageElement>('[data-sprite-idle-ghost="true"]');
 
 describe('SpriteItem 렌더', () => {
+  it('배치 각도를 바꿔도 이미지의 로컬 자세와 CSS 채널은 그대로 둔다', () => {
+    const position = spritePosition({
+      baseImage: 'hand.png',
+      idleTransform: { x: 4, y: -2, rotation: 179, scale: 1.5 },
+    });
+    const surface = renderSprite(position)!;
+    const imageStyle = surface.querySelector('img')!.getAttribute('style');
+    for (const rotation of [179, -179, 180, -180, 0]) {
+      const updated = renderSprite({ ...position, rotation })!;
+      expect(updated.querySelector('img')!.getAttribute('style')).toBe(
+        imageStyle,
+      );
+      const layout = updated.parentElement!;
+      expect(layout.style.transformOrigin).toBe('50% 50%');
+      expect(layout.style.transform.endsWith(`rotate(${rotation}deg)`)).toBe(
+        rotation !== 0,
+      );
+      expect(updated.matches('[data-sprite-element]')).toBe(true);
+    }
+  });
+
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -133,6 +165,81 @@ describe('SpriteItem 렌더', () => {
     expect(img?.style.width).toBe('120px');
     expect(img?.style.height).toBe('80px');
     expect(img?.style.transformOrigin).toBe('25% 100%');
+  });
+
+  it('상자 밖으로 변환된 실제 그림의 클릭과 우클릭은 요소로 전달한다', () => {
+    const onClick = vi.fn();
+    const onContextMenu = vi.fn();
+    const onCtrlClick = vi.fn();
+    const onShiftClick = vi.fn();
+    const onGridContextMenu = vi.fn();
+    const host = renderSprite(
+      spritePosition({
+        baseImage: 'sprite.png',
+        width: 120,
+        height: 80,
+        rotation: 45,
+        pivot: { x: 0.25, y: 0.75 },
+        idleTransform: { x: 15, y: 0, rotation: 170, scale: 1 },
+        useInlineStyles: true,
+      }),
+      { onClick, onContextMenu, onCtrlClick, onShiftClick },
+    )!;
+    const img = host.querySelector<HTMLImageElement>('img')!;
+    expect(img.style.pointerEvents).toBe('auto');
+    expect(img.style.transform).toBe(
+      'translate(15px, 0px) rotate(170deg) scale(1)',
+    );
+    expect(img.style.transformOrigin).toBe('25% 75%');
+
+    document.body.addEventListener('contextmenu', onGridContextMenu);
+    const contextmenu = new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      button: 2,
+    });
+    try {
+      act(() => {
+        img.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        img.dispatchEvent(
+          new MouseEvent('click', { bubbles: true, ctrlKey: true }),
+        );
+        img.dispatchEvent(
+          new MouseEvent('click', { bubbles: true, shiftKey: true }),
+        );
+        img.dispatchEvent(contextmenu);
+      });
+    } finally {
+      document.body.removeEventListener('contextmenu', onGridContextMenu);
+    }
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(onCtrlClick).toHaveBeenCalledTimes(1);
+    expect(onShiftClick).toHaveBeenCalledTimes(1);
+    expect(onContextMenu).toHaveBeenCalledTimes(1);
+    expect(contextmenu.defaultPrevented).toBe(true);
+    expect(onGridContextMenu).not.toHaveBeenCalled();
+  });
+
+  it('선택한 그림의 press는 요소 드래그로 전달하고 브라우저 이미지 드래그는 막는다', () => {
+    selectionPointerDown.mockClear();
+    const host = renderSprite(spritePosition({ baseImage: 'sprite.png' }), {
+      isSelected: true,
+    })!;
+    const img = host.querySelector<HTMLImageElement>('img')!;
+    expect(img.style.pointerEvents).toBe('auto');
+    expect(img.draggable).toBe(false);
+
+    const dragstart = new Event('dragstart', {
+      bubbles: true,
+      cancelable: true,
+    });
+    act(() => {
+      img.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      img.dispatchEvent(dragstart);
+    });
+    expect(selectionPointerDown).toHaveBeenCalledTimes(1);
+    expect(selectionPointerDown.mock.calls[0][0].target).toBe(img);
+    expect(dragstart.defaultPrevented).toBe(true);
   });
 
   it('hidden 스프라이트는 렌더하지 않는다', () => {
@@ -300,6 +407,11 @@ describe('SpriteItem 자세 편집 프리뷰', () => {
     expect(ghost).not.toBeNull();
     expect(ghost?.getAttribute('src')).toContain('base');
     expect(ghost?.style.opacity).toBe('0.3');
+    expect(ghost?.style.pointerEvents).toBe('none');
+    expect(
+      node?.querySelector<HTMLImageElement>('img:not([data-sprite-idle-ghost])')
+        ?.style.pointerEvents,
+    ).toBe('auto');
     // 고스트는 기본 자세 그대로, 실제 이미지는 자세 변환
     expect(ghost?.style.transform).toBe(
       'translate(0px, 0px) rotate(0deg) scale(1)',

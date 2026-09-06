@@ -47,6 +47,7 @@ const SpriteDuplicateGhost = ({
       width={width}
       height={height}
       cursor={cursor}
+      rotation={position.rotation ?? 0}
       className={position.className ?? undefined}
       dataAttributes={{ 'data-sprite-ghost': 'true' }}
     >

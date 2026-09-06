@@ -576,6 +576,7 @@
     "spriteFollowBasePivot": "Use Base Pivot",
     "spriteStatePivot": "State Pivot",
     "spriteRotation": "Rotation",
+    "rotation": "Rotation",
     "spriteScale": "Scale",
     "spritePose": "State",
     "spriteAddPose": "Add State",

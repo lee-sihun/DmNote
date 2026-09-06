@@ -9,10 +9,12 @@ vi.mock('../core/platform', () => ({
 import {
   clearPendingCustomCursorHover,
   isCustomCursorHoverSuspended,
+  lockCustomCursor,
   resumeCustomCursorHover,
   setCustomCursorHover,
   setPendingCustomCursorHover,
   suspendCustomCursorHover,
+  unlockCustomCursor,
 } from './cursorUtils';
 
 // 오버레이 활성화 시 body에 붙는 클래스 계약
@@ -167,5 +169,127 @@ describe('커스텀 커서 호버 억제 (드래그 세션)', () => {
 
     expect(apply).toHaveBeenCalledOnce();
     expect(hasCursorBodyClass()).toBe(true);
+  });
+});
+
+describe('커스텀 커서 포인터 추종', () => {
+  let target: HTMLDivElement;
+
+  const overlay = () => document.getElementById('dmn-cursor-overlay')!;
+  const move = (type: 'pointermove' | 'mousemove', x: number, y: number) => {
+    const EventType = type === 'pointermove' ? PointerEvent : MouseEvent;
+    target.dispatchEvent(
+      new EventType(type, { clientX: x, clientY: y, bubbles: true }),
+    );
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    target = document.createElement('div');
+    // 핸들의 이벤트 전파와 무관하게 화면 커서는 현재 포인터를 따른다
+    target.addEventListener('pointermove', (event) => event.stopPropagation());
+    target.addEventListener('mousemove', (event) => event.stopPropagation());
+    document.body.appendChild(target);
+  });
+
+  afterEach(() => {
+    setCustomCursorHover(null);
+    unlockCustomCursor();
+    target.remove();
+    vi.runAllTimers();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it.each([
+    'rotate',
+    'ns-resize',
+    'ew-resize',
+    'nwse-resize',
+    'nesw-resize',
+  ] as const)(
+    '%s 드래그는 호환 mousemove가 없어도 캡처된 pointermove를 따른다',
+    (cursor) => {
+      lockCustomCursor(
+        cursor,
+        new PointerEvent('pointerdown', { clientX: 20, clientY: 30 }),
+      );
+      expect(overlay().style.transform).toBe('translate3d(8px, 18px, 0)');
+
+      move('pointermove', 70, 90);
+      move('pointermove', 120, 150);
+      vi.runAllTimers();
+
+      expect(overlay().style.transform).toBe('translate3d(108px, 138px, 0)');
+      expect(hasCursorBodyClass()).toBe(true);
+    },
+  );
+
+  it('pointer와 mouse 이동이 함께 오면 같은 프레임의 최종 위치를 한 번만 그린다', () => {
+    lockCustomCursor(
+      'rotate',
+      new PointerEvent('pointerdown', { clientX: 20, clientY: 30 }),
+    );
+    const requestFrame = vi.spyOn(window, 'requestAnimationFrame');
+
+    move('pointermove', 70, 90);
+    move('mousemove', 70, 90);
+    move('pointermove', 120, 150);
+    move('mousemove', 120, 150);
+    expect(requestFrame).toHaveBeenCalledOnce();
+    vi.runAllTimers();
+
+    expect(overlay().style.transform).toBe('translate3d(108px, 138px, 0)');
+  });
+
+  it('기존 mouse 이동만 제공하는 입력도 캡처 단계에서 따른다', () => {
+    lockCustomCursor(
+      'ew-resize',
+      new MouseEvent('mousedown', { clientX: 20, clientY: 30 }),
+    );
+    move('mousemove', 100, 120);
+    vi.runAllTimers();
+
+    expect(overlay().style.transform).toBe('translate3d(88px, 108px, 0)');
+  });
+
+  it.each(['unlock', 'blur'] as const)(
+    '%s 뒤에는 예약 프레임과 두 이동 리스너를 모두 회수한다',
+    (finish) => {
+      lockCustomCursor(
+        'rotate',
+        new PointerEvent('pointerdown', { clientX: 20, clientY: 30 }),
+      );
+      move('pointermove', 100, 120);
+      if (finish === 'unlock') unlockCustomCursor();
+      else window.dispatchEvent(new Event('blur'));
+      const requestFrame = vi.spyOn(window, 'requestAnimationFrame');
+
+      move('pointermove', 200, 220);
+      move('mousemove', 200, 220);
+      vi.runAllTimers();
+
+      expect(requestFrame).not.toHaveBeenCalled();
+      expect(overlay().style.transform).toBe('translate3d(8px, 18px, 0)');
+      expect(overlay().style.display).toBe('none');
+      expect(hasCursorBodyClass()).toBe(false);
+    },
+  );
+
+  it('드래그 잠금 해제 뒤 남은 호버는 이동을 계속 따르고 leave에서 끝난다', () => {
+    setCustomCursorHover('ns-resize');
+    lockCustomCursor(
+      'rotate',
+      new PointerEvent('pointerdown', { clientX: 20, clientY: 30 }),
+    );
+    unlockCustomCursor();
+    move('pointermove', 100, 120);
+    vi.runAllTimers();
+    expect(overlay().style.transform).toBe('translate3d(88px, 108px, 0)');
+    expect(hasCursorBodyClass()).toBe(true);
+
+    setCustomCursorHover(null);
+    expect(overlay().style.display).toBe('none');
+    expect(hasCursorBodyClass()).toBe(false);
   });
 });

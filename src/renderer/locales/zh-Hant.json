@@ -581,6 +581,7 @@
     "spriteFollowBasePivot": "使用基礎基準點",
     "spriteStatePivot": "狀態基準點",
     "spriteRotation": "旋轉",
+    "rotation": "旋轉",
     "spriteScale": "縮放",
     "spritePose": "狀態",
     "spriteAddPose": "新增狀態",

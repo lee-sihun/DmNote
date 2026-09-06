@@ -1,5 +1,7 @@
 import { EDITOR_BOUNDS_LIMITS } from '@src/types/editor';
 import { clamp } from '@utils/core/clamp';
+import { DEG_TO_RAD } from '@utils/core/rotation';
+import { anchorRotatedResize } from './rotatedResize';
 
 import {
   isBoundsTransitionWithinEditorLimits,
@@ -52,6 +54,7 @@ export const aspectScaleRange = (
   start: ResizeBounds,
   handle: ResizeAxisHandle,
   minSize: number,
+  rotation = 0,
 ): ScaleRange => {
   const { maxDimension, maxAbsCoordinate } = EDITOR_BOUNDS_LIMITS;
   const guarded = [start.width, start.height].filter((size) => size >= minSize);
@@ -65,12 +68,31 @@ export const aspectScaleRange = (
     min += min * Number.EPSILON;
   }
   let max = Math.min(maxDimension / start.width, maxDimension / start.height);
-  const axes: Array<[number, number, -1 | 0 | 1]> = [
-    [start.x, start.width, handle.dx],
-    [start.y, start.height, handle.dy],
-  ];
-  for (const [origin, size, dir] of axes) {
-    const slope = anchorSlope(size, dir);
+  const cos = Math.cos(rotation * DEG_TO_RAD);
+  const sin = Math.sin(rotation * DEG_TO_RAD);
+  const axes: Array<[number, number]> =
+    rotation === 0
+      ? [
+          [start.x, anchorSlope(start.width, handle.dx)],
+          [start.y, anchorSlope(start.height, handle.dy)],
+        ]
+      : [
+          [
+            start.x,
+            (cos * start.width * handle.dx -
+              sin * start.height * handle.dy -
+              start.width) /
+              2,
+          ],
+          [
+            start.y,
+            (sin * start.width * handle.dx +
+              cos * start.height * handle.dy -
+              start.height) /
+              2,
+          ],
+        ];
+  for (const [origin, slope] of axes) {
     if (slope === 0) continue;
     const range = coordinateScaleRange(origin, slope, maxAbsCoordinate);
     min = Math.max(min, range.min);
@@ -127,6 +149,7 @@ export const settleAspectScale = (
   handle: ResizeAxisHandle,
   range: ScaleRange,
   exact?: ExactAxisSize,
+  rotation = 0,
 ): number => {
   let settled = clamp(Number.isFinite(scale) ? scale : 1, range.min, range.max);
   for (let attempt = 0; attempt < 8; attempt += 1) {
@@ -134,7 +157,11 @@ export const settleAspectScale = (
     if (
       isBoundsTransitionWithinEditorLimits(
         start,
-        scaleBoundsAnchored(start, settled, handle, exactSize),
+        anchorRotatedResize(
+          start,
+          scaleBoundsAnchored(start, settled, handle, exactSize),
+          rotation,
+        ),
       )
     ) {
       return settled;

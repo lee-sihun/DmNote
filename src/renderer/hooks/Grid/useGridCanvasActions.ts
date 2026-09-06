@@ -4,6 +4,7 @@
  */
 
 import { newElementId } from '@src/renderer/editor/model/elementId';
+import { DEFAULT_ELEMENT_ROTATION } from '@src/types/key/rotation';
 import {
   addKeyAt,
   addGraphAt,
@@ -330,6 +331,7 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
       statType: 'kps',
       dx,
       dy,
+      rotation: DEFAULT_ELEMENT_ROTATION,
       width: 60,
       height: 60,
       hidden: false,
@@ -367,6 +369,7 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
       graphAnimationEnabled: true,
       dx,
       dy,
+      rotation: DEFAULT_ELEMENT_ROTATION,
       width: 120,
       height: 60,
       hidden: false,
@@ -435,6 +438,7 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
       reverse: false,
       dx,
       dy,
+      rotation: DEFAULT_ELEMENT_ROTATION,
       width: 60,
       height: 60,
       hidden: false,
@@ -503,6 +507,7 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
         groupId: null,
         className: null,
         useInlineStyles: null,
+        rotation: 0,
         baseImage: null,
         pivot: { ...CENTER_SPRITE_ANCHOR },
         idleTransform: { ...IDENTITY_SPRITE_TRANSFORM },

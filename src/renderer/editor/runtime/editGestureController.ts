@@ -204,26 +204,19 @@ export const editGestureController = {
       domainPatches = new Map();
       active.appliedPatches.set(domain, domainPatches);
     }
+    const presentIds = new Set(
+      (authorityRecordFor(domain)[mode] ?? []).map(({ id }) => id),
+    );
+    const localEntries: PreviewEntry[] = [];
     for (const entry of validEntries) {
       const intentKey = entry.id;
-      const currentIndex = currentIndexForId(domain, mode, intentKey);
-      if (currentIndex < 0) continue;
+      if (!presentIds.has(intentKey)) continue;
       const applied = domainPatches.get(intentKey);
       domainPatches.set(
         intentKey,
         applied ? { ...applied, ...entry.patch } : { ...entry.patch },
       );
-      const replacedSessionIds = previewOverlay.applyLocalPatchByIds(
-        active.sessionId,
-        mode,
-        [intentKey],
-        entry.patch,
-        domain,
-      );
-      markGestureSessionsDiscarded(replacedSessionIds);
-      replacedSessionIds.forEach((sessionId) => {
-        previewApi.cancel(sessionId).catch(() => {});
-      });
+      localEntries.push(entry);
       let pending = active.pendingPatches.get(domain);
       if (!pending) {
         pending = new Map();
@@ -234,6 +227,18 @@ export const editGestureController = {
         intentKey,
         queued ? { ...queued, ...entry.patch } : { ...entry.patch },
       );
+    }
+    if (localEntries.length > 0) {
+      const replacedSessionIds = previewOverlay.applyLocalPatchesByIds(
+        active.sessionId,
+        mode,
+        localEntries,
+        domain,
+      );
+      markGestureSessionsDiscarded(replacedSessionIds);
+      replacedSessionIds.forEach((sessionId) => {
+        previewApi.cancel(sessionId).catch(() => {});
+      });
     }
     schedulePublishFlush();
   },

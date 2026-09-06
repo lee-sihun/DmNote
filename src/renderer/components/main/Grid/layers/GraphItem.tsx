@@ -10,6 +10,7 @@ import {
 
 interface GraphPosition {
   hidden?: boolean;
+  rotation?: number;
   dx?: number;
   dy?: number;
   width?: number;
@@ -152,6 +153,7 @@ const GraphItem = ({
       ref={attachRef}
       dx={renderDx}
       dy={renderDy}
+      rotation={position.rotation}
       width={width}
       height={height}
       zIndex={position.zIndex ?? zIndex}

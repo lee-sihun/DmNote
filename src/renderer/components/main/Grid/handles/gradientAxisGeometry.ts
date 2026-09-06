@@ -14,6 +14,7 @@ export interface GradientAxisBounds {
   y: number;
   width: number;
   height: number;
+  rotation?: number;
 }
 
 export interface GradientAxisGeometry {
@@ -28,6 +29,8 @@ export interface GradientAxisGeometry {
   zoom: number;
   endX: number;
   endY: number;
+  rotation: number;
+  screenAngle: number;
 }
 
 interface RegisteredGradientAnchorBounds {
@@ -172,6 +175,7 @@ export const resolveGradientAxisBounds = ({
     y: pos.dy,
     width: pos.width || (anchor.kind === 'graph' ? 200 : 60),
     height: pos.height || (anchor.kind === 'graph' ? 100 : 60),
+    ...(pos.rotation ? { rotation: pos.rotation } : {}),
   };
 };
 
@@ -189,9 +193,12 @@ export const buildGradientAxisGeometry = (
     bounds.height,
   );
   const rad = (angle * Math.PI) / 180;
+  const rotation = bounds.rotation ?? 0;
+  const screenAngle = angle + rotation;
+  const screenRad = (screenAngle * Math.PI) / 180;
   // CSS linear-gradient: 0deg = 위, 시계 방향 - 화면 좌표(y 아래)로 변환
-  const dirX = Math.sin(rad);
-  const dirY = -Math.cos(rad);
+  const dirX = Math.sin(screenRad);
+  const dirY = -Math.cos(screenRad);
   // CSS 그라데이션 라인 절반 길이 - pos 0/1이 이 지점에 해당
   const halfLine =
     ((Math.abs(bounds.width * Math.sin(rad)) +
@@ -210,6 +217,8 @@ export const buildGradientAxisGeometry = (
     zoom,
     endX: cx + dirX * halfLine,
     endY: cy + dirY * halfLine,
+    rotation,
+    screenAngle,
   };
 };
 
@@ -234,11 +243,14 @@ export const gradientAxisPointerAngle = (
   clientY: number,
   end: GradientAxisEnd,
   origin: { x: number; y: number },
+  rotation = 0,
 ): number => {
   const raw =
     (Math.atan2(clientX - origin.x, origin.y - clientY) * 180) / Math.PI;
   // 시작점 쪽을 잡으면 축 반대 방향이 그라데이션 진행 방향
-  return normalizeGradientAxisAngle(end === 'start' ? raw + 180 : raw);
+  return normalizeGradientAxisAngle(
+    (end === 'start' ? raw + 180 : raw) - rotation,
+  );
 };
 
 export const applyGradientAxisMagnet = (

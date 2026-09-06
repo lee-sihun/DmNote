@@ -115,7 +115,7 @@ const GradientAxisOverlay = ({
 
   if (!session || !bounds || !geometry) return null;
 
-  const { cx, cy, halfLine, endX, endY } = geometry;
+  const { cx, cy, halfLine, endX, endY, screenAngle } = geometry;
   // pos(0~1) → 축 위 화면 좌표
   const stopPoint = (pos: number) => gradientAxisStopPoint(geometry, pos);
 
@@ -148,7 +148,7 @@ const GradientAxisOverlay = ({
             width: halfLine * 2,
             height: 0,
             borderTop: '1.5px solid var(--ui-selection-border-strong)',
-            transform: `translate(-50%, -50%) rotate(${angle - 90}deg)`,
+            transform: `translate(-50%, -50%) rotate(${screenAngle - 90}deg)`,
             opacity: 0.9,
             pointerEvents: 'none',
           }}
@@ -173,7 +173,7 @@ const GradientAxisOverlay = ({
             top: cy,
             width: halfLine * 2,
             height: AXIS_HIT_THICKNESS,
-            transform: `translate(-50%, -50%) rotate(${angle - 90}deg)`,
+            transform: `translate(-50%, -50%) rotate(${screenAngle - 90}deg)`,
             cursor: isRotating ? 'grabbing' : 'default',
             pointerEvents: 'auto',
             touchAction: 'none',

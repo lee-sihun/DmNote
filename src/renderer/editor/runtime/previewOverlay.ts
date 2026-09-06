@@ -68,11 +68,15 @@ export const composePreviewPositions = <T extends { id: string }>(
       if (nextMode === null) nextMode = [...modePositions];
       nextMode[index] = { ...current, ...patch };
     }
+    const indexById = new Map<string, number>();
+    if (idPatches?.size) {
+      (nextMode ?? modePositions).forEach(({ id }, index) => {
+        if (!indexById.has(id)) indexById.set(id, index);
+      });
+    }
     for (const [id, patch] of idPatches ?? []) {
-      const index = (nextMode ?? modePositions).findIndex(
-        (position) => position.id === id,
-      );
-      if (index < 0) continue;
+      const index = indexById.get(id);
+      if (index === undefined) continue;
       const current = (nextMode ?? modePositions)[index];
       if (!current) continue;
       if (nextMode === null) nextMode = [...modePositions];
@@ -185,6 +189,20 @@ export const previewOverlay = {
     patch: Record<string, unknown>,
     domain: PreviewDomain = 'keyPosition',
   ): string[] {
+    return this.applyLocalPatchesByIds(
+      sessionId,
+      mode,
+      targets.map((id) => ({ id, patch })),
+      domain,
+    );
+  },
+
+  applyLocalPatchesByIds(
+    sessionId: string,
+    mode: string,
+    entries: readonly { id: string; patch: Record<string, unknown> }[],
+    domain: PreviewDomain = 'keyPosition',
+  ): string[] {
     if (tombstones.has(sessionId)) return [];
     const replaced = replacePreviousLocalSession(sessionId);
     let session = sessions.get(sessionId);
@@ -198,7 +216,9 @@ export const previewOverlay = {
       };
       sessions.set(sessionId, session);
     }
-    mergeLocalIdPatch(session, domain, targets, patch);
+    for (const { id, patch } of entries) {
+      mergeLocalIdPatch(session, domain, [id], patch);
+    }
     refreshRenderedState();
     return replaced;
   },

@@ -13,6 +13,8 @@ export interface SpritePoseHandleSession {
   poseId: string;
   /** 요소 원점 (그리드 좌표) */
   origin: { dx: number; dy: number };
+  /** 상자 중심의 배치 회전. 자세 transform과 독립 */
+  rotation?: number;
   /** 요소 상자와 기준점 - 회전·배율 축 P의 근거 */
   width: number;
   height: number;
@@ -52,6 +54,7 @@ const sameSessionGeometry = (
 ): boolean =>
   current.origin.dx === next.origin.dx &&
   current.origin.dy === next.origin.dy &&
+  (current.rotation ?? 0) === (next.rotation ?? 0) &&
   current.width === next.width &&
   current.height === next.height &&
   current.pivot.x === next.pivot.x &&

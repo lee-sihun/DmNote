@@ -5,6 +5,7 @@ import {
   type GradientPreviewSurface,
 } from '@stores/grid/useGradientEditStore';
 import { gridAnchorBoundsFor } from '@utils/core/gridAnchorBounds';
+import { rotatePointAround } from '@utils/core/rotation';
 import { GLYPH_BOX_CHANGE_EVENT } from './useCounterGlyphPaint';
 
 /**
@@ -20,6 +21,7 @@ export function useCounterAxisAnchor(
   selector?: string,
   expectedSurface: GradientPreviewSurface = 'counterFill',
   origin?: { x: number; y: number },
+  rotation = 0,
 ) {
   const sessionKey =
     session?.surface === expectedSurface && session.anchor.kind !== 'batch'
@@ -39,17 +41,28 @@ export function useCounterAxisAnchor(
       : host;
     if (!element) return;
     const register = () => {
-      let bounds = gridAnchorBoundsFor(element);
+      let bounds = gridAnchorBoundsFor(element, rotation);
       if (!bounds) return;
       // 페인트 박스가 글리프 잉크에 맞춰져 있으면 축도 같은 박스를 쓴다
       // (useCounterGlyphPaint가 기록, 로컬 px = 그리드 px)
       const glyph = element.dataset.dmnGlyphBox?.split(' ').map(Number);
       if (glyph?.length === 4 && glyph.every(Number.isFinite)) {
+        const glyphCenter = rotatePointAround(
+          {
+            x: bounds.x + glyph[0] + glyph[2] / 2,
+            y: bounds.y + glyph[1] + glyph[3] / 2,
+          },
+          { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 },
+          rotation,
+        );
         bounds = {
-          x: bounds.x + glyph[0],
-          y: bounds.y + glyph[1],
+          x:
+            rotation === 0 ? bounds.x + glyph[0] : glyphCenter.x - glyph[2] / 2,
+          y:
+            rotation === 0 ? bounds.y + glyph[1] : glyphCenter.y - glyph[3] / 2,
           width: glyph[2],
           height: glyph[3],
+          ...(rotation !== 0 ? { rotation } : {}),
         };
       }
       useGradientEditStore
@@ -70,5 +83,5 @@ export function useCounterAxisAnchor(
       observer?.disconnect();
       useGradientEditStore.getState().setAnchorBounds(sessionKey, null);
     };
-  }, [sessionKey, hostRef, selector, textDep]);
+  }, [sessionKey, hostRef, selector, textDep, rotation]);
 }

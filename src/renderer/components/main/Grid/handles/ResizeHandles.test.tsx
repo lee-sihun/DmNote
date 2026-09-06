@@ -15,6 +15,7 @@ import {
 } from '@utils/grid/cursorUtils';
 import { isSameAspect } from './aspectResize';
 import { isBoundsWithinEditorLimits } from './resizeLimits';
+import { EDITOR_BOUNDS_LIMITS } from '@src/types/editor';
 import ResizeHandles from './ResizeHandles';
 
 describe('ResizeHandles frame coalescing', () => {
@@ -84,6 +85,65 @@ describe('ResizeHandles frame coalescing', () => {
     });
     act(() => document.dispatchEvent(new MouseEvent('mouseup')));
   });
+
+  it.each([false, true])(
+    '회전된 리사이즈는 최종 저장 좌표 한계 안에서 멈춘다 (비율 고정 %s)',
+    async (keepAspect) => {
+      const onResize = vi.fn();
+      await act(async () => {
+        root.render(
+          <ResizeHandles
+            bounds={{
+              x: -EDITOR_BOUNDS_LIMITS.maxAbsCoordinate + 10,
+              y: 0,
+              width: 100,
+              height: 100,
+            }}
+            rotation={90}
+            onResize={onResize}
+          />,
+        );
+      });
+      const handle = host.querySelector<HTMLElement>(
+        '[data-resize-handle="e"]',
+      )!;
+      act(() =>
+        handle.dispatchEvent(
+          new MouseEvent('mousedown', { bubbles: true, cancelable: true }),
+        ),
+      );
+      document.dispatchEvent(
+        new MouseEvent('mousemove', { clientY: 100, shiftKey: keepAspect }),
+      );
+      act(() => document.dispatchEvent(new MouseEvent('mouseup')));
+      const result = onResize.mock.lastCall?.[0];
+      expect(result).toBeDefined();
+      expect(isBoundsWithinEditorLimits(result)).toBe(true);
+      expect(result.x).toBeCloseTo(-EDITOR_BOUNDS_LIMITS.maxAbsCoordinate);
+      expect(result.width).toBeCloseTo(120);
+      expect(result.height).toBeCloseTo(keepAspect ? 120 : 100);
+      expect(result.x + result.width / 2).toBeCloseTo(
+        -EDITOR_BOUNDS_LIMITS.maxAbsCoordinate + 60,
+      );
+      expect(result.y + result.height / 2 - result.width / 2).toBeCloseTo(0);
+      onResize.mockClear();
+      await act(async () => {
+        root.render(
+          <ResizeHandles bounds={result} rotation={90} onResize={onResize} />,
+        );
+      });
+      act(() =>
+        handle.dispatchEvent(
+          new MouseEvent('mousedown', { bubbles: true, cancelable: true }),
+        ),
+      );
+      document.dispatchEvent(
+        new MouseEvent('mousemove', { clientY: 100, shiftKey: keepAspect }),
+      );
+      act(() => document.dispatchEvent(new MouseEvent('mouseup')));
+      expect(onResize).not.toHaveBeenCalled();
+    },
+  );
 
   it('가로 전용 핸들은 높이·Y를 유지한다 (비배수 높이 1px 밀림 방지)', async () => {
     const onResize = vi.fn();
@@ -348,7 +408,7 @@ describe('ResizeHandles 핸들 호버 생명주기', () => {
     // 포인터가 핸들 안에 머문 릴리즈 - 커서와 하이라이트 모두 복원
     expect(hasCursorBodyClass()).toBe(true);
     const visual = handle.firstElementChild as HTMLElement;
-    expect(visual.style.backgroundColor).not.toBe('white');
+    expect(visual.style.backgroundColor).toBe('white');
   });
 
   it('억제 중 enter 후 leave가 오면 resume에도 hover가 없다', async () => {

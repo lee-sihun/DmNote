@@ -2,6 +2,7 @@ import type { KeyPosition } from '@src/types/key/keys';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 import { NumberInput, PropertyRow, PropertySection } from '../PropertyInputs';
+import RotationInputRow from '../RotationInputRow';
 
 type GeometryField = 'dx' | 'dy' | 'width' | 'height';
 type SingleGeometryKind = 'key-or-stat' | 'graph' | 'knob';
@@ -51,6 +52,9 @@ interface SingleGeometrySectionProps {
   onLocalHeightChange?: (value: number) => void;
   onGeometryPreview?: (field: GeometryField, value: number) => void;
   onGeometryCommit?: (field: GeometryField, value: number) => void;
+  // 회전은 bounds가 아니라 patchElement/rotation 경로 - 둘 다 있을 때만 행을 그린다
+  onRotationPreview?: (value: number) => void;
+  onRotationCommit?: (value: number) => void;
   t: (key: string) => string | undefined;
 }
 
@@ -67,6 +71,8 @@ const SingleGeometrySection = ({
   onLocalHeightChange,
   onGeometryPreview,
   onGeometryCommit,
+  onRotationPreview,
+  onRotationCommit,
   t,
 }: SingleGeometrySectionProps) => {
   const isIndividualMode = !onLocalDxChange;
@@ -185,6 +191,16 @@ const SingleGeometrySection = ({
             : {})}
         />
       </PropertyRow>
+
+      {onRotationCommit && onRotationPreview && (
+        <RotationInputRow
+          label={t('propertiesPanel.rotation') || '회전'}
+          value={keyPosition.rotation ?? 0}
+          onPreview={onRotationPreview}
+          onChange={onRotationCommit}
+          onCancel={() => editGestureController.cancel()}
+        />
+      )}
     </PropertySection>
   );
 };

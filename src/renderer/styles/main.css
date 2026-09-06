@@ -44,8 +44,8 @@ body {
 }
 
 /* 커스텀 커서 미리보기 */
-body.dmn-custom-cursor,
-body.dmn-custom-cursor * {
+html body.dmn-custom-cursor,
+html body.dmn-custom-cursor * {
   cursor: none !important;
 }
 

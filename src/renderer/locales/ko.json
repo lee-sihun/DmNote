@@ -576,6 +576,7 @@
     "spriteFollowBasePivot": "기본 기준점 사용",
     "spriteStatePivot": "상태 기준점",
     "spriteRotation": "회전",
+    "rotation": "회전",
     "spriteScale": "배율",
     "spritePose": "상태",
     "spriteAddPose": "상태 추가",

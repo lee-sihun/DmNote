@@ -2,7 +2,7 @@
  * 스프라이트 캔버스 핸들
  * - 선택 중엔 기준점 십자를 그리고, 드래그가 9점 스냅·보정 patch를 commit한다
  * - 시작 시점 canonical이 바뀌면(리사이즈 착지·다른 창 편집) 낡은 patch를 버린다
- * - 자세 세션은 본체 이동·회전 노브·모서리 배율을 요소 로컬 px로 계산한다
+ * - 자세 세션은 본체 이동·모서리 바깥 회전·모서리 배율을 요소 로컬 px로 계산한다
  * - undo/redo 반영·다른 pointerId·세션 종료는 진행 중 드래그를 커밋 없이 닫는다
  */
 import React, { act } from 'react';
@@ -109,8 +109,8 @@ describe('SpriteCanvasHandles', () => {
     container.querySelector<SVGPolygonElement>(
       '[data-sprite-pose-frame="true"]',
     );
-  const rotateKnob = () =>
-    container.querySelector<HTMLElement>('[data-sprite-rotate-knob="true"]');
+  const rotateCorner = () =>
+    container.querySelector<HTMLElement>('[data-rotate-corner="0"]');
   const scaleKnobs = () =>
     container.querySelectorAll<HTMLElement>('[data-sprite-scale-knob="true"]');
 
@@ -213,6 +213,27 @@ describe('SpriteCanvasHandles', () => {
     pivotHandle()!.dispatchEvent(event);
 
     expect(event.defaultPrevented).toBe(true);
+  });
+
+  it('배치가 90도 돌아도 기준점 포인터를 상자 로컬 축으로 해석한다', async () => {
+    useSpriteStore.setState({
+      positions: { '4key': [{ ...sprite(), rotation: 90 }] },
+    });
+    render();
+    pointer('pointerdown', pivotHandle()!, { clientX: 110, clientY: 70 });
+    pointer('pointermove', window, {
+      clientX: 60,
+      clientY: 170,
+      ctrlKey: true,
+    });
+    await flushFrame();
+    pointer('pointerup', window, { clientX: 60, clientY: 170, ctrlKey: true });
+    expect(mocks.patchPosition.mock.calls.at(-1)?.slice(0, 3)).toEqual([
+      '4key',
+      SPRITE_ID,
+      expect.objectContaining({ pivot: { x: 1, y: 1 } }),
+    ]);
+    await flushFrame();
   });
 
   it('기준점 조작 전에 포커스된 입력을 정산한다', () => {
@@ -435,10 +456,121 @@ describe('SpriteCanvasHandles', () => {
       return session;
     };
 
-    it('프레임·회전 노브·모서리 4개를 그리고 자세 편집 중엔 십자가 자세 축을 따라간다', () => {
+    it('자세 프레임과 기준점은 배치 회전과 로컬 자세 회전을 합성한다', () => {
+      openSession({
+        rotation: 90,
+        transform: { x: 30, y: 0, rotation: 90, scale: 1 },
+      });
+      const corners = poseFrame()!
+        .getAttribute('points')!
+        .split(' ')
+        .map((point) => point.split(',').map(Number));
+      [
+        [210, 150],
+        [10, 150],
+        [10, 50],
+        [210, 50],
+      ].forEach((expected, index) => {
+        expect(corners[index][0]).toBeCloseTo(expected[0], 8);
+        expect(corners[index][1]).toBeCloseTo(expected[1], 8);
+      });
+      expect(Number.parseFloat(pivotHandle()!.style.left) + 13).toBeCloseTo(
+        110,
+        8,
+      );
+      expect(Number.parseFloat(pivotHandle()!.style.top) + 13).toBeCloseTo(
+        100,
+        8,
+      );
+    });
+
+    it('배치가 돌아도 자세 이동과 포즈 기준점은 로컬 축으로 편집한다', async () => {
+      const session = openSession({ rotation: 90 }, { zoom: 2 });
+      pointer('pointerdown', poseFrame()!, { clientX: 100, clientY: 100 });
+      pointer('pointermove', window, { clientX: 140, clientY: 80 });
+      await flushFrame();
+      expect(session.preview).toHaveBeenLastCalledWith(
+        expect.objectContaining({ x: -10, y: -20 }),
+      );
+      pointer('pointerup', window, { clientX: 140, clientY: 80 });
+      expect(session.commit).toHaveBeenLastCalledWith(
+        expect.objectContaining({ x: -10, y: -20 }),
+      );
+      const pivotSession = openSession({ rotation: 90 });
+      pointer('pointerdown', pivotHandle()!, { clientX: 110, clientY: 70 });
+      pointer('pointermove', window, {
+        clientX: 110,
+        clientY: 90,
+        ctrlKey: true,
+      });
+      await flushFrame();
+      expect(Number.parseFloat(pivotHandle()!.style.left) + 13).toBeCloseTo(
+        110,
+        8,
+      );
+      expect(Number.parseFloat(pivotHandle()!.style.top) + 13).toBeCloseTo(
+        90,
+        8,
+      );
+      pointer('pointerup', window, {
+        clientX: 110,
+        clientY: 90,
+        ctrlKey: true,
+      });
+      expect(pivotSession.commitPivot).toHaveBeenCalledWith(
+        expect.objectContaining({ x: 0.6, y: 0.5 }),
+        expect.anything(),
+      );
+    });
+
+    it('배치 각도를 더하지 않고 자세 회전과 배율만 편집한다', async () => {
+      const rotateSession = openSession({
+        rotation: 90,
+        transform: { x: 0, y: 0, rotation: 45, scale: 1 },
+      });
+      pointer('pointerdown', rotateCorner()!, { clientX: 160, clientY: 70 });
+      pointer('pointermove', window, { clientX: 110, clientY: 120 });
+      await flushFrame();
+      expect(rotateSession.preview).toHaveBeenLastCalledWith(
+        expect.objectContaining({ rotation: 135 }),
+      );
+      pointer('pointerup', window, { clientX: 110, clientY: 120 });
+      const scaleSession = openSession({
+        rotation: 90,
+        transform: { x: 30, y: 0, rotation: 45, scale: 1 },
+      });
+      pointer('pointerdown', scaleKnobs()[0], { clientX: 160, clientY: 100 });
+      pointer('pointermove', window, { clientX: 210, clientY: 100 });
+      await flushFrame();
+      expect(scaleSession.preview).toHaveBeenLastCalledWith(
+        expect.objectContaining({ rotation: 45, scale: 2 }),
+      );
+      pointer('pointerup', window, { clientX: 210, clientY: 100 });
+    });
+
+    it('도중에 배치 회전이 바뀌면 이전 자세 포인터를 커밋하지 않는다', async () => {
+      const session = openSession();
+      pointer('pointerdown', poseFrame()!, { clientX: 100, clientY: 100 });
+      pointer('pointermove', window, { clientX: 140, clientY: 80 });
+      await flushFrame();
+      act(() =>
+        useSpritePoseHandleStore
+          .getState()
+          .setSession({ ...session, rotation: 90 }),
+      );
+      pointer('pointerup', window, { clientX: 140, clientY: 80 });
+      expect(session.commit).not.toHaveBeenCalled();
+    });
+
+    it('프레임과 회전·배율 영역 각 4개를 그리고 십자가 자세 축을 따라간다', () => {
       openSession({ transform: { x: 30, y: 0, rotation: 0, scale: 1 } });
       expect(poseFrame()).not.toBeNull();
-      expect(rotateKnob()).not.toBeNull();
+      expect(rotateCorner()).not.toBeNull();
+      expect(container.querySelectorAll('[data-rotate-corner]')).toHaveLength(
+        4,
+      );
+      expect(container.querySelector('[data-sprite-rotate-knob]')).toBeNull();
+      expect(poseFrame()!.parentElement!.querySelector('line')).toBeNull();
       expect(scaleKnobs().length).toBe(4);
       // 십자 = 원점 + P + 이동값 = (10+100+30, 20+50) → 히트 26 좌상단 (127, 57)
       expect(pivotHandle()!.style.left).toBe('127px');
@@ -466,11 +598,17 @@ describe('SpriteCanvasHandles', () => {
       });
     });
 
-    it('회전 노브는 축 기준 각도 차이를 더하고 Shift는 15° 단위로 스냅한다', async () => {
+    it('모서리 바깥 회전은 실제 영역 중심에서 시작하고 Shift는 15° 단위로 스냅한다', async () => {
       const session = openSession();
-      // 축 화면 (110, 70). 노브를 축 오른쪽(각도 0)에서 아래(각도 90)로
-      pointer('pointerdown', rotateKnob()!, { clientX: 210, clientY: 70 });
-      pointer('pointermove', window, { clientX: 110, clientY: 170 });
+      const handle = rotateCorner()!;
+      const fromX =
+        parseFloat(handle.style.left) + parseFloat(handle.style.width) / 2;
+      const fromY =
+        parseFloat(handle.style.top) + parseFloat(handle.style.height) / 2;
+      const toX = 110 - (fromY - 70);
+      const toY = 70 + (fromX - 110);
+      pointer('pointerdown', handle, { clientX: fromX, clientY: fromY });
+      pointer('pointermove', window, { clientX: toX, clientY: toY });
       await flushFrame();
       const rotated = (
         session.preview as ReturnType<typeof vi.fn>
@@ -478,8 +616,8 @@ describe('SpriteCanvasHandles', () => {
       expect(rotated.rotation).toBeCloseTo(90, 6);
 
       pointer('pointermove', window, {
-        clientX: 105,
-        clientY: 170,
+        clientX: toX + 3,
+        clientY: toY,
         shiftKey: true,
       });
       await flushFrame();
@@ -488,7 +626,7 @@ describe('SpriteCanvasHandles', () => {
       ).mock.calls.at(-1)![0];
       expect(snapped.rotation).toBe(90);
       expect(session.commit).not.toHaveBeenCalled();
-      pointer('pointerup', window, { clientX: 105, clientY: 170 });
+      pointer('pointerup', window, { clientX: toX + 3, clientY: toY });
       expect(session.commit).toHaveBeenCalledWith(
         expect.objectContaining({ rotation: 90 }),
       );

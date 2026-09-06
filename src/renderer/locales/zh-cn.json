@@ -581,6 +581,7 @@
     "spriteFollowBasePivot": "使用基础基准点",
     "spriteStatePivot": "状态基准点",
     "spriteRotation": "旋转",
+    "rotation": "旋转",
     "spriteScale": "缩放",
     "spritePose": "状态",
     "spriteAddPose": "添加状态",

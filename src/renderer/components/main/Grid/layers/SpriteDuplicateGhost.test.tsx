@@ -52,6 +52,34 @@ const renderGhost = (zoom = 1) => {
 };
 
 describe('SpriteDuplicateGhost', () => {
+  it('배치 회전은 커서 중심의 고스트 상자에만 적용한다', () => {
+    act(() =>
+      root.render(
+        <SpriteDuplicateGhost
+          position={position({
+            rotation: 90,
+            idleTransform: { x: 4, y: -2, rotation: -179, scale: 1.2 },
+          })}
+          cursor={{ x: 300, y: 200 }}
+          zoom={1}
+        />,
+      ),
+    );
+    const ghost = container.querySelector<HTMLElement>(
+      '[data-sprite-ghost="true"]',
+    )!;
+    expect(ghost.style.transform).toBe(
+      'translate3d(200px, 140px, 0) rotate(90deg)',
+    );
+    expect(ghost.style.transformOrigin).toBe('50% 50%');
+    expect(
+      ghost
+        .querySelector('img')!
+        .style.getPropertyValue('--dmn-sprite-transform-default'),
+    ).toBe('translate(4px, -2px) rotate(-179deg) scale(1.2)');
+    expect(ghost.querySelector('[data-sprite-element] > img')).not.toBeNull();
+  });
+
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);

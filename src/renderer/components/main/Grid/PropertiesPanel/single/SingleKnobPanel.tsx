@@ -301,6 +301,18 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
               kind="knob"
               onGeometryPreview={handleGeometryPreview}
               onGeometryCommit={handleGeometryCommit}
+              onRotationPreview={
+                onStylePropertyPreview
+                  ? (value) =>
+                      onStylePropertyPreview({ property: 'rotation', value })
+                  : undefined
+              }
+              onRotationCommit={
+                onStylePropertyCommit
+                  ? (value) =>
+                      onStylePropertyCommit({ property: 'rotation', value })
+                  : undefined
+              }
               t={t}
             />
 

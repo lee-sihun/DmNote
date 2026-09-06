@@ -52,7 +52,7 @@ interface SpritePoseEditorPopupProps {
 }
 
 // 상태 하나의 편집 팝업 - 상태 이미지·변환 수치·담당 키. 위치·회전·배율은 캔버스
-// 핸들(본체 드래그·회전 노브·모서리)과 같은 값이라 여기서는 수치 입력만 맡는다.
+// 핸들(본체 드래그·모서리 바깥 회전·모서리 배율)과 같은 값이라 여기서는 수치 입력만 맡는다.
 // 셸(PickerSurface)은 행 전환 동안 유지하고 편집 subtree만 poseId로 재마운트해
 // 입력 draft·포커스는 대상별로 끊고 전환 자체는 이어지게 한다
 const SpritePoseEditorPopup: React.FC<SpritePoseEditorPopupProps> = ({

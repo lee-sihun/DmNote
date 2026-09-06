@@ -133,6 +133,7 @@ const spritePosition = (
 ): CanonicalReactiveSpritePosition => ({
   activation: 'whileHeld',
   pressDurationMs: 300,
+  rotation: 0,
   id: SPRITE_ID,
   dx: 0,
   dy: 0,
@@ -1192,6 +1193,91 @@ describe('SingleSpritePanel 자세 편집', () => {
     expect(patch.poses[0].transform.x).toBe(10);
     expect(patch.poses[0].transform.y).toBe(0);
     expect(patch.poses[0].transform.rotation).toBe(90);
+  });
+
+  it('90° 배치 회전을 0°로 바꿔도 위치·대기 변환·자세를 수정하지 않는다', async () => {
+    const position = spritePosition({
+      dx: 125,
+      dy: -35,
+      rotation: 90,
+      idleTransform: { x: 20, y: -10, rotation: 170, scale: 1.2 },
+      poses: [
+        makeSpritePose({
+          triggers: [KEY_ID_A],
+          transform: { x: -15, y: 25, rotation: -170, scale: 0.8 },
+        }),
+      ],
+    });
+    const initial = structuredClone(position);
+    seed(position);
+    render(position);
+    const input = container.querySelector<HTMLInputElement>(
+      'input[aria-label="propertiesPanel.rotation"]',
+    )!;
+    expect(input).not.toBeNull();
+    expect(parseFloat(input.value)).toBe(90);
+
+    act(() => {
+      input.focus();
+      setInputValue(input, '0');
+    });
+    await flushPreview();
+    expect(mocks.preview).toHaveBeenLastCalledWith(
+      '4key',
+      [{ id: SPRITE_ID, patch: { rotation: 0 } }],
+      { domain: 'spritePosition' },
+    );
+    act(() => input.blur());
+
+    expect(mocks.patchPosition).toHaveBeenCalledExactlyOnceWith(
+      '4key',
+      SPRITE_ID,
+      { rotation: 0 },
+      undefined,
+      undefined,
+    );
+    expect(mocks.commitBounds).not.toHaveBeenCalled();
+    expect(position).toEqual(initial);
+    expect(useSpriteStore.getState().positions['4key'][0]).toEqual(initial);
+  });
+
+  it('배치 회전 입력의 Escape는 90°로 복원하고 자세 변경이나 저장을 남기지 않는다', async () => {
+    const position = spritePosition({
+      dx: 125,
+      dy: -35,
+      rotation: 90,
+      poses: [makeSpritePose({ triggers: [KEY_ID_A] })],
+    });
+    const initial = structuredClone(position);
+    seed(position);
+    render(position);
+    const input = container.querySelector<HTMLInputElement>(
+      'input[aria-label="propertiesPanel.rotation"]',
+    )!;
+    act(() => {
+      input.focus();
+      setInputValue(input, '45');
+    });
+    await flushPreview();
+    expect(mocks.preview).toHaveBeenLastCalledWith(
+      '4key',
+      [{ id: SPRITE_ID, patch: { rotation: 45 } }],
+      { domain: 'spritePosition' },
+    );
+    mocks.gestureCancel.mockClear();
+
+    act(() =>
+      input.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+      ),
+    );
+    await flushPreview();
+
+    expect(mocks.gestureCancel).toHaveBeenCalledOnce();
+    expect(parseFloat(input.value)).toBe(90);
+    expect(mocks.patchPosition).not.toHaveBeenCalled();
+    expect(mocks.commitBounds).not.toHaveBeenCalled();
+    expect(useSpriteStore.getState().positions['4key'][0]).toEqual(initial);
   });
 
   it('자세 행 클릭은 자세 팝업을 열어 프리뷰를 발행하고 재클릭은 닫는다', () => {
