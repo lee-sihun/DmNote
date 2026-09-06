@@ -18,10 +18,10 @@ vi.mock('./SettingTool', () => ({
 vi.mock('./TabTool', () => ({
   default: () => <button data-testid="tabs" />,
 }));
-vi.mock('../Modal/TooltipGroup', () => ({
+vi.mock('../Modal/tooltip/TooltipGroup', () => ({
   TooltipGroup: ({ children }: { children: React.ReactNode }) => children,
 }));
-vi.mock('../Modal/FloatingTooltip', () => ({
+vi.mock('../Modal/tooltip/FloatingTooltip', () => ({
   default: ({ children }: { children: React.ReactNode }) => children,
 }));
 vi.mock('@contexts/useTranslation', () => ({

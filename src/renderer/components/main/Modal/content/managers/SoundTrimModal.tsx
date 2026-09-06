@@ -5,7 +5,7 @@ import { isTopmostPopupLayer } from '@components/main/Modal/popupLayer';
 import IconSwap from '@components/main/common/IconSwap';
 import { setCustomCursorHover } from '@utils/grid/cursorUtils';
 import { type ContinuousInputStrategy } from '@utils/animation/rafLatestScheduler';
-import { soundApi } from '@api/modules/resourceApi';
+import { soundApi } from '@api/modules/resources/resourceApi';
 import {
   arrayBufferToBase64,
   base64ToArrayBuffer,

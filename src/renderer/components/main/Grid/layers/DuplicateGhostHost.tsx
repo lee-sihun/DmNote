@@ -1,5 +1,5 @@
 import React from 'react';
-import { elementRotationTransform } from '@utils/core/rotation';
+import { elementRotationTransform } from '@utils/element/rotation';
 
 // 복제 배치 미리보기의 공통 껍데기 - 커서를 중심에 둔 배치, 반투명, 드래그 프리뷰 층.
 // 배경·보더·라운딩 같은 표면 표현은 요소 종류마다 달라 호출부가 넘긴다

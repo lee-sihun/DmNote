@@ -479,7 +479,8 @@ impl AppState {
         // 이미 내비게이션이 시작된 뒤라 늦다. 실제 색은 렌더러가 토큰을 읽어 덮는다
         #[cfg(target_os = "windows")]
         {
-            builder = builder.background_color(crate::state::windows_window_corners::SEED_FILL);
+            builder =
+                builder.background_color(crate::state::window::windows_window_corners::SEED_FILL);
         }
 
         #[cfg(not(target_os = "windows"))]
@@ -525,11 +526,11 @@ impl AppState {
     ) {
         // 웹 콘텐츠가 그리는 라운딩은 리사이즈 프레임을 못 따라옴 - 실루엣은 컴포지터가 소유
         #[cfg(target_os = "macos")]
-        crate::state::macos_window_corners::apply_rounded_corners(app, window);
+        crate::state::window::macos_window_corners::apply_rounded_corners(app, window);
         // Windows는 DWM이 이미 자기 반경으로 자르고 있어 웹 라운딩과 어긋난다 - 반경 지정이
         // 불가능하므로 실루엣을 DWM에 넘기고 웹은 사각으로 채운다 (메인 창과 같은 처리)
         #[cfg(target_os = "windows")]
-        crate::state::windows_window_corners::apply_initial_chrome(window);
+        crate::state::window::windows_window_corners::apply_initial_chrome(window);
 
         let bounds_session = self
             .panel_bounds_persistence

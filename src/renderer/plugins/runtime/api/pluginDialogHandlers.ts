@@ -1,7 +1,7 @@
 import {
   unregisterComponentHandler,
   withComponentHandlerTracking,
-} from '@utils/plugin/pluginUtils';
+} from '@utils/plugin/components/pluginUtils';
 import { handlerRegistry } from '../handlers';
 
 export const createPluginDialogHandlerScope = () => {

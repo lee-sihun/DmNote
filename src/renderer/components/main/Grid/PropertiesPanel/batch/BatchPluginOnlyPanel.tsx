@@ -1,9 +1,10 @@
 import React from 'react';
-import { PANEL_ROOT_CLASS } from '../panelChrome';
-import { PropertySection, TABS, type TabType } from '../index';
-import BatchGeometrySection from './BatchGeometrySection';
-import SelectionRotationInput from './SelectionRotationInput';
-import EditSessionBoundary from '../EditSessionBoundary';
+import { PANEL_ROOT_CLASS } from '../navigation/panelChrome';
+import { PropertySection } from '../controls/PropertyInputs';
+import { TABS, type TabType } from '../types';
+import BatchGeometrySection from './geometry/BatchGeometrySection';
+import SelectionRotationInput from './geometry/SelectionRotationInput';
+import EditSessionBoundary from '../selection/EditSessionBoundary';
 import BatchPanelHeader from './BatchPanelHeader';
 import type { MixedValueResult } from './batchPanelShared';
 

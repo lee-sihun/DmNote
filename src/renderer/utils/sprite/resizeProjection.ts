@@ -2,7 +2,7 @@ import type { EditorBoundsV1 } from '@src/types/editor';
 import type { SpriteTransform } from '@src/types/key/sprites';
 import { SPRITE_CONSTRAINTS } from '@src/types/key/sprites';
 
-import { clamp } from '@utils/core/clamp';
+import { clamp } from '@utils/number/clamp';
 
 // 스프라이트 리사이즈 projection - resizeSprite op의 프론트 구현.
 // 백엔드 적용기와 분기·연산 순서(나눗셈 1회, 값마다 곱셈 1회, clamp는

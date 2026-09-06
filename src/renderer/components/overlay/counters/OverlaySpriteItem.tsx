@@ -1,5 +1,5 @@
 'use no memo';
-import { elementRotationTransform } from '@utils/core/rotation';
+import { elementRotationTransform } from '@utils/element/rotation';
 import React, { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useSignals } from '@preact/signals-react/runtime';
 import {
@@ -13,8 +13,8 @@ import {
 import {
   isRenderableImageRef,
   resolveImageSource,
-} from '@utils/core/imageSource';
-import { warmupImageSource } from '@utils/core/imageWarmup';
+} from '@utils/media/imageSource';
+import { warmupImageSource } from '@utils/media/imageWarmup';
 import { stableStringify } from '@utils/core/stableStringify';
 import {
   resolveSpriteTarget,

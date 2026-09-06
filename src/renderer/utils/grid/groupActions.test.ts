@@ -17,11 +17,14 @@ const mocks = vi.hoisted(() => ({
   setElementGroupsViaAuthority: vi.fn(() => Promise.resolve(true)),
 }));
 
-vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
-  editorCoordinator: { commitPatch: mocks.commitPatch },
-}));
+vi.mock(
+  '@src/renderer/editor/runtime/coordinator/editorStateCoordinator',
+  () => ({
+    editorCoordinator: { commitPatch: mocks.commitPatch },
+  }),
+);
 
-vi.mock('@src/renderer/editor/runtime/mixedElementGroups', () => ({
+vi.mock('@src/renderer/editor/runtime/intent/mixedElementGroups', () => ({
   setMixedElementGroups: mocks.setMixedElementGroups,
 }));
 

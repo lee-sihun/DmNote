@@ -8,20 +8,23 @@ import React, {
 import { flushSync } from 'react-dom';
 import { I18nContext } from '@contexts/I18nContextDef';
 import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
-import { subscribeHistoryEditorFlushStart } from '@src/renderer/editor/runtime/historyEditorFlushLock';
+import { subscribeHistoryEditorFlushStart } from '@src/renderer/editor/runtime/lifecycle/historyEditorFlushLock';
 import {
   releaseDragSession,
   tryAcquireDragSession,
-} from '@hooks/Grid/dragSession';
+} from '@hooks/Grid/drag/dragSession';
 import { createRafLatestScheduler } from '@utils/animation/rafLatestScheduler';
-import { beginDragCursor, endDragCursor } from '@utils/core/dragCursor';
+import { beginDragCursor, endDragCursor } from '@utils/dom/dragCursor';
 import {
   getCursor,
   lockCustomCursor,
   unlockCustomCursor,
   type RotationCursorType,
 } from '@utils/grid/cursorUtils';
-import { resolveRotationDrag, rotatedRectCorners } from '@utils/core/rotation';
+import {
+  resolveRotationDrag,
+  rotatedRectCorners,
+} from '@utils/element/rotation';
 import { getActiveElement } from '@utils/dom/activeElement';
 import { isHTMLElementNode } from '@utils/dom/isElementNode';
 import { suppressNextClick } from '@utils/dom/suppressNextClick';

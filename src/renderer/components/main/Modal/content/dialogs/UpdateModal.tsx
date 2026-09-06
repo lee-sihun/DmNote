@@ -3,7 +3,7 @@ import { useTranslation } from '@contexts/useTranslation';
 import Modal from '../../Modal';
 import { useSingleFlightAction } from '@hooks/useSingleFlightAction';
 import { useModalPresence } from '@hooks/ui/usePopupPresence';
-import { appApi } from '@api/modules/appApi';
+import { appApi } from '@api/modules/app/appApi';
 
 interface UpdateInfo {
   currentVersion: string;

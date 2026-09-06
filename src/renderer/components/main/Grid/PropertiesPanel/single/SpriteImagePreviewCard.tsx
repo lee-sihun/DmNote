@@ -1,4 +1,4 @@
-import { resolveImageSource } from '@utils/core/imageSource';
+import { resolveImageSource } from '@utils/media/imageSource';
 import {
   isErrorForCurrentSrc,
   useFailedImageSrcs,

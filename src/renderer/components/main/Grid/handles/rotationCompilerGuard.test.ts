@@ -21,7 +21,7 @@ const compile = (relativePath: string): string => {
 
 const COMPILED = [
   'src/renderer/components/main/Grid/handles/CanvasRotateHandle.tsx',
-  'src/renderer/components/main/Grid/PropertiesPanel/batch/SelectionRotationInput.tsx',
+  'src/renderer/components/main/Grid/PropertiesPanel/batch/geometry/SelectionRotationInput.tsx',
 ];
 
 describe('요소 회전 컴파일러 가드', () => {
@@ -30,7 +30,8 @@ describe('요소 회전 컴파일러 가드', () => {
   });
 
   it("useSelectionRotationFrame은 'use no memo'로 제외를 명시한다", () => {
-    const path = 'src/renderer/hooks/Grid/useSelectionRotationFrame.ts';
+    const path =
+      'src/renderer/hooks/Grid/selection/useSelectionRotationFrame.ts';
     expect(readFileSync(resolve(process.cwd(), path), 'utf8')).toMatch(
       /^'use no memo';/,
     );

@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import type { SettingsDiff, SettingsState } from '@src/types/settings/settings';
 import { I18nContext } from './I18nContextDef';
 import type { SupportedLocale, I18nContextValue } from './I18nContextDef';
-import { settingsApi } from '@api/modules/settingsApi';
+import { settingsApi } from '@api/modules/app/settingsApi';
 
 export type { SupportedLocale } from './I18nContextDef';
 

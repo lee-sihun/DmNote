@@ -25,7 +25,7 @@ const captured = vi.hoisted(() => ({
   picker: null as PickerProps | null,
 }));
 
-vi.mock('@components/main/Modal/content/pickers/ColorPicker', () => ({
+vi.mock('@components/main/Modal/content/pickers/color/ColorPicker', () => ({
   default: (props: PickerProps) => {
     captured.picker = props;
     return null;
@@ -40,18 +40,23 @@ vi.mock('@components/main/Modal/PopupExit', () => ({
     children: React.ReactElement | null;
   }) => (open ? children : null),
 }));
-vi.mock('@components/main/Modal/content/pickers/ColorSwatch', async () => {
-  const ReactModule = await import('react');
-  return {
-    ColorSwatchButton: ReactModule.forwardRef<
-      HTMLButtonElement,
-      { onClick?: () => void }
-    >(function SwatchStub(props, ref) {
-      return <button ref={ref} data-testid="swatch" onClick={props.onClick} />;
-    }),
-  };
-});
-vi.mock('../PropertyInputs', () => ({
+vi.mock(
+  '@components/main/Modal/content/pickers/color/ColorSwatch',
+  async () => {
+    const ReactModule = await import('react');
+    return {
+      ColorSwatchButton: ReactModule.forwardRef<
+        HTMLButtonElement,
+        { onClick?: () => void }
+      >(function SwatchStub(props, ref) {
+        return (
+          <button ref={ref} data-testid="swatch" onClick={props.onClick} />
+        );
+      }),
+    };
+  },
+);
+vi.mock('../controls/PropertyInputs', () => ({
   PropertyRow: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
   ),
@@ -61,10 +66,10 @@ vi.mock('../PropertyInputs', () => ({
   NumberInput: () => null,
   OptionalNumberInput: () => null,
 }));
-vi.mock('@components/main/common/Checkbox', () => ({
+vi.mock('@components/main/common/checkbox/Checkbox', () => ({
   default: () => null,
 }));
-vi.mock('@components/main/common/Dropdown', () => ({
+vi.mock('@components/main/common/dropdown/Dropdown', () => ({
   default: () => null,
 }));
 

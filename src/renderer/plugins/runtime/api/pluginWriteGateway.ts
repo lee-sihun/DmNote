@@ -5,8 +5,8 @@
  * 않고 단일 직렬 큐의 격리 커밋으로 처리한다.
  */
 
-import { editorCommitRaw } from '@api/modules/editorApi';
-import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
+import { editorCommitRaw } from '@api/modules/editor/editorApi';
+import { editorCoordinator } from '@src/renderer/editor/runtime/coordinator/editorStateCoordinator';
 import { EDITOR_SCHEMA_VERSION } from '@src/types/editor';
 import type {
   EditorCommitResult,

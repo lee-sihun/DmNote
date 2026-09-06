@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { obsApi } from '@api/modules/obsApi';
-import { settingsApi } from '@api/modules/settingsApi';
-import { trackEditorWrite } from '@src/renderer/editor/runtime/editorWriteBarrier';
+import { obsApi } from '@api/modules/window/obsApi';
+import { settingsApi } from '@api/modules/app/settingsApi';
+import { trackEditorWrite } from '@src/renderer/editor/runtime/lifecycle/editorWriteBarrier';
 import type { I18nContextValue } from '@contexts/I18nContextDef';
 import type { ObsStatus } from '@src/types/obs';
 import { DEFAULT_OBS_PORT } from '@src/types/obs';

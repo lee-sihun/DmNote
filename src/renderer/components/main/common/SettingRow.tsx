@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import Checkbox from '@components/main/common/Checkbox';
+import Checkbox from '@components/main/common/checkbox/Checkbox';
 import {
   useOptimisticBooleanCommit,
   type BooleanCommitStrategy,

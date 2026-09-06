@@ -30,7 +30,7 @@ const mocks = vi.hoisted(() => ({
   authorityUpdate: vi.fn(),
 }));
 
-vi.mock('@api/modules/resourceApi', () => ({
+vi.mock('@api/modules/resources/resourceApi', () => ({
   counterAnimationApi: {
     create: (...args: unknown[]) => mocks.create(...args),
     update: (...args: unknown[]) => mocks.update(...args),
@@ -54,11 +54,16 @@ vi.mock('@components/main/Modal/FullSurfaceModalLayout', () => ({
     return <>{children}</>;
   },
 }));
-vi.mock('@components/main/common/Dropdown', () => ({ default: () => null }));
-vi.mock('@components/main/Grid/PropertiesPanel/PropertyInputs', () => ({
-  TextInput: () => null,
-  NumberInput: () => null,
+vi.mock('@components/main/common/dropdown/Dropdown', () => ({
+  default: () => null,
 }));
+vi.mock(
+  '@components/main/Grid/PropertiesPanel/controls/PropertyInputs',
+  () => ({
+    TextInput: () => null,
+    NumberInput: () => null,
+  }),
+);
 vi.mock('@components/overlay/counters/CountDisplay', () => ({
   default: () => null,
 }));

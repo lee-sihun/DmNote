@@ -4,7 +4,7 @@ const { sendTo } = vi.hoisted(() => ({
   sendTo: vi.fn(),
 }));
 
-vi.mock('@api/modules/bridgeApi', () => ({ bridgeApi: { sendTo } }));
+vi.mock('@api/modules/plugin/bridgeApi', () => ({ bridgeApi: { sendTo } }));
 
 import { sendBridgeMessageBestEffort } from './bridgeMessages';
 

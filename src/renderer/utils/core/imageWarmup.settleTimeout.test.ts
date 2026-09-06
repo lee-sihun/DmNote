@@ -5,7 +5,7 @@
  * 모듈 카운터가 파일 단위 상태라 누적 캐시 테스트와 분리한다
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { warmupImageSource } from './imageWarmup';
+import { warmupImageSource } from '../media/imageWarmup';
 
 type MockImage = {
   onload: (() => void) | null;

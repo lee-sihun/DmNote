@@ -10,7 +10,7 @@ import {
   FormatSelectBar,
   GradientStopEditor,
   type ColorFormat,
-} from '@components/main/Modal/content/pickers/GradientFormatControls';
+} from '@components/main/Modal/content/pickers/color/GradientFormatControls';
 import {
   useGradientEditStore,
   type GradientCanvasAnchor,

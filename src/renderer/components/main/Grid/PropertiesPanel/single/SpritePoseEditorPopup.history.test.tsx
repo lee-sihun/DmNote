@@ -7,20 +7,27 @@ import SpritePoseEditorPopup from './SpritePoseEditorPopup';
 import {
   acquireHistoryEditorFlushLock,
   resetHistoryEditorFlushLock,
-} from '@src/renderer/editor/runtime/historyEditorFlushLock';
+} from '@src/renderer/editor/runtime/lifecycle/historyEditorFlushLock';
 
-vi.mock('@components/main/Grid/PropertiesPanel/PickerSurface', () => ({
+vi.mock('@components/main/Grid/PropertiesPanel/controls/PickerSurface', () => ({
   default: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
 }));
-vi.mock('@components/main/Grid/PropertiesPanel/PropertyInputs', () => ({
-  PropertySection: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
+vi.mock(
+  '@components/main/Grid/PropertiesPanel/controls/PropertyInputs',
+  () => ({
+    PropertySection: ({ children }: { children: React.ReactNode }) => (
+      <div>{children}</div>
+    ),
+  }),
+);
+vi.mock('@components/main/common/checkbox/Checkbox', () => ({
+  default: () => null,
 }));
-vi.mock('@components/main/common/Checkbox', () => ({ default: () => null }));
-vi.mock('@components/main/common/Dropdown', () => ({ default: () => null }));
+vi.mock('@components/main/common/dropdown/Dropdown', () => ({
+  default: () => null,
+}));
 vi.mock('./SpriteImagePreviewCard', () => ({ default: () => null }));
 
 describe('자세 팝업에서 숫자 스크럽의 history 취소 전달', () => {

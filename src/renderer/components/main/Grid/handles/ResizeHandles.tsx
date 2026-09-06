@@ -8,7 +8,7 @@ import {
   lockCustomCursor,
   unlockCustomCursor,
 } from '@utils/grid/cursorUtils';
-import { useCustomCursorHover } from '@hooks/Grid/useCustomCursorHover';
+import { useCustomCursorHover } from '@hooks/Grid/viewport/useCustomCursorHover';
 import {
   createRafLatestScheduler,
   type ContinuousInputStrategy,
@@ -23,7 +23,7 @@ import {
   type ScaleRange,
 } from './aspectResize';
 import { SELECTION_BORDER_CENTER } from './selectionOutline';
-import { rotatePointAround } from '@utils/core/rotation';
+import { rotatePointAround } from '@utils/element/rotation';
 import {
   anchorRotatedResize,
   constrainRotatedResize,

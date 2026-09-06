@@ -23,7 +23,7 @@ const mocks = vi.hoisted(() => ({
   reorderViaAuthority: vi.fn(() => Promise.resolve(true)),
 }));
 
-vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
+vi.mock('@src/renderer/editor/runtime/intent/elementIntent', () => ({
   runElementIntent: mocks.runElementIntent,
   intentPatch: (patch: unknown) =>
     patch === null ? { kind: 'targetLost' } : { kind: 'patch', patch },
@@ -36,12 +36,15 @@ vi.mock('@plugins/runtime/displayElement/pluginElementActions', () => ({
   reorderLayerSelectionViaAuthority: mocks.reorderViaAuthority,
 }));
 
-vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
-  editorCoordinator: {
-    commitPatch: mocks.commitPatch,
-    getState: () => ({ lastAck: null }),
-  },
-}));
+vi.mock(
+  '@src/renderer/editor/runtime/coordinator/editorStateCoordinator',
+  () => ({
+    editorCoordinator: {
+      commitPatch: mocks.commitPatch,
+      getState: () => ({ lastAck: null }),
+    },
+  }),
+);
 
 vi.mock('./layerReorderIntent', () => ({
   commitLayerDropIntent: mocks.commitLayerDropIntent,

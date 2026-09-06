@@ -1,4 +1,4 @@
-import { rotatePointAround } from '@utils/core/rotation';
+import { rotatePointAround } from '@utils/element/rotation';
 import { EDITOR_BOUNDS_LIMITS } from '@src/types/editor';
 import type { CursorType } from '@utils/grid/cursorUtils';
 import type { Bounds } from './groupResizeUtils';

@@ -23,7 +23,7 @@ const mocks = vi.hoisted(() => ({
   panelChildWindow: null as { window: { devicePixelRatio: number } } | null,
 }));
 
-vi.mock('@api/modules/panelWindowApi', () => ({
+vi.mock('@api/modules/window/panelWindowApi', () => ({
   panelWindowApi: {
     onDragHint: (listener: Listener) => {
       mocks.hintListeners.push(listener);

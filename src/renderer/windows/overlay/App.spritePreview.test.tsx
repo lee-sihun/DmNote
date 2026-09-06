@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { resetAllKeySignals } from '@stores/signals/keySignals';
-import { previewOverlay } from '@src/renderer/editor/runtime/previewOverlay';
+import { previewOverlay } from '@src/renderer/editor/runtime/gesture/previewOverlay';
 
 import type { CanonicalReactiveSpritePosition } from '@src/types/editor';
 import type { PreviewEnvelope } from '@src/types/preview';
@@ -112,16 +112,16 @@ vi.mock('@hooks/shared/useLayoutComputation', () => ({
     };
   },
 }));
-vi.mock('@utils/core/axisEventBus', () => ({
+vi.mock('@utils/input/axisEventBus', () => ({
   axisEventBus: { initialize: vi.fn() },
 }));
-vi.mock('@utils/core/keyEventBus', () => ({
+vi.mock('@utils/input/keyEventBus', () => ({
   keyEventBus: {
     subscribe: vi.fn(() => vi.fn()),
     initialize: vi.fn(() => Promise.resolve()),
   },
 }));
-vi.mock('@api/modules/obsApi', () => ({
+vi.mock('@api/modules/window/obsApi', () => ({
   obsApi: {
     onResync: vi.fn(() => vi.fn()),
   },

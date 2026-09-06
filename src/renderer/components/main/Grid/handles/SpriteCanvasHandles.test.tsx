@@ -15,7 +15,7 @@ import {
 } from '@stores/grid/useSpritePoseHandleStore';
 import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
-import { releaseDragSession } from '@hooks/Grid/dragSession';
+import { releaseDragSession } from '@hooks/Grid/drag/dragSession';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import {
   makeCanonicalSpritePosition,
@@ -36,10 +36,10 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@contexts/useTranslation', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
-vi.mock('@api/modules/itemsApi', () => ({
+vi.mock('@api/modules/editor/itemsApi', () => ({
   spriteItemsApi: { patchPosition: mocks.patchPosition },
 }));
-vi.mock('@src/renderer/editor/runtime/editGestureController', () => ({
+vi.mock('@src/renderer/editor/runtime/gesture/editGestureController', () => ({
   editGestureController: {
     discardOrphanedLocalPreviews: mocks.discardOrphanedLocalPreviews,
     activeGestureId: () => undefined,

@@ -8,7 +8,7 @@ import {
 import {
   isRenderableImageRef,
   toRenderableImageRef,
-} from '@utils/core/imageSource';
+} from '@utils/media/imageSource';
 
 import { DEG_TO_RAD, RAD_TO_DEG } from './spriteGeometry';
 import {

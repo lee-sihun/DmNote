@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 
-import type { DuplicateState } from '@hooks/Grid/useGridCanvasActions';
-import { resolveImageSource } from '@utils/core/imageSource';
+import type { DuplicateState } from '@hooks/Grid/contextMenu/useGridCanvasActions';
+import { resolveImageSource } from '@utils/media/imageSource';
 import {
   DEFAULT_IMAGE_MODE,
   imageTransformToCss,
@@ -12,8 +12,8 @@ import {
   DEFAULT_ELEMENT_FONT,
   DEFAULT_ELEMENT_RADIUS,
   DEFAULT_ELEMENT_SHADOW_SPEC,
-} from '@utils/core/elementDefaults';
-import { resolveElementBorder } from '@utils/core/elementBorder';
+} from '@utils/element/elementDefaults';
+import { resolveElementBorder } from '@utils/element/elementBorder';
 import { gradientRingStyle, gradientToCss } from '@src/types/color';
 import {
   elementShadowToCss,

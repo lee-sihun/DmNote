@@ -5,11 +5,11 @@ import type {
   SpriteTransform,
 } from '@src/types/key/sprites';
 
-import { clamp } from '@utils/core/clamp';
+import { clamp } from '@utils/number/clamp';
 
 // 스프라이트 좌표 변환 프리미티브. 도달 범위·배치·핸들·패널이 공유한다
 
-export { DEG_TO_RAD, RAD_TO_DEG } from '@utils/core/rotation';
+export { DEG_TO_RAD, RAD_TO_DEG } from '@utils/element/rotation';
 
 /** 정규화 앵커를 rect 안의 요소 로컬 px로 */
 export const anchorPx = (

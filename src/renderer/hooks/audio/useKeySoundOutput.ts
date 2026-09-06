@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { keySoundOutputApi } from '@api/modules/resourceApi';
+import { keySoundOutputApi } from '@api/modules/resources/resourceApi';
 import type {
   KeySoundOutputBackend,
   KeySoundOutputDevices,
   KeySoundOutputState,
-} from '@api/modules/resourceApi';
+} from '@api/modules/resources/resourceApi';
 
 // 설정 패널 재진입 시 장치 선택 드롭다운 깜빡임 방지용 마지막 상태
 let cachedKeySoundOutput: KeySoundOutputState | null = null;

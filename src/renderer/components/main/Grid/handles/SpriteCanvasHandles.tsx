@@ -11,9 +11,9 @@ import {
 } from '@stores/grid/useSpritePoseHandleStore';
 import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
-import { spriteItemsApi } from '@api/modules/itemsApi';
-import { subscribeHistoryEditorFlushStart } from '@src/renderer/editor/runtime/historyEditorFlushLock';
-import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
+import { spriteItemsApi } from '@api/modules/editor/itemsApi';
+import { subscribeHistoryEditorFlushStart } from '@src/renderer/editor/runtime/lifecycle/historyEditorFlushLock';
+import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
 import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import {
@@ -43,12 +43,12 @@ import {
   type SpritePivotHandleFrame,
   type SpritePosePivotHandleFrame,
 } from '@utils/sprite/spritePlacement';
-import { clamp } from '@utils/core/clamp';
-import { resolveRotationDrag } from '@utils/core/rotation';
-import { rotatePointAround } from '@utils/core/rotation';
+import { clamp } from '@utils/number/clamp';
+import { resolveRotationDrag } from '@utils/element/rotation';
+import { rotatePointAround } from '@utils/element/rotation';
 import { suppressNextClick } from '@utils/dom/suppressNextClick';
 import { createRafLatestScheduler } from '@utils/animation/rafLatestScheduler';
-import { beginDragCursor, endDragCursor } from '@utils/core/dragCursor';
+import { beginDragCursor, endDragCursor } from '@utils/dom/dragCursor';
 import {
   getCursor,
   lockCustomCursor,
@@ -60,7 +60,7 @@ import { isHTMLElementNode } from '@utils/dom/isElementNode';
 import {
   releaseDragSession,
   tryAcquireDragSession,
-} from '@hooks/Grid/dragSession';
+} from '@hooks/Grid/drag/dragSession';
 import { SELECTION_BORDER_CENTER } from './selectionOutline';
 import RotateCornerHandles from './RotateCornerHandles';
 

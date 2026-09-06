@@ -7,8 +7,8 @@ import { useAfterPaintValueCommit } from '@hooks/useAfterPaintValueCommit';
 import { useOptimisticBooleanCommit } from '@hooks/useOptimisticBooleanCommit';
 import { useOptimisticValueCommit } from '@hooks/useOptimisticValueCommit';
 import { registerPendingOptimisticCommit } from '@hooks/pendingOptimisticCommits';
-import { trackEditorWrite } from './editorWriteBarrier';
-import { settleFocusedEditor } from './focusedEditorSettlement';
+import { trackEditorWrite } from './lifecycle/editorWriteBarrier';
+import { settleFocusedEditor } from './lifecycle/focusedEditorSettlement';
 
 type CommitKind = 'after-paint' | 'boolean' | 'value';
 

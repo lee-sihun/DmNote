@@ -53,20 +53,23 @@ const mocks = vi.hoisted(() => ({
 }));
 
 // 요소 상자(위치·크기)는 resizeSprite op 경로 - 커밋 인자만 검증한다
-vi.mock('@src/renderer/editor/runtime/elementOps', async (importOriginal) => ({
-  ...(await importOriginal<Record<string, unknown>>()),
-  commitSingleElementBoundsById: mocks.commitBounds,
-}));
+vi.mock(
+  '@src/renderer/editor/runtime/operations/elementOps',
+  async (importOriginal) => ({
+    ...(await importOriginal<Record<string, unknown>>()),
+    commitSingleElementBoundsById: mocks.commitBounds,
+  }),
+);
 
-vi.mock('@api/modules/itemsApi', () => ({
+vi.mock('@api/modules/editor/itemsApi', () => ({
   spriteItemsApi: { patchPosition: mocks.patchPosition },
 }));
 
-vi.mock('@api/modules/resourceApi', () => ({
+vi.mock('@api/modules/resources/resourceApi', () => ({
   imageApi: { load: mocks.imageLoad },
 }));
 
-vi.mock('@utils/core/assetProbe', () => ({
+vi.mock('@utils/media/assetProbe', () => ({
   canDecodeImage: mocks.canDecodeImage,
   probeImageSize: mocks.probeImageSize,
   canLoadFont: vi.fn(() => Promise.resolve(true)),
@@ -78,7 +81,7 @@ vi.mock('@hooks/useLenis', () => ({
 
 // 팝업 표면은 배치 로직 없이 열림 여부만 따라 인라인 렌더.
 // 변형별 배치 계약(fallbackHeight/offsetY)은 data 속성으로 남겨 검증한다
-vi.mock('@components/main/Grid/PropertiesPanel/PickerSurface', () => ({
+vi.mock('@components/main/Grid/PropertiesPanel/controls/PickerSurface', () => ({
   default: ({
     open,
     children,
@@ -108,7 +111,7 @@ vi.mock('@components/main/Grid/PropertiesPanel/PickerSurface', () => ({
 }));
 
 // preview 발행 계약 검증용 - 패널이 쓰는 네 메서드만 대체
-vi.mock('@src/renderer/editor/runtime/editGestureController', () => ({
+vi.mock('@src/renderer/editor/runtime/gesture/editGestureController', () => ({
   editGestureController: {
     preview: mocks.preview,
     cancel: mocks.gestureCancel,

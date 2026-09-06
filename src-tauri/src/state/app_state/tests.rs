@@ -51,8 +51,8 @@ use crate::{
         EDITOR_OPS_VERSION,
     },
     state::{
+        assets::local_asset_path::path_identity_key,
         history::{HistoryAdmissionGate, HistoryDirection, HistoryScope},
-        local_asset_path::path_identity_key,
         store::{
             AppStore, AuxEditorResetTransactionOptions, AuxEditorTransactionOptions,
             PluginInstancesResetScope,
@@ -2400,7 +2400,7 @@ fn sigterm_preserves_pending_state_and_allows_retry_after_canceled_flush() {
         if mode == "protected" {
             let state = Arc::clone(&state);
             let requests = AtomicUsize::new(0);
-            crate::state::unix_termination::install(move || {
+            crate::state::window::unix_termination::install(move || {
                 let request_number = requests.fetch_add(1, Ordering::SeqCst) + 1;
                 let mut active = state.editor_flush_handshake.lock();
                 let outcome = install_lifecycle_handshake(

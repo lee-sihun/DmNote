@@ -6,7 +6,7 @@ import type {
 } from '@src/types/key/sprites';
 
 import { makeSpritePose, makeSpritePosition } from './spriteFixtures';
-import { rotatePointAround } from '@utils/core/rotation';
+import { rotatePointAround } from '@utils/element/rotation';
 import {
   boxSpritePlacement,
   compensateTransformForPivotChange,

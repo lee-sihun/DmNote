@@ -12,7 +12,7 @@ import { useTrackReserveTransition } from '@hooks/overlay/useTrackReserveTransit
 import { useOverlayReveal } from '@hooks/overlay/useOverlayReveal';
 import { useOverlayKeyStateRuntime } from '@hooks/overlay/useOverlayKeyStateRuntime';
 import { useAppBootstrap } from '@hooks/app/useAppBootstrap';
-import { overlayApi } from '@api/modules/overlayApi';
+import { overlayApi } from '@api/modules/window/overlayApi';
 import { useBuiltinStatsSubscription } from '@hooks/overlay/useBuiltinStatsSubscription';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
@@ -25,7 +25,7 @@ import { useStoreWithEqualityFn } from 'zustand/traditional';
 import {
   selectPluginLayoutElements,
   pluginLayoutElementsEqual,
-} from '@utils/plugin/pluginLayoutElements';
+} from '@utils/plugin/layout/pluginLayoutElements';
 import OverlayScene from '@components/shared/OverlayScene';
 import { computeLayout } from '@hooks/shared/useLayoutComputation';
 import { buildSpriteKeyCanonicalMap } from '@utils/sprite/spriteKeyBinding';

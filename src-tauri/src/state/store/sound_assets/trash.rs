@@ -9,7 +9,7 @@ use anyhow::{anyhow, Context, Result};
 
 use crate::models::AppStoreData;
 
-use super::super::super::local_asset_path::path_identity_key;
+use super::super::super::assets::local_asset_path::path_identity_key;
 use super::super::collect_local_sound_paths;
 use super::{
     SoundRecoveryOutcome, StagedSoundDeletionFile, SOUND_DELETE_BACKUP_MARKER, TRASH_RETENTION,

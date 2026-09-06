@@ -1,4 +1,4 @@
-import { beginDragCursor, endDragCursor } from '@utils/core/dragCursor';
+import { beginDragCursor, endDragCursor } from '@utils/dom/dragCursor';
 import {
   useCallback,
   useEffect,
@@ -9,7 +9,7 @@ import {
 import type React from 'react';
 import { createRafLatestScheduler } from '@utils/animation/rafLatestScheduler';
 import { prefersReducedMotion } from '@utils/animation/motionPreferences';
-import { clamp } from '@utils/core/clamp';
+import { clamp } from '@utils/number/clamp';
 
 // 드래그 중 이동 전환을 끄는 표식. dmn- 접두사는 플러그인 마크업과의 속성 충돌 방지
 const DRAG_ATTR = 'data-dmn-dragging';

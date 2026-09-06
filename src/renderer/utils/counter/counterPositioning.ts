@@ -1,5 +1,5 @@
 import type React from 'react';
-import { rotatePointAround } from '@utils/core/rotation';
+import { rotatePointAround } from '@utils/element/rotation';
 
 export const OUTSIDE_OFFSET = 5;
 

@@ -15,15 +15,15 @@ const mocks = vi.hoisted(() => ({
   alert: vi.fn(),
 }));
 
-vi.mock('@api/modules/resourceApi', () => ({
+vi.mock('@api/modules/resources/resourceApi', () => ({
   fontApi: { load: (...args: unknown[]) => mocks.fontLoad(...args) },
 }));
 
-vi.mock('@utils/core/assetProbe', () => ({
+vi.mock('@utils/media/assetProbe', () => ({
   canLoadFont: (...args: unknown[]) => mocks.canLoadFont(...args),
 }));
 
-vi.mock('@api/modules/settingsApi', () => ({
+vi.mock('@api/modules/app/settingsApi', () => ({
   settingsApi: {
     update: (...args: unknown[]) => mocks.settingsUpdate(...args),
   },

@@ -42,14 +42,14 @@ const runtime = vi.hoisted(() => {
   };
 });
 
-vi.mock('@api/modules/editorApi', () => ({
+vi.mock('@api/modules/editor/editorApi', () => ({
   editorApi: {
     get: runtime.get,
     commit: runtime.commit,
     onCommitted: runtime.onCommitted,
   },
 }));
-vi.mock('@api/modules/previewApi', () => ({
+vi.mock('@api/modules/editor/previewApi', () => ({
   previewApi: {
     publish: runtime.previewPublish,
     cancel: runtime.previewCancel,
@@ -110,10 +110,10 @@ const loadHarness = async () => {
   const [handles, overlay, spriteStore, coordinator, dragSession] =
     await Promise.all([
       import('./SpriteCanvasHandles'),
-      import('@src/renderer/editor/runtime/previewOverlay'),
+      import('@src/renderer/editor/runtime/gesture/previewOverlay'),
       import('@stores/data/useSpriteStore'),
-      import('@src/renderer/editor/runtime/editorStateCoordinator'),
-      import('@hooks/Grid/dragSession'),
+      import('@src/renderer/editor/runtime/coordinator/editorStateCoordinator'),
+      import('@hooks/Grid/drag/dragSession'),
     ]);
   return {
     SpriteCanvasHandles: handles.default,
@@ -361,7 +361,7 @@ describe('SpriteCanvasHandles 기준점 드래그 통합', () => {
     await harness.editorCoordinator.start();
     render();
     const { editGestureController } = await import(
-      '@src/renderer/editor/runtime/editGestureController'
+      '@src/renderer/editor/runtime/gesture/editGestureController'
     );
     // 다른 컨트롤의 프리뷰가 기준점을 0.75로 보여 주는 상태
     act(() =>
@@ -438,7 +438,7 @@ describe('SpriteCanvasHandles 기준점 드래그 통합', () => {
     await harness.editorCoordinator.start();
     render();
     const { editGestureController } = await import(
-      '@src/renderer/editor/runtime/editGestureController'
+      '@src/renderer/editor/runtime/gesture/editGestureController'
     );
     // 기준점·transform은 canonical 그대로, 상자만 두 배로 보이는 프리뷰
     act(() =>

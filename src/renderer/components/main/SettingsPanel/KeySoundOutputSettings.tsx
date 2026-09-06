@@ -1,4 +1,4 @@
-import Dropdown from '@components/main/common/Dropdown';
+import Dropdown from '@components/main/common/dropdown/Dropdown';
 import { SettingCard, SettingRow } from '@components/main/common/SettingRow';
 import { useTranslation } from '@contexts/useTranslation';
 import { useKeySoundOutput } from '@hooks/audio/useKeySoundOutput';

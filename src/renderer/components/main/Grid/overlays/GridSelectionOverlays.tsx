@@ -6,7 +6,7 @@ import SpriteCanvasHandles from '../handles/SpriteCanvasHandles';
 import NativeRotateHandle from '../handles/NativeRotateHandle';
 import SpriteRotateHandle from '../handles/SpriteRotateHandle';
 import SelectionRotateHandle from '../handles/SelectionRotateHandle';
-import { useSelectionRotationFrame } from '@hooks/Grid/useSelectionRotationFrame';
+import { useSelectionRotationFrame } from '@hooks/Grid/selection/useSelectionRotationFrame';
 import { isRotatableElementType } from '../handles/rotatableElement';
 import { SELECTION_BORDER_WIDTH } from '../handles/selectionOutline';
 import {

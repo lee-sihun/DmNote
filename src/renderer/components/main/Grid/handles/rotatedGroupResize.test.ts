@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EDITOR_BOUNDS_LIMITS } from '@src/types/editor';
-import { rotatePointAround } from '@utils/core/rotation';
+import { rotatePointAround } from '@utils/element/rotation';
 import type { GroupResizeHandle } from './groupResizePlan';
 import type { Bounds, ElementBounds } from './groupResizeUtils';
 import {

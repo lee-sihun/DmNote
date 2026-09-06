@@ -19,7 +19,7 @@ const apiMocks = vi.hoisted(() => ({
   noteTabSet: vi.fn(),
 }));
 
-vi.mock('@api/modules/noteTabApi', () => ({
+vi.mock('@api/modules/editor/noteTabApi', () => ({
   noteTabApi: {
     set: (...args: unknown[]) => apiMocks.noteTabSet(...args),
   },
@@ -49,24 +49,27 @@ vi.mock('@contexts/useTranslation', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock('@components/main/common/Checkbox', () => ({
+vi.mock('@components/main/common/checkbox/Checkbox', () => ({
   default: () => <span />,
 }));
 vi.mock('@components/main/common/TabSwitch', () => ({
   default: () => <span />,
 }));
-vi.mock('@components/main/Grid/PropertiesPanel/PropertyInputs', () => ({
-  PropertyRow: ({
-    label,
-    children,
-  }: {
-    label: string;
-    children: React.ReactNode;
-  }) => <label data-label={label}>{children}</label>,
-  PropertySection: ({ children }: { children: React.ReactNode }) => (
-    <section>{children}</section>
-  ),
-}));
+vi.mock(
+  '@components/main/Grid/PropertiesPanel/controls/PropertyInputs',
+  () => ({
+    PropertyRow: ({
+      label,
+      children,
+    }: {
+      label: string;
+      children: React.ReactNode;
+    }) => <label data-label={label}>{children}</label>,
+    PropertySection: ({ children }: { children: React.ReactNode }) => (
+      <section>{children}</section>
+    ),
+  }),
+);
 vi.mock('../../Modal', () => ({
   default: ({
     children,

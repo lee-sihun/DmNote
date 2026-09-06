@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
   update: vi.fn(),
   result: null as Promise<unknown> | null,
 }));
-vi.mock('@api/modules/settingsApi', () => ({
+vi.mock('@api/modules/app/settingsApi', () => ({
   settingsApi: { update: mocks.update },
 }));
 

@@ -6,7 +6,7 @@ import { useScrubDrag } from './useScrubDrag';
 import {
   acquireHistoryEditorFlushLock,
   resetHistoryEditorFlushLock,
-} from '@src/renderer/editor/runtime/historyEditorFlushLock';
+} from '@src/renderer/editor/runtime/lifecycle/historyEditorFlushLock';
 
 describe('스크럽 history 종료 경계', () => {
   let root: Root;

@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import { useSingleFlightAction } from '@hooks/useSingleFlightAction';
 import { useHistoryStatusStore } from '@stores/data/useHistoryStatusStore';
-import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
-import { flushFocusedEditor } from '@src/renderer/editor/runtime/lifecycleEditorFlush';
-import type { EditorCoordinatorState } from '@src/renderer/editor/runtime/editorCoordinator';
+import { editorCoordinator } from '@src/renderer/editor/runtime/coordinator/editorStateCoordinator';
+import { flushFocusedEditor } from '@src/renderer/editor/runtime/lifecycle/lifecycleEditorFlush';
+import type { EditorCoordinatorState } from '@src/renderer/editor/runtime/coordinator/editorCoordinator';
 
 const EditorSaveNotice = () => {
   const { t } = useTranslation();

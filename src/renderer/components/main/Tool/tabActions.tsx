@@ -8,7 +8,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import { useKeyStore } from '@stores/data/useKeyStore';
-import { keysApi } from '@api/modules/keysApi';
+import { keysApi } from '@api/modules/editor/keysApi';
 import Alert from '../Modal/content/dialogs/Alert.jsx';
 import TabNameModal from '../Modal/content/editors/TabNameModal';
 import { TabActionsContext, type TabTarget } from './tabActionsContext';

@@ -3,8 +3,8 @@ import React, { useEffect, useState } from 'react';
 import KnobFace from '@components/shared/KnobFace';
 import { useSignals } from '@preact/signals-react/runtime';
 import { getAxisSignal } from '@stores/signals/axisSignals';
-import { resolveImageSource } from '@utils/core/imageSource';
-import { warmupImageSource } from '@utils/core/imageWarmup';
+import { resolveImageSource } from '@utils/media/imageSource';
+import { warmupImageSource } from '@utils/media/imageWarmup';
 import {
   DEFAULT_ELEMENT_BG,
   DEFAULT_ELEMENT_ACTIVE_BG,
@@ -12,8 +12,8 @@ import {
   DEFAULT_ELEMENT_ACTIVE_FONT,
   DEFAULT_ELEMENT_SHADOW_SPEC,
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
-} from '@utils/core/elementDefaults';
-import { resolveElementBorder } from '@utils/core/elementBorder';
+} from '@utils/element/elementDefaults';
+import { resolveElementBorder } from '@utils/element/elementBorder';
 import {
   gradientToCss,
   resolveStatePair,
@@ -24,7 +24,7 @@ import {
   resolveElementShadow,
   type ElementShadowSpec,
 } from '@src/types/key/shadows';
-import { elementRotationTransform } from '@utils/core/rotation';
+import { elementRotationTransform } from '@utils/element/rotation';
 
 interface KnobPosition {
   hidden?: boolean;

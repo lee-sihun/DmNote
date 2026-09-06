@@ -2,7 +2,7 @@ import React, { act, createRef } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { PANEL_HEADER_CLASS } from '../panelChrome';
+import { PANEL_HEADER_CLASS } from '../navigation/panelChrome';
 import BatchPanelHeader from './BatchPanelHeader';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;

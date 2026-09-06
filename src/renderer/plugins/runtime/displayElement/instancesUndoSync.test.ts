@@ -13,7 +13,7 @@ const { instancesGetMock } = vi.hoisted(() => ({
   instancesGetMock: vi.fn(),
 }));
 
-vi.mock('@api/modules/pluginInstancesApi', () => ({
+vi.mock('@api/modules/plugin/pluginInstancesApi', () => ({
   pluginInstancesApi: { get: instancesGetMock, onChanged: vi.fn() },
 }));
 

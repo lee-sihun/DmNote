@@ -4,8 +4,8 @@ import {
   type GradientEditSession,
   type GradientPreviewSurface,
 } from '@stores/grid/useGradientEditStore';
-import { gridAnchorBoundsFor } from '@utils/core/gridAnchorBounds';
-import { rotatePointAround } from '@utils/core/rotation';
+import { gridAnchorBoundsFor } from '@utils/grid/gridAnchorBounds';
+import { rotatePointAround } from '@utils/element/rotation';
 import { GLYPH_BOX_CHANGE_EVENT } from './useCounterGlyphPaint';
 
 /**

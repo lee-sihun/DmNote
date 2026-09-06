@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
-import { panelWindowApi } from '@api/modules/panelWindowApi';
-import { flushFocusedEditor } from '@src/renderer/editor/runtime/lifecycleEditorFlush';
+import { panelWindowApi } from '@api/modules/window/panelWindowApi';
+import { flushFocusedEditor } from '@src/renderer/editor/runtime/lifecycle/lifecycleEditorFlush';
 import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 import {
   getPanelChildWindow,

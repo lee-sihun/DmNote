@@ -17,7 +17,7 @@ vi.mock('@contexts/useTranslation', () => ({
 vi.mock('@hooks/useLenis', () => ({
   useLenis: () => ({ scrollContainerRef: null }),
 }));
-vi.mock('@api/modules/cssApi', () => ({ cssApi: mocks }));
+vi.mock('@api/modules/resources/cssApi', () => ({ cssApi: mocks }));
 
 import CssPanelContent from './CssPanelContent';
 

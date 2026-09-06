@@ -9,7 +9,7 @@ import type {
   NoteSettings,
   TabNoteSettings,
 } from '@src/types/settings/noteSettings';
-import { noteTabApi } from '@api/modules/noteTabApi';
+import { noteTabApi } from '@api/modules/editor/noteTabApi';
 import { useTranslation } from '@contexts/useTranslation';
 
 interface TabNoteSettingModalProps {

@@ -3,7 +3,7 @@
  * 플러그인의 이벤트 핸들러를 전역적으로 관리합니다.
  */
 
-import { clearComponentHandlers } from '@utils/plugin/pluginUtils';
+import { clearComponentHandlers } from '@utils/plugin/components/pluginUtils';
 
 type HandlerFunction = (...args: unknown[]) => void | Promise<void>;
 

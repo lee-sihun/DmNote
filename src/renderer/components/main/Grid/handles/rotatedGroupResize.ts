@@ -4,7 +4,7 @@ import {
   SPRITE_CONSTRAINTS,
   type SpriteTransform,
 } from '@src/types/key/sprites';
-import { rotatePointAround } from '@utils/core/rotation';
+import { rotatePointAround } from '@utils/element/rotation';
 import {
   GROUP_RESIZE_MIN_SIZE,
   type GroupResizeHandle,

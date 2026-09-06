@@ -1,4 +1,4 @@
-import { elementRotationTransform } from '@utils/core/rotation';
+import { elementRotationTransform } from '@utils/element/rotation';
 import React from 'react';
 import {
   useGridElementInteraction,
@@ -13,7 +13,7 @@ import {
 import {
   resolveImageSource,
   toRenderableImageRef,
-} from '@utils/core/imageSource';
+} from '@utils/media/imageSource';
 import { computeSpriteImageStyle } from '@utils/sprite/spriteImageStyles';
 import SpriteImagePlaceholder from '@components/main/common/SpriteImagePlaceholder';
 import { resolvePoseImage } from '@utils/sprite/poseResolver';

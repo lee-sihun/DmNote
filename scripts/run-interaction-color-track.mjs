@@ -60,7 +60,7 @@ const correctness = spawnSync(
   [
     'vitest',
     'run',
-    'src/renderer/components/main/Modal/content/pickers/colorPickerPrimitives.test.tsx',
+    'src/renderer/components/main/Modal/content/pickers/color/colorPickerPrimitives.test.tsx',
     'src/renderer/utils/animation/rafLatestScheduler.test.ts',
   ],
   { cwd: root, stdio: 'inherit' },
@@ -73,7 +73,7 @@ const implementation = execFileSync(
     '-1',
     '--format=%H',
     '--',
-    'src/renderer/components/main/Modal/content/pickers/colorPickerPrimitives.tsx',
+    'src/renderer/components/main/Modal/content/pickers/color/colorPickerPrimitives.tsx',
   ],
   { cwd: root, encoding: 'utf8' },
 ).trim();

@@ -6,9 +6,9 @@ import {
   getCurrentWindow,
   Window as TauriWindow,
 } from '@tauri-apps/api/window';
-import { appApi, windowApi } from '@api/modules/appApi';
-import { overlayApi } from '@api/modules/overlayApi';
-import { settingsApi } from '@api/modules/settingsApi';
+import { appApi, windowApi } from '@api/modules/app/appApi';
+import { overlayApi } from '@api/modules/window/overlayApi';
+import { settingsApi } from '@api/modules/app/settingsApi';
 import { subscribeHitContextMenu } from './useOverlayHitRegions';
 import type { CustomTab } from '@src/types/key/keys';
 import { buildOrderedTabs, builtinTabLabelKey } from '@utils/tabOrder';

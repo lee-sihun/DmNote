@@ -3,13 +3,13 @@ import {
   acquireHistoryEditorFlushLock,
   releaseHistoryEditorFlushLock,
   resetHistoryEditorFlushLock,
-} from './historyEditorFlushLock';
+} from './lifecycle/historyEditorFlushLock';
 import {
   openPanelChildWindow,
   resetPanelChildWindow,
 } from '@utils/panelWindow/panelChildWindow';
 
-vi.mock('@api/modules/panelWindowApi', () => ({
+vi.mock('@api/modules/window/panelWindowApi', () => ({
   panelWindowApi: { armOpen: () => Promise.resolve() },
 }));
 

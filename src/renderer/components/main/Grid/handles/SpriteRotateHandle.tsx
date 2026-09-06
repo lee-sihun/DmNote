@@ -1,6 +1,6 @@
-import { spriteItemsApi } from '@api/modules/itemsApi';
+import { spriteItemsApi } from '@api/modules/editor/itemsApi';
 import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
-import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
+import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
 import CanvasRotateHandle from './CanvasRotateHandle';
 import type { Bounds } from './groupResizeUtils';
 

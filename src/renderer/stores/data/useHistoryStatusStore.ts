@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import { historyApi, type HistoryStatus } from '@api/modules/historyApi';
+import { historyApi, type HistoryStatus } from '@api/modules/editor/historyApi';
 
 interface HistoryStatusState {
   historyRevision: number;

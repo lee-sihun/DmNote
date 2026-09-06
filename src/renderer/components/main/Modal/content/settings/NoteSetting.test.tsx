@@ -19,7 +19,7 @@ vi.mock('@hooks/usePressAction', () => ({
     },
   }),
 }));
-vi.mock('@components/main/common/Checkbox', () => ({
+vi.mock('@components/main/common/checkbox/Checkbox', () => ({
   default: ({
     checked,
     onChange,
@@ -54,23 +54,26 @@ vi.mock('@components/main/common/TabSwitch', () => ({
     </div>
   ),
 }));
-vi.mock('@components/main/Grid/PropertiesPanel/PropertyInputs', () => ({
-  PropertyRow: ({
-    label,
-    children,
-  }: {
-    label: React.ReactNode;
-    children: React.ReactNode;
-  }) => (
-    <label data-label={typeof label === 'string' ? label : undefined}>
-      {label}
-      {children}
-    </label>
-  ),
-  PropertySection: ({ children }: { children: React.ReactNode }) => (
-    <section>{children}</section>
-  ),
-}));
+vi.mock(
+  '@components/main/Grid/PropertiesPanel/controls/PropertyInputs',
+  () => ({
+    PropertyRow: ({
+      label,
+      children,
+    }: {
+      label: React.ReactNode;
+      children: React.ReactNode;
+    }) => (
+      <label data-label={typeof label === 'string' ? label : undefined}>
+        {label}
+        {children}
+      </label>
+    ),
+    PropertySection: ({ children }: { children: React.ReactNode }) => (
+      <section>{children}</section>
+    ),
+  }),
+);
 vi.mock('../../Modal', () => ({
   default: ({
     children,

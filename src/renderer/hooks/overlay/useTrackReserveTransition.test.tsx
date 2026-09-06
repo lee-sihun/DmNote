@@ -11,7 +11,7 @@ const { transitionFade } = vi.hoisted(() => ({
     vi.fn<(alpha: number, durationMs: number) => Promise<boolean>>(),
 }));
 
-vi.mock('@api/modules/overlayApi', () => ({
+vi.mock('@api/modules/window/overlayApi', () => ({
   overlayApi: { transitionFade },
 }));
 

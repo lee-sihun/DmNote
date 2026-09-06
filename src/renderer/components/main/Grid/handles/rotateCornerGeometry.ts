@@ -1,4 +1,4 @@
-import type { Point } from '@utils/core/rotation';
+import type { Point } from '@utils/element/rotation';
 
 export const ROTATE_CORNER_OUTER_REACH = 26;
 export const ROTATE_CORNER_INNER_REACH = 14;

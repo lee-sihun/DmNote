@@ -99,19 +99,19 @@ const pluginRate = improvement(
   pluginAfter.eventBlockingMs.p95,
 );
 const panelImplementation = implementationCommit(
-  'src/renderer/components/main/Grid/PropertiesPanel/PanelToggleButton.tsx',
+  'src/renderer/components/main/Grid/PropertiesPanel/navigation/PanelToggleButton.tsx',
 );
 const gridImplementation = implementationCommit(
-  'src/renderer/hooks/Grid/useGridKeyboard.ts',
+  'src/renderer/hooks/Grid/selection/useGridKeyboard.ts',
 );
 const pluginImplementation = implementationCommit(
-  'src/renderer/utils/plugin/pluginHandlerDispatcher.ts',
+  'src/renderer/utils/plugin/interactions/pluginHandlerDispatcher.ts',
 );
 const panelBenchmarkCommit = implementationCommit(
   'src/renderer/benchmarks/panelToggle.performance.test.tsx',
 );
 const gridBenchmarkCommit = implementationCommit(
-  'src/renderer/benchmarks/gridKeyboard.performance.test.tsx',
+  'src/renderer/benchmarks/grid/gridKeyboard.performance.test.tsx',
 );
 const pluginBenchmarkCommit = implementationCommit(
   'src/renderer/benchmarks/pluginInput.performance.test.ts',

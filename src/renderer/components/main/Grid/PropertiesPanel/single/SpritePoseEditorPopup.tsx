@@ -1,9 +1,9 @@
 import React from 'react';
-import PickerSurface from '@components/main/Grid/PropertiesPanel/PickerSurface';
-import { PropertySection } from '@components/main/Grid/PropertiesPanel/PropertyInputs';
-import Dropdown from '@components/main/common/Dropdown';
-import Checkbox from '@components/main/common/Checkbox';
-import { NumberInput } from '@components/main/common/NumberInput';
+import PickerSurface from '@components/main/Grid/PropertiesPanel/controls/PickerSurface';
+import { PropertySection } from '@components/main/Grid/PropertiesPanel/controls/PropertyInputs';
+import Dropdown from '@components/main/common/dropdown/Dropdown';
+import Checkbox from '@components/main/common/checkbox/Checkbox';
+import { NumberInput } from '@components/main/common/numberInput/NumberInput';
 import {
   AngleGlyph,
   ScaleGlyph,
@@ -14,7 +14,7 @@ import {
   type SpriteTransform,
 } from '@src/types/key/sprites';
 import { FORM_LABEL_CLASS, FORM_ROW_CLASS } from '@utils/cardRecipes';
-import { clamp } from '@utils/core/clamp';
+import { clamp } from '@utils/number/clamp';
 import SpriteImagePreviewCard from './SpriteImagePreviewCard';
 
 // 담당 키·이미지 오버라이드 컨트롤 묶음 (삭제·이름 변경은 행 메뉴가 맡는다)

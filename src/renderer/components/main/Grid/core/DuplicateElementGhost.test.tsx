@@ -3,7 +3,7 @@ import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { DuplicateState } from '@hooks/Grid/useGridCanvasActions';
+import type { DuplicateState } from '@hooks/Grid/contextMenu/useGridCanvasActions';
 import DuplicateElementGhost from './DuplicateElementGhost';
 
 // 스프라이트 고스트는 전용 컴포넌트 계약(SpriteDuplicateGhost.test)이 따로 잡는다

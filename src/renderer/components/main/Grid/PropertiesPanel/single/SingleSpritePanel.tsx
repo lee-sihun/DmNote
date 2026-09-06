@@ -1,16 +1,16 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
+import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
 import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
-import { commitSingleElementBoundsById } from '@src/renderer/editor/runtime/elementOps';
+import { commitSingleElementBoundsById } from '@src/renderer/editor/runtime/operations/elementOps';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useSpriteStore } from '@stores/data/useSpriteStore';
-import { spriteItemsApi } from '@api/modules/itemsApi';
-import { clamp } from '@utils/core/clamp';
+import { spriteItemsApi } from '@api/modules/editor/itemsApi';
+import { clamp } from '@utils/number/clamp';
 import { stableStringify } from '@utils/core/stableStringify';
-import { toRenderableImageRef } from '@utils/core/imageSource';
-import { pickValidatedImage } from '@utils/core/pickValidatedImage';
+import { toRenderableImageRef } from '@utils/media/imageSource';
+import { pickValidatedImage } from '@utils/media/pickValidatedImage';
 import {
   anchorToPercent,
   isSameSpriteAnchor,
@@ -56,7 +56,7 @@ import {
 } from '@src/types/key/sprites';
 import type { EditorBoundsV1 } from '@src/types/editor';
 import type { CanonicalReactiveSpritePosition } from '@src/types/editor';
-import { PANEL_ROOT_CLASS } from '../panelChrome';
+import { PANEL_ROOT_CLASS } from '../navigation/panelChrome';
 import {
   PropertyRow,
   PropertySection,
@@ -64,11 +64,13 @@ import {
   TABS,
   TabType,
 } from '../index';
-import RotationInputRow from '../RotationInputRow';
-import Dropdown from '@components/main/common/Dropdown';
+import RotationInputRow from '../controls/RotationInputRow';
+import Dropdown from '@components/main/common/dropdown/Dropdown';
 import ListAddRow from '@components/main/common/ListAddRow';
 import PopupExit from '@components/main/Modal/PopupExit';
-import ListPopup, { type ListItem } from '@components/main/Modal/ListPopup';
+import ListPopup, {
+  type ListItem,
+} from '@components/main/Modal/listPopup/ListPopup';
 import {
   pickerRowClass,
   pickerMoreButtonClass,
@@ -77,7 +79,7 @@ import {
 } from '@components/main/Modal/content/pickers/pickerRowClass';
 import MoreVerticalIcon from '@components/main/Modal/content/pickers/MoreVerticalIcon';
 import { usePickerItemMenu } from '@hooks/usePickerItemMenu';
-import EditSessionBoundary from '../EditSessionBoundary';
+import EditSessionBoundary from '../selection/EditSessionBoundary';
 import SpritePoseEditorPopup from './SpritePoseEditorPopup';
 import SpriteImagePreviewCard from './SpriteImagePreviewCard';
 import SinglePanelRenameHeader from './SinglePanelRenameHeader';

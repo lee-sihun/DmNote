@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, type RefObject } from 'react';
-import { measureCounterGlyphBox } from '@utils/core/counterGlyphMetrics';
+import { measureCounterGlyphBox } from '@utils/counter/counterGlyphMetrics';
 
 const POSITION_VAR = '--dmn-counter-fill-position-default';
 const SIZE_VAR = '--dmn-counter-fill-size-default';

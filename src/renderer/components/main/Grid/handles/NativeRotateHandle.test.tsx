@@ -6,13 +6,13 @@ import {
   acquireHistoryEditorFlushLock,
   releaseHistoryEditorFlushLock,
   resetHistoryEditorFlushLock,
-} from '@src/renderer/editor/runtime/historyEditorFlushLock';
+} from '@src/renderer/editor/runtime/lifecycle/historyEditorFlushLock';
 import {
   releaseDragSession,
   tryAcquireDragSession,
-} from '@hooks/Grid/dragSession';
-import { endDragCursor } from '@utils/core/dragCursor';
-import { rotatePointAround } from '@utils/core/rotation';
+} from '@hooks/Grid/drag/dragSession';
+import { endDragCursor } from '@utils/dom/dragCursor';
+import { rotatePointAround } from '@utils/element/rotation';
 import {
   getCursor,
   setCustomCursorHover,
@@ -29,13 +29,13 @@ const mocks = vi.hoisted(() => ({
 }));
 
 // 저장·프리뷰 경계만 대체하고 포인터·프레임·소유권·커서는 실제 경로 사용
-vi.mock('../PropertiesPanel/previewPatchForwarders', () => ({
+vi.mock('../PropertiesPanel/selection/previewPatchForwarders', () => ({
   previewSingleStyleProperty: mocks.preview,
 }));
-vi.mock('@src/renderer/editor/runtime/elementPaintStyleOps', () => ({
+vi.mock('@src/renderer/editor/runtime/operations/elementPaintStyleOps', () => ({
   patchStylePropertyById: mocks.patch,
 }));
-vi.mock('@src/renderer/editor/runtime/editGestureController', () => ({
+vi.mock('@src/renderer/editor/runtime/gesture/editGestureController', () => ({
   editGestureController: {
     activeGestureId: mocks.activeGestureId,
     settleCommit: mocks.settleCommit,

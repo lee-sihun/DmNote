@@ -1,6 +1,6 @@
 import type { PointerEvent } from 'react';
-import { useCustomCursorHover } from '@hooks/Grid/useCustomCursorHover';
-import type { Point } from '@utils/core/rotation';
+import { useCustomCursorHover } from '@hooks/Grid/viewport/useCustomCursorHover';
+import type { Point } from '@utils/element/rotation';
 import {
   getCursor,
   rotationCursorForAngle,

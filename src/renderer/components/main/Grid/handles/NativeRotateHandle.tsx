@@ -1,6 +1,6 @@
-import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
-import { patchStylePropertyById } from '@src/renderer/editor/runtime/elementPaintStyleOps';
-import { previewSingleStyleProperty } from '../PropertiesPanel/previewPatchForwarders';
+import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
+import { patchStylePropertyById } from '@src/renderer/editor/runtime/operations/elementPaintStyleOps';
+import { previewSingleStyleProperty } from '../PropertiesPanel/selection/previewPatchForwarders';
 import CanvasRotateHandle from './CanvasRotateHandle';
 import type { Bounds } from './groupResizeUtils';
 import type { RotatableElementType } from './rotatableElement';

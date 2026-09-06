@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
   flushResult: true,
 }));
 
-vi.mock('@api/modules/panelWindowApi', () => ({
+vi.mock('@api/modules/window/panelWindowApi', () => ({
   panelWindowApi: {
     ackClose: (requestId: string) => mocks.ackClose(requestId),
     dock: () => mocks.dock(),
@@ -22,7 +22,7 @@ vi.mock('@api/modules/panelWindowApi', () => ({
     },
   },
 }));
-vi.mock('@src/renderer/editor/runtime/lifecycleEditorFlush', () => ({
+vi.mock('@src/renderer/editor/runtime/lifecycle/lifecycleEditorFlush', () => ({
   flushFocusedEditor: () => Promise.resolve(mocks.flushResult),
 }));
 vi.mock('@utils/panelWindow/panelChildWindow', () => ({

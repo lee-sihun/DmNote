@@ -7,12 +7,12 @@ import {
 } from 'react';
 import type React from 'react';
 import { flushSync } from 'react-dom';
-import { beginDragCursor, endDragCursor } from '@utils/core/dragCursor';
+import { beginDragCursor, endDragCursor } from '@utils/dom/dragCursor';
 import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
 import {
   isHistoryEditorFlushLocked,
   subscribeHistoryEditorFlushStart,
-} from '@src/renderer/editor/runtime/historyEditorFlushLock';
+} from '@src/renderer/editor/runtime/lifecycle/historyEditorFlushLock';
 
 export interface ScrubDragOptions {
   enabled: boolean;

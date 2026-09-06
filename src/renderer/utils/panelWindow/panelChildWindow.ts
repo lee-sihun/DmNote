@@ -1,5 +1,5 @@
-import { panelWindowApi } from '@api/modules/panelWindowApi';
-import { registerHistoryEditorFlushDocument } from '@src/renderer/editor/runtime/historyEditorFlushLock';
+import { panelWindowApi } from '@api/modules/window/panelWindowApi';
+import { registerHistoryEditorFlushDocument } from '@src/renderer/editor/runtime/lifecycle/historyEditorFlushLock';
 import { initializeMotionPreferences } from '@utils/animation/motionPreferences';
 
 import {

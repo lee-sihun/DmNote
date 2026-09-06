@@ -1,10 +1,10 @@
-import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
+import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
 import {
   commitSelectionRotation,
   previewSelectionRotation,
-} from '@src/renderer/editor/runtime/selectionRotationOps';
-import { wrapDegrees } from '@utils/core/rotation';
-import type { useSelectionRotationFrame } from '@hooks/Grid/useSelectionRotationFrame';
+} from '@src/renderer/editor/runtime/operations/selectionRotationOps';
+import { wrapDegrees } from '@utils/element/rotation';
+import type { useSelectionRotationFrame } from '@hooks/Grid/selection/useSelectionRotationFrame';
 import type { CanvasRotationSession } from './CanvasRotateHandle';
 
 export type SelectionRotationFrame = NonNullable<

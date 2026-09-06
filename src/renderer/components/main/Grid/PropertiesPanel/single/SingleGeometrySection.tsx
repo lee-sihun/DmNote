@@ -1,8 +1,12 @@
 import type { KeyPosition } from '@src/types/key/keys';
-import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
+import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
-import { NumberInput, PropertyRow, PropertySection } from '../PropertyInputs';
-import RotationInputRow from '../RotationInputRow';
+import {
+  NumberInput,
+  PropertyRow,
+  PropertySection,
+} from '../controls/PropertyInputs';
+import RotationInputRow from '../controls/RotationInputRow';
 
 type GeometryField = 'dx' | 'dy' | 'width' | 'height';
 type SingleGeometryKind = 'key-or-stat' | 'graph' | 'knob';

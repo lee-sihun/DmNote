@@ -47,7 +47,7 @@ vi.mock('@hooks/Modal/usePalette', () => ({
     setPalette: vi.fn(),
   }),
 }));
-vi.mock('@api/modules/keysApi', () => ({
+vi.mock('@api/modules/editor/keysApi', () => ({
   keysApi: { resetCountersMode: mocks.resetCountersMode },
 }));
 vi.mock('@components/main/TitleBar', () => ({ default: () => null }));
@@ -58,7 +58,7 @@ vi.mock('@components/main/Grid/PropertiesPanelHost', () => ({
   default: () => null,
 }));
 vi.mock('@components/main/Modal/PopupExit', () => ({ default: () => null }));
-vi.mock('@components/main/Modal/FloatingPopup', () => ({
+vi.mock('@components/main/Modal/floatingPopup/FloatingPopup', () => ({
   default: () => null,
 }));
 vi.mock('@components/main/Modal/content/dialogs/UpdateModal', () => ({
@@ -67,10 +67,10 @@ vi.mock('@components/main/Modal/content/dialogs/UpdateModal', () => ({
 vi.mock('@components/main/Modal/content/settings/NoteSetting', () => ({
   default: () => null,
 }));
-vi.mock('@components/main/Modal/content/pickers/Palette', () => ({
+vi.mock('@components/main/Modal/content/pickers/color/Palette', () => ({
   default: () => null,
 }));
-vi.mock('@components/main/Modal/content/pickers/ColorPicker', () => ({
+vi.mock('@components/main/Modal/content/pickers/color/ColorPicker', () => ({
   default: () => null,
 }));
 vi.mock('@components/main/Tool/ToolBar', () => ({

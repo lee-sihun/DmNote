@@ -10,7 +10,7 @@ import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
-import Dropdown from '@components/main/common/Dropdown';
+import Dropdown from '@components/main/common/dropdown/Dropdown';
 import ReloadButton from '@components/main/common/ReloadButton';
 import {
   SettingCard,
@@ -34,7 +34,7 @@ import {
   FILL_INTERACTIVE_CLASS,
 } from '@components/main/SettingsPanel/panelChrome';
 import { applyCounterSnapshot } from '@stores/signals/keyCounterSignals';
-import { getPluginDisplayName } from '@utils/plugin/pluginUtils';
+import { getPluginDisplayName } from '@utils/plugin/components/pluginUtils';
 import { isMac } from '@utils/core/platform';
 import { useUpdateCheck } from '@hooks/app/useUpdateCheck';
 import { useObsSettingsController } from '@components/main/useObsSettingsController';
@@ -44,12 +44,12 @@ import type { ShortcutsState } from '@src/types/settings/shortcuts';
 import type { SupportedLocale } from '@contexts/I18nContextDef';
 import type { KeysResetAllResponse } from '@src/types/plugin/api';
 import type { KeyCounters } from '@src/types/key/keys';
-import { settingsApi } from '@api/modules/settingsApi';
-import { overlayApi } from '@api/modules/overlayApi';
-import { cssApi } from '@api/modules/cssApi';
-import { jsApi } from '@api/modules/jsApi';
-import { keysApi } from '@api/modules/keysApi';
-import { appApi, windowApi } from '@api/modules/appApi';
+import { settingsApi } from '@api/modules/app/settingsApi';
+import { overlayApi } from '@api/modules/window/overlayApi';
+import { cssApi } from '@api/modules/resources/cssApi';
+import { jsApi } from '@api/modules/plugin/jsApi';
+import { keysApi } from '@api/modules/editor/keysApi';
+import { appApi, windowApi } from '@api/modules/app/appApi';
 import { assertCanonicalEditorDocument } from '@src/types/editor';
 
 interface SettingsProps {

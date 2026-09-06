@@ -1,6 +1,6 @@
 import { EDITOR_BOUNDS_LIMITS } from '@src/types/editor';
-import { clamp } from '@utils/core/clamp';
-import { DEG_TO_RAD } from '@utils/core/rotation';
+import { clamp } from '@utils/number/clamp';
+import { DEG_TO_RAD } from '@utils/element/rotation';
 import { anchorRotatedResize } from './rotatedResize';
 
 import {

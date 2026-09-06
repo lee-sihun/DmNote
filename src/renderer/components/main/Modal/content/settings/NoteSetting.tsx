@@ -1,12 +1,12 @@
 import { usePressAction } from '@hooks/usePressAction';
 import { useSingleFlightAction } from '@hooks/useSingleFlightAction';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import Checkbox from '@components/main/common/Checkbox';
+import Checkbox from '@components/main/common/checkbox/Checkbox';
 import TabSwitch from '@components/main/common/TabSwitch';
 import {
   PropertyRow,
   PropertySection,
-} from '@components/main/Grid/PropertiesPanel/PropertyInputs';
+} from '@components/main/Grid/PropertiesPanel/controls/PropertyInputs';
 import Modal from '../../Modal';
 import type { PopupMotionState } from '@hooks/ui/usePopupPresence';
 import { useTranslation } from '@contexts/useTranslation';
@@ -19,7 +19,7 @@ import {
   toDisplayDelayMs,
   toEffectiveMinLengthPx,
   toMinLengthMs,
-} from '@utils/core/noteLengthPolicy';
+} from '@utils/noteLengthPolicy';
 
 type ConstraintKey = keyof typeof NOTE_SETTINGS_CONSTRAINTS;
 

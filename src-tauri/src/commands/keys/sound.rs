@@ -20,9 +20,9 @@ use crate::models::{
 };
 use crate::services::event_publisher::publish_event;
 use crate::state::{
+    assets::local_asset_path::paths_have_same_identity,
     atomic_file::{prepare_atomic_replace, PreparedAtomicReplace},
     history::HistoryAdmissionLease,
-    local_asset_path::paths_have_same_identity,
     store::{
         move_staged_sound_deletions_to_trash, restore_staged_sound_deletions,
         stage_sound_files_for_deletion, PROCESSED_WAV_TRANSACTION_LOCK,

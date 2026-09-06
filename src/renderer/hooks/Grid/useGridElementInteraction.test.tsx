@@ -20,7 +20,7 @@ const hookState = vi.hoisted(() => ({
 
 vi.mock('@utils/core/platform', () => ({ isMac: () => false }));
 
-vi.mock('@hooks/Grid/useDraggable', () => ({
+vi.mock('@hooks/Grid/drag/useDraggable', () => ({
   useDraggable: () => ({
     ref: (node: HTMLElement | null) => hookState.attached.push(node),
     dx: 0,
@@ -31,7 +31,7 @@ vi.mock('@hooks/Grid/useDraggable', () => ({
   }),
 }));
 
-vi.mock('@hooks/Grid/useSelectionDrag', () => ({
+vi.mock('@hooks/Grid/drag/useSelectionDrag', () => ({
   useSelectionDrag: () => ({
     handlePointerDown: () => {},
     movedDuringPressRef: { current: hookState.movedDuringPress },
@@ -39,7 +39,7 @@ vi.mock('@hooks/Grid/useSelectionDrag', () => ({
   }),
 }));
 
-vi.mock('@hooks/Grid/useSmartGuidesElements', () => ({
+vi.mock('@hooks/Grid/drag/useSmartGuidesElements', () => ({
   useSmartGuidesElements: () => ({ getOtherElements: () => [] }),
 }));
 

@@ -57,13 +57,13 @@ vi.mock('./useLayerDnD', () => ({
   }),
 }));
 
-vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
+vi.mock('@src/renderer/editor/runtime/operations/elementOps', () => ({
   patchElementHiddenById: vi.fn(),
   patchElementLayerNameById: mocks.renameLayer,
   renameLayerGroupById: mocks.renameGroup,
 }));
 
-vi.mock('@components/main/Modal/ListPopup', () => ({
+vi.mock('@components/main/Modal/listPopup/ListPopup', () => ({
   default: ({
     open,
     items,

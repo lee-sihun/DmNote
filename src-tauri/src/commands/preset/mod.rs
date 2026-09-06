@@ -12,7 +12,7 @@ use crate::models::{
     KnobPositions, LayerGroups, NoteSettings, SpritePositions, StatPositions, TabCssOverrides,
     TabNoteOverrides,
 };
-use crate::state::local_asset_path::{file_url_to_path, FileUrlPath};
+use crate::state::assets::local_asset_path::{file_url_to_path, FileUrlPath};
 
 #[derive(Serialize)]
 pub struct PresetOperationResult {

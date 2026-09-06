@@ -9,13 +9,16 @@ import CounterAnimationEditorModal from './CounterAnimationEditorModal';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-vi.mock('@components/main/common/Dropdown', () => ({
+vi.mock('@components/main/common/dropdown/Dropdown', () => ({
   default: () => null,
 }));
-vi.mock('@components/main/Grid/PropertiesPanel/PropertyInputs', () => ({
-  TextInput: () => null,
-  NumberInput: () => null,
-}));
+vi.mock(
+  '@components/main/Grid/PropertiesPanel/controls/PropertyInputs',
+  () => ({
+    TextInput: () => null,
+    NumberInput: () => null,
+  }),
+);
 vi.mock('@components/overlay/counters/CountDisplay', () => ({
   default: () => null,
 }));

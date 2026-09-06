@@ -20,7 +20,7 @@ const hookState = vi.hoisted(() => ({ wasMoved: false, pressMoved: false }));
 vi.mock('@utils/core/platform', () => ({ isMac: () => false }));
 
 // 공용 상호작용 훅은 배럴이 아니라 소스 모듈을 직접 쓴다
-vi.mock('@hooks/Grid/useDraggable', () => ({
+vi.mock('@hooks/Grid/drag/useDraggable', () => ({
   useDraggable: () => ({
     ref: () => {},
     dx: 0,
@@ -31,7 +31,7 @@ vi.mock('@hooks/Grid/useDraggable', () => ({
   }),
 }));
 
-vi.mock('@hooks/Grid/useSelectionDrag', () => ({
+vi.mock('@hooks/Grid/drag/useSelectionDrag', () => ({
   useSelectionDrag: () => ({
     handlePointerDown: () => {},
     movedDuringPressRef: { current: false },

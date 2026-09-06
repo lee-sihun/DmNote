@@ -286,3 +286,222 @@ Rust 선언의 signature/attribute 대조에서 나타난 production 차이는 t
 ### 재병합 승인
 
 2026-09-05 사용자가 재검토 후 main 병합을 명시적으로 승인했다. 원격을 다시 조회해 main이 `d2b9f9ab`, 검증한 후보가 `17198717`이고 main에 추가 변경이 없음을 확인했다. 탭 정규화 보정과 추가 계약 테스트를 포함한 후보를 통합하며, 위 승인 대기 조건은 해소됐다. 이 상태 기록 외에 검증 이후 제품 코드와 테스트 변경은 없다.
+
+## 2026-09-05 런타임 안전성·폴더 구조·strict 검사 후속 작업
+
+작업 브랜치: `refactor/runtime-safety-and-structure`. 앞선 리팩터링·병합 기록과 후속 계획은 유지하며, 이번 변경은 다음과 같다. 코드사이닝은 운영 인증 심사 완료까지 보류한 사용자 결정에 따라 변경하지 않았다.
+
+- OBS 미디어 percent decoder의 UTF-8 문자열 슬라이싱을 바이트 해석으로 변경했다. 잘못된 Unicode·불완전한 escape 입력과 인증된 media 요청의 400 응답을 테스트한다.
+- 웹폰트 모달 테스트는 가상 타이머와 명시적 Font Loading API 모킹을 사용한다. 디바운스 후 로드와 닫기 시 취소·스타일 정리를 검증한다.
+- `editor/runtime`의 직속 파일 63개를 `coordinator`, `projection`, `operations`, `intent`, `geometry`, `gesture`, `lifecycle`로 묶었다. 편집 조정기에서 계약 타입, 공통 rebase 계산·의미 연산 결과 검증, pending gesture 보존 정책을 분리했다.
+- `PropertiesPanel`의 직속 파일은 50개에서 3개로 줄였다. `controls`, `navigation`, `selection`, `plugin`을 추가하고 batch 전용 모듈은 기존 `batch`에 배치했다. 테스트와 관련 스크립트 경로도 함께 이동했다.
+- Rust `state`의 자산 유틸리티는 `assets`, 창·플랫폼 연동은 `window`로 옮겼다. 직속 파일은 21개에서 13개로 줄었고, 패널 드래그 상태 전이는 `window/panel_drag/machine.rs`로 분리했다. 저장·복구 트랜잭션의 소유권과 command/event·permissions는 유지했다.
+- `tsconfig.strict.json`에서 공유 타입, 편집 모델, 커밋 엔진, 의미 연산 투영, 순수 배치 계획과 import 의존성을 검사한다. `npm run type-check`에 연결했으므로 기존 CI 품질 검사에도 포함된다. 전체 UI·테스트 fixture의 strict 전환은 아직 완료하지 않았으며, 해당 영역 정리 시 검사 범위를 확장한다.
+
+검증: 프론트 전체 테스트 3,604개 통과·18개 제외, Rust 테스트 1,048개 통과·6개 제외, CI 정책 테스트 15개 통과. TypeScript 일반·strict 검사, Vite build, Rust check·Clippy(`--all-targets --locked -- -D warnings`) 통과. ESLint는 기존 `SoundTrimModal`의 훅 의존성 경고 1건을 유지한다. 빌드의 대형 청크 경고도 남아 있다. Windows 실제 빌드·WebView·ASIO 장치 검증은 이번 macOS 로컬 검증에 포함하지 않았다.
+
+## 2026-09-05 소스 폴더 전수 통계와 추가 분류 검토
+
+집계 기준: `refactor/runtime-safety-and-structure`의 `d6ae4ba4` 소스 상태. `rg --files --hidden src src-tauri/src`로 파일을 열거하고, 파일이 속한 모든 상위 폴더를 포함해 143개 폴더를 집계했다. Git ignore 대상과 파일이 없는 빈 디렉터리는 제외한다. `docs`, 저장소 루트의 `tests`, `scripts`, 빌드 산출물은 이번 소스 폴더 집계 범위 밖이다.
+
+- 직속 파일: 해당 폴더에 직접 있는 파일. 전체 폴더의 이 열 합계는 1,224개다.
+- 직속 코드: 이번 스캔에서 확인한 `.ts`, `.tsx`, `.rs`, `.css`, `.html`. 테스트·타입 선언도 포함한다.
+- 직속 테스트: `.test.`·`.spec.` 이름, `tests.rs`, `tests/` 아래 파일을 이름 기준으로 판정한다. Rust 소스 내부의 `#[test]`는 별도 파일로 세지 않으며, 이 수치는 테스트 케이스 수나 커버리지가 아니다.
+- 하위 포함 파일: 해당 폴더와 모든 하위 폴더의 파일 합계. 상위·하위 행 사이에 중복되므로 이 열을 전체 합산하면 안 된다.
+- 코드 그래프는 책임 경계를 확인하는 보조 자료로 사용했다. 일부 테스트·API 모듈의 파싱 누락이 있어 파일 수는 그래프가 아닌 실제 파일 목록으로 계산했다.
+
+### 전체 규모
+
+| 범위 | 폴더 수 | 하위 포함 파일 | 코드 파일 | 자산·설정 등 |
+| --- | ---: | ---: | ---: | ---: |
+| `src` (프론트·공유 타입) | 98 | 1,039 | 1,005 | 34 |
+| `src-tauri/src` | 45 | 185 | 185 | 0 |
+| 합계 | 143 | 1,224 | 1,190 | 34 |
+
+직속 파일 수 분포: 0–9개인 폴더 100개, 10–19개 28개, 20–29개 6개, 30–39개 7개, 40개 이상 2개. 직속 파일이 30개 이상인 9개 폴더는 모두 프론트다. 프론트의 자산·설정 34개는 SVG 19개, MP4 9개, JSON 5개, WOFF2 1개다.
+
+### 추가 분류 후보
+
+후속 실행 순서와 완료 기준은 [소스 폴더 분류 후속 계획](source-organization-plan.md)에 정리했다. 아래 표는 최초 검토 기록이며, 낮은 우선순위로 분류한 영역도 후속 계획의 검토 범위에 포함한다.
+
+아래 파일 수는 직속 파일 수이며, 분류안은 아직 적용하지 않았다. 같은 책임의 구현·타입·테스트를 함께 이동하고, 파일 수 자체를 강제 상한으로 삼지 않는다.
+
+| 우선순위 | 폴더 (`src/renderer/` 기준) | 파일 | 테스트 | 추가 분류 판단 |
+| --- | --- | ---: | ---: | --- |
+| 높음 | `utils/core` | 39 | 12 | 이미지 로드·자산 판정, 폰트·글리프 측정, 입력 이벤트, 숫자 파싱, 렌더 스타일이 혼재. 기존 도메인 유틸리티 폴더를 우선 활용하고 필요한 영역만 추가 |
+| 높음 | `components/main/Modal/content/pickers` | 37 | 14 | `color`, `font`, `sound`의 구현·전용 runtime·테스트 묶음이 명확. 여러 picker가 쓰는 목록 UI는 상위에 유지 |
+| 높음 | `components/main/common` | 33 | 14 | 숫자 입력의 모델·runtime·chrome·테스트, dropdown runtime·테스트, checkbox 테스트가 각각 독립적인 묶음. `numberInput`, `dropdown`, `checkbox` 분류 가능 |
+| 중간 | `hooks/Grid` | 41 | 20 | `selection`, `drag`, `resize`, `viewport`, `contextMenu` 후보. 드래그 수명주기·편집 commit·키보드 선택이 결합되어 있어 동작 변경 없이 경로부터 나눌 필요 |
+| 중간 | `components/main/Modal` | 34 | 20 | floating popup, list popup, tooltip의 컴포넌트·runtime·테스트 묶음 분리 가능. 공통 layer·chrome·exit 상태의 소유권 유지 필요 |
+| 중간 | `components/main/Grid/PropertiesPanel/batch` | 33 | 7 | `panels`, `sections`, `pickers`, `runtime` 후보. 앞선 정리로 batch 책임이 모였지만 한 단계 더 분리할 여지 있음. `../index`를 통한 내부 역참조도 함께 검토 |
+| 낮음 | `api/modules` | 37 | 11 | command 도메인별 파일명이 이미 명확. `editor`, `plugin`, `window`, `app` 등으로 묶을 수 있지만 경계 모듈의 import 변경 범위에 비해 시급성은 낮음 |
+| 낮음 | `benchmarks` | 37 | 18 | 테스트와 측정용 화면의 쌍이 다수. `controls`, `grid`, `overlay` 분류 가능하지만 package scripts의 직속 glob·명시 경로, WebView 시나리오 진입점을 함께 수정해야 함 |
+| 낮음 | `__tests__` | 41 | 39 | 여러 UI를 가로지르는 계약 테스트가 주로 모인 폴더. 무조건 구현 옆으로 옮기기보다 `editor`, `popup`, `panel` 등의 계약별 분류가 적절 |
+| 낮음 | `utils/plugin` | 28 | 12 | 플러그인 도메인 내부에서의 추가 묶음 검토는 가능하나 core·picker 정리보다 후순위 |
+| 유지 우선 | `components/shared` | 26 | 13 | 구현과 테스트가 함께 있어 파일 수가 늘어남. 파일 수만으로 재분류할 근거는 부족 |
+| 유지 우선 | `components/main/Grid/PropertiesPanel/layer` | 23 | 11 | 레이어 도메인과 테스트의 묶음이 이미 명확 |
+
+`utils/core/assetProbe.ts`는 같은 폴더의 `imageSource`를 사용하고, 글리프·폰트 유틸리티도 별도 묶음을 이룬다. `FontPicker`는 `WebFontEditorSheet`, `webFontEditorLoader`, `fontPickerPreload`에 연결되어 있으며, SoundPicker도 전용 library runtime을 갖는다. `common/useNumericEditSession`은 숫자 입력 모델을, `useDropdownRuntime`은 popup layer와 chrome을 사용한다. 이런 실제 의존 관계를 분류 기준으로 삼는다.
+
+백엔드는 `models` 14개, `state` 13개, `state/app_state` 12개, `state/store` 11개가 상위다. `models`의 편집·키 모델이나 `app_state`의 창·입력·생명주기 runtime을 추가로 묶을 수는 있다. 다만 현재 규모에서는 module 경로와 Rust 가시성만 늘릴 가능성이 있어 일괄 추가 분류를 권하지 않는다. 저장·복구·history 트랜잭션은 파일 수를 이유로 다른 소유자로 옮기지 않는다.
+
+추천 순서: `utils/core` → picker의 `color/font/sound` → `common` 입력 컴포넌트 → `hooks/Grid` → modal 기반 UI·batch 패널. 코드 이동 시 import·mock·lazy loader뿐 아니라 소스를 직접 읽는 테스트, 벤치마크 실행 경로, strict 검사 include도 함께 확인한다. 이번 요청에서는 통계와 가능성 검토만 수행했으며 추가 소스 이동은 하지 않았다.
+
+### 모든 소스 폴더 통계
+
+#### 프론트·공유 타입
+
+| 폴더 | 직속 파일 | 직속 코드 | 직속 테스트 | 하위 포함 파일 |
+| --- | ---: | ---: | ---: | ---: |
+| `src` | 0 | 0 | 0 | 1039 |
+| `src/renderer` | 2 | 2 | 1 | 1006 |
+| `src/renderer/__tests__` | 41 | 41 | 39 | 41 |
+| `src/renderer/api` | 7 | 7 | 2 | 44 |
+| `src/renderer/api/modules` | 37 | 37 | 11 | 37 |
+| `src/renderer/assets` | 0 | 0 | 0 | 29 |
+| `src/renderer/assets/fonts` | 1 | 0 | 0 | 1 |
+| `src/renderer/assets/mp4` | 9 | 0 | 0 | 9 |
+| `src/renderer/assets/svgs` | 19 | 0 | 0 | 19 |
+| `src/renderer/benchmarks` | 37 | 37 | 18 | 37 |
+| `src/renderer/components` | 0 | 0 | 0 | 379 |
+| `src/renderer/components/main` | 8 | 8 | 2 | 339 |
+| `src/renderer/components/main/Grid` | 6 | 6 | 3 | 168 |
+| `src/renderer/components/main/Grid/PropertiesPanel` | 3 | 3 | 0 | 122 |
+| `src/renderer/components/main/Grid/PropertiesPanel/batch` | 33 | 33 | 7 | 33 |
+| `src/renderer/components/main/Grid/PropertiesPanel/controls` | 12 | 12 | 2 | 12 |
+| `src/renderer/components/main/Grid/PropertiesPanel/layer` | 23 | 23 | 11 | 23 |
+| `src/renderer/components/main/Grid/PropertiesPanel/navigation` | 13 | 13 | 3 | 13 |
+| `src/renderer/components/main/Grid/PropertiesPanel/plugin` | 3 | 3 | 0 | 3 |
+| `src/renderer/components/main/Grid/PropertiesPanel/selection` | 14 | 14 | 5 | 14 |
+| `src/renderer/components/main/Grid/PropertiesPanel/single` | 21 | 21 | 7 | 21 |
+| `src/renderer/components/main/Grid/core` | 14 | 14 | 6 | 14 |
+| `src/renderer/components/main/Grid/handles` | 13 | 13 | 5 | 13 |
+| `src/renderer/components/main/Grid/layers` | 9 | 9 | 3 | 9 |
+| `src/renderer/components/main/Grid/overlays` | 4 | 4 | 1 | 4 |
+| `src/renderer/components/main/Modal` | 34 | 34 | 20 | 104 |
+| `src/renderer/components/main/Modal/content` | 0 | 0 | 0 | 70 |
+| `src/renderer/components/main/Modal/content/dialogs` | 7 | 7 | 3 | 7 |
+| `src/renderer/components/main/Modal/content/editors` | 14 | 14 | 6 | 14 |
+| `src/renderer/components/main/Modal/content/managers` | 9 | 9 | 4 | 9 |
+| `src/renderer/components/main/Modal/content/pickers` | 37 | 37 | 14 | 37 |
+| `src/renderer/components/main/Modal/content/settings` | 3 | 3 | 1 | 3 |
+| `src/renderer/components/main/SettingsPanel` | 6 | 6 | 0 | 6 |
+| `src/renderer/components/main/Tool` | 15 | 15 | 7 | 20 |
+| `src/renderer/components/main/Tool/icons` | 5 | 5 | 0 | 5 |
+| `src/renderer/components/main/common` | 33 | 33 | 14 | 33 |
+| `src/renderer/components/overlay` | 2 | 2 | 1 | 14 |
+| `src/renderer/components/overlay/counters` | 12 | 12 | 3 | 12 |
+| `src/renderer/components/shared` | 26 | 26 | 13 | 26 |
+| `src/renderer/config` | 1 | 1 | 0 | 1 |
+| `src/renderer/constants` | 4 | 4 | 0 | 4 |
+| `src/renderer/contexts` | 5 | 5 | 0 | 5 |
+| `src/renderer/editor` | 0 | 0 | 0 | 76 |
+| `src/renderer/editor/model` | 10 | 10 | 3 | 10 |
+| `src/renderer/editor/runtime` | 0 | 0 | 0 | 66 |
+| `src/renderer/editor/runtime/coordinator` | 13 | 13 | 4 | 13 |
+| `src/renderer/editor/runtime/geometry` | 4 | 4 | 2 | 4 |
+| `src/renderer/editor/runtime/gesture` | 5 | 5 | 2 | 5 |
+| `src/renderer/editor/runtime/intent` | 15 | 15 | 7 | 15 |
+| `src/renderer/editor/runtime/lifecycle` | 12 | 12 | 5 | 12 |
+| `src/renderer/editor/runtime/operations` | 12 | 12 | 2 | 12 |
+| `src/renderer/editor/runtime/projection` | 5 | 5 | 0 | 5 |
+| `src/renderer/hooks` | 22 | 22 | 7 | 127 |
+| `src/renderer/hooks/Grid` | 41 | 41 | 20 | 41 |
+| `src/renderer/hooks/Modal` | 1 | 1 | 0 | 1 |
+| `src/renderer/hooks/app` | 12 | 12 | 5 | 12 |
+| `src/renderer/hooks/audio` | 2 | 2 | 1 | 2 |
+| `src/renderer/hooks/overlay` | 17 | 17 | 7 | 17 |
+| `src/renderer/hooks/panel` | 7 | 7 | 3 | 7 |
+| `src/renderer/hooks/pickers` | 3 | 3 | 1 | 3 |
+| `src/renderer/hooks/shared` | 6 | 6 | 1 | 6 |
+| `src/renderer/hooks/ui` | 16 | 16 | 2 | 16 |
+| `src/renderer/locales` | 5 | 0 | 0 | 5 |
+| `src/renderer/plugins` | 0 | 0 | 0 | 58 |
+| `src/renderer/plugins/runtime` | 14 | 14 | 7 | 58 |
+| `src/renderer/plugins/runtime/api` | 19 | 19 | 9 | 19 |
+| `src/renderer/plugins/runtime/context` | 4 | 4 | 1 | 4 |
+| `src/renderer/plugins/runtime/displayElement` | 18 | 18 | 7 | 18 |
+| `src/renderer/plugins/runtime/handlers` | 3 | 3 | 1 | 3 |
+| `src/renderer/stores` | 6 | 6 | 2 | 41 |
+| `src/renderer/stores/data` | 9 | 9 | 2 | 9 |
+| `src/renderer/stores/grid` | 14 | 14 | 7 | 14 |
+| `src/renderer/stores/plugin` | 5 | 5 | 2 | 5 |
+| `src/renderer/stores/signals` | 7 | 7 | 1 | 7 |
+| `src/renderer/styles` | 3 | 3 | 0 | 3 |
+| `src/renderer/utils` | 15 | 15 | 5 | 139 |
+| `src/renderer/utils/animation` | 7 | 7 | 2 | 7 |
+| `src/renderer/utils/audio` | 2 | 2 | 1 | 2 |
+| `src/renderer/utils/color` | 3 | 3 | 1 | 3 |
+| `src/renderer/utils/core` | 39 | 39 | 12 | 39 |
+| `src/renderer/utils/counter` | 1 | 1 | 0 | 1 |
+| `src/renderer/utils/css` | 4 | 4 | 2 | 6 |
+| `src/renderer/utils/css/scopeUserCss` | 2 | 2 | 0 | 2 |
+| `src/renderer/utils/dom` | 2 | 2 | 0 | 2 |
+| `src/renderer/utils/focus` | 1 | 1 | 0 | 1 |
+| `src/renderer/utils/grid` | 20 | 20 | 10 | 25 |
+| `src/renderer/utils/grid/smartGuides` | 5 | 5 | 0 | 5 |
+| `src/renderer/utils/panelWindow` | 6 | 6 | 3 | 6 |
+| `src/renderer/utils/plugin` | 28 | 28 | 12 | 28 |
+| `src/renderer/utils/ui` | 4 | 4 | 1 | 4 |
+| `src/renderer/windows` | 0 | 0 | 0 | 15 |
+| `src/renderer/windows/main` | 7 | 7 | 2 | 7 |
+| `src/renderer/windows/obs` | 2 | 2 | 0 | 2 |
+| `src/renderer/windows/overlay` | 6 | 6 | 3 | 6 |
+| `src/types` | 11 | 11 | 1 | 33 |
+| `src/types/key` | 13 | 13 | 4 | 13 |
+| `src/types/plugin` | 3 | 3 | 0 | 3 |
+| `src/types/settings` | 6 | 6 | 1 | 6 |
+
+#### 백엔드
+
+| 폴더 | 직속 파일 | 직속 코드 | 직속 테스트 | 하위 포함 파일 |
+| --- | ---: | ---: | ---: | ---: |
+| `src-tauri/src` | 8 | 8 | 0 | 185 |
+| `src-tauri/src/audio` | 2 | 2 | 0 | 6 |
+| `src-tauri/src/audio/engine` | 4 | 4 | 1 | 4 |
+| `src-tauri/src/commands` | 2 | 2 | 0 | 53 |
+| `src-tauri/src/commands/app` | 6 | 6 | 0 | 8 |
+| `src-tauri/src/commands/app/update_macos` | 2 | 2 | 0 | 2 |
+| `src-tauri/src/commands/editor` | 8 | 8 | 0 | 10 |
+| `src-tauri/src/commands/editor/css` | 2 | 2 | 1 | 2 |
+| `src-tauri/src/commands/keys` | 4 | 4 | 0 | 9 |
+| `src-tauri/src/commands/keys/keys` | 2 | 2 | 1 | 2 |
+| `src-tauri/src/commands/keys/sound` | 3 | 3 | 1 | 3 |
+| `src-tauri/src/commands/layout` | 9 | 9 | 0 | 9 |
+| `src-tauri/src/commands/media` | 3 | 3 | 0 | 3 |
+| `src-tauri/src/commands/plugin` | 5 | 5 | 0 | 5 |
+| `src-tauri/src/commands/preset` | 4 | 4 | 1 | 7 |
+| `src-tauri/src/commands/preset/load` | 3 | 3 | 1 | 3 |
+| `src-tauri/src/keyboard` | 3 | 3 | 0 | 8 |
+| `src-tauri/src/keyboard/daemon` | 4 | 4 | 0 | 4 |
+| `src-tauri/src/keyboard/manager` | 1 | 1 | 1 | 1 |
+| `src-tauri/src/models` | 14 | 14 | 1 | 15 |
+| `src-tauri/src/models/editor` | 1 | 1 | 1 | 1 |
+| `src-tauri/src/services` | 9 | 9 | 0 | 22 |
+| `src-tauri/src/services/obs_bridge` | 5 | 5 | 1 | 8 |
+| `src-tauri/src/services/obs_bridge/media` | 1 | 1 | 1 | 1 |
+| `src-tauri/src/services/obs_bridge/rpc` | 1 | 1 | 1 | 1 |
+| `src-tauri/src/services/obs_bridge/websocket` | 1 | 1 | 1 | 1 |
+| `src-tauri/src/services/overlay_hit` | 1 | 1 | 1 | 4 |
+| `src-tauri/src/services/overlay_hit/platform` | 3 | 3 | 0 | 3 |
+| `src-tauri/src/services/preview_broker` | 1 | 1 | 1 | 1 |
+| `src-tauri/src/state` | 13 | 13 | 0 | 73 |
+| `src-tauri/src/state/app_state` | 12 | 12 | 1 | 14 |
+| `src-tauri/src/state/app_state/window_geometry` | 2 | 2 | 0 | 2 |
+| `src-tauri/src/state/assets` | 4 | 4 | 0 | 4 |
+| `src-tauri/src/state/editor` | 4 | 4 | 1 | 4 |
+| `src-tauri/src/state/editor_ops` | 4 | 4 | 1 | 5 |
+| `src-tauri/src/state/editor_ops/transition` | 1 | 1 | 0 | 1 |
+| `src-tauri/src/state/gesture` | 1 | 1 | 1 | 1 |
+| `src-tauri/src/state/history` | 3 | 3 | 1 | 3 |
+| `src-tauri/src/state/migration` | 4 | 4 | 1 | 4 |
+| `src-tauri/src/state/native_element_id` | 2 | 2 | 1 | 2 |
+| `src-tauri/src/state/plugin` | 1 | 1 | 1 | 1 |
+| `src-tauri/src/state/store` | 11 | 11 | 1 | 13 |
+| `src-tauri/src/state/store/sound_assets` | 2 | 2 | 0 | 2 |
+| `src-tauri/src/state/window` | 6 | 6 | 0 | 9 |
+| `src-tauri/src/state/window/panel_drag` | 3 | 3 | 1 | 3 |
+
+## 2026-09-05 소스 폴더 후속 분류 완료
+
+`refactor/runtime-safety-and-structure`에서 309개 소스 파일을 책임별로 이동했다. 전체 소스 1,224개와 strict 대상 69개를 유지했고, 폴더는 143개에서 186개로 변경됐다. 직속 파일 최대는 41개에서 23개로 줄었다. 기존 전수 통계는 이동 전 기록으로 보존한다. 최종 폴더별 통계·유지 판단·파일 이동표는 [분류 결과](source-organization-report.md), 실행 검증과 알려진 한계는 [후속 계획의 실행 기록](source-organization-plan.md#실행-기록)을 따른다.

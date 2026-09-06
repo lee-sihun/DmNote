@@ -248,7 +248,7 @@ vi.mock('@plugins/runtime/displayElement/pluginElementActions', () => ({
   patchUseInlineStylesViaAuthority: patchUseInlineStylesViaAuthorityMock,
   updatePluginElement: vi.fn(),
 }));
-vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
+vi.mock('@src/renderer/editor/runtime/operations/elementOps', () => ({
   renameLayerGroupById: renameLayerGroupMock,
   commitElementGeometryById: patchGeometryMock,
   commitBatchGeometryByIds: patchBatchGeometryMock,
@@ -293,19 +293,19 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchUseInlineStylesById: patchUseInlineStylesMock,
   patchUseInlineStylesByTargets: patchUseInlineStylesTargetsMock,
 }));
-vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
+vi.mock('@src/renderer/editor/runtime/intent/elementIntent', () => ({
   reportElementOpSkipped: reportElementOpSkippedMock,
 }));
-vi.mock('@src/renderer/editor/runtime/mixedBatchGeometry', () => ({
+vi.mock('@src/renderer/editor/runtime/geometry/mixedBatchGeometry', () => ({
   commitMixedBatchGeometry: commitMixedBatchGeometryMock,
 }));
-vi.mock('@api/modules/itemsApi', () => ({
+vi.mock('@api/modules/editor/itemsApi', () => ({
   graphItemsApi: { updatePositions: graphUpdatePositionsMock },
   knobItemsApi: { updatePositions: knobUpdatePositionsMock },
   layerGroupsApi: { update: vi.fn(() => Promise.resolve()) },
   statItemsApi: { updatePositions: statUpdatePositionsMock },
 }));
-vi.mock('@src/renderer/editor/runtime/editGestureController', () => ({
+vi.mock('@src/renderer/editor/runtime/gesture/editGestureController', () => ({
   editGestureController: {
     activeGestureId: activeGestureIdMock,
     preview: previewMock,
@@ -314,7 +314,7 @@ vi.mock('@src/renderer/editor/runtime/editGestureController', () => ({
 }));
 vi.mock('./PropertiesPanel/index', async () => {
   const { default: PanelRenameControl } = await import(
-    './PropertiesPanel/PanelRenameControl'
+    './PropertiesPanel/navigation/PanelRenameControl'
   );
   const Stub = ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
@@ -402,17 +402,21 @@ vi.mock('./PropertiesPanel/batch/useBatchHandlers', () => ({
     };
   },
 }));
-vi.mock('./PropertiesPanel/PanelNavContext', () => ({
+vi.mock('./PropertiesPanel/navigation/PanelNavContext', () => ({
   PanelNavProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
-vi.mock('./PropertiesPanel/PanelHeaderActions', () => ({
+vi.mock('./PropertiesPanel/navigation/PanelHeaderActions', () => ({
   default: ({ mode }: { mode: string }) => <div data-mode={mode} />,
 }));
-vi.mock('./PropertiesPanel/PanelToggleButton', () => ({
+vi.mock('./PropertiesPanel/navigation/PanelToggleButton', () => ({
   default: () => <button>toggle</button>,
 }));
-vi.mock('@components/main/common/Checkbox', () => ({ default: () => null }));
-vi.mock('@components/main/common/Dropdown', () => ({ default: () => null }));
+vi.mock('@components/main/common/checkbox/Checkbox', () => ({
+  default: () => null,
+}));
+vi.mock('@components/main/common/dropdown/Dropdown', () => ({
+  default: () => null,
+}));
 
 import { useIsEditSessionScoped } from '@src/renderer/contexts/EditSessionScope';
 

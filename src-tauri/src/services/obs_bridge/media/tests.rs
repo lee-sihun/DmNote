@@ -277,3 +277,28 @@ async fn canonical_containment_follows_symlinks_before_authorization() {
     assert!(response.starts_with(b"HTTP/1.1 200 OK"));
     assert!(response.ends_with(b"inside"));
 }
+
+#[test]
+fn percent_decoding_preserves_malformed_sequences_and_unicode() {
+    for (input, expected) in [
+        ("%가", "%가"),
+        ("%a가", "%a가"),
+        ("%😀", "%😀"),
+        ("%", "%"),
+        ("%2", "%2"),
+        ("%GG", "%GG"),
+        ("한글%2f이미지%2F", "한글/이미지/"),
+        ("%EA%B0%80", "가"),
+        ("%FF", "�"),
+    ] {
+        assert_eq!(percent_decode(input), expected, "input: {input}");
+    }
+}
+
+#[tokio::test]
+async fn authenticated_malformed_media_path_returns_bad_request() {
+    for path in ["%가", "%a가", "%😀", "%", "%2", "%GG"] {
+        let response = media_response("secret", &format!("{path}?token=secret"), None).await;
+        assert_eq!(response, empty_response("400 Bad Request"), "path: {path}");
+    }
+}

@@ -3,7 +3,7 @@ import {
   rotatePointAround,
   type Aabb,
   type Point,
-} from '@utils/core/rotation';
+} from '@utils/element/rotation';
 
 // 노트 트랙 지오메트리의 단일 정의.
 // 좌표계: 캔버스 DOM 좌표 (y 아래 양수). 트랙은 키 로컬 프레임에서 "키 상변에서 위로"

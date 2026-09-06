@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { rotatedRectCorners, rotatePointAround } from '@utils/core/rotation';
+import { rotatedRectCorners, rotatePointAround } from '@utils/element/rotation';
 import { rotationCursorForAngle } from '@utils/grid/cursorUtils';
 import { rotateCornerGeometry } from './rotateCornerGeometry';
 

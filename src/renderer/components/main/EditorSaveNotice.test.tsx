@@ -1,7 +1,7 @@
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createEditorCoordinator } from '@src/renderer/editor/runtime/editorCoordinator';
+import { createEditorCoordinator } from '@src/renderer/editor/runtime/coordinator/editorCoordinator';
 import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
 import type {
   CanonicalEditorDocumentV1,
@@ -16,18 +16,21 @@ const mocks = vi.hoisted(() => ({
   settle: vi.fn(),
   commit: vi.fn(),
 }));
-vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
-  editorCoordinator: {
-    getState: () => mocks.coordinator!.getState(),
-    subscribe: (
-      listener: Parameters<
-        ReturnType<typeof createEditorCoordinator>['subscribe']
-      >[0],
-    ) => mocks.coordinator!.subscribe(listener),
-    flush: () => mocks.coordinator!.flush(),
-  },
-}));
-vi.mock('@src/renderer/editor/runtime/lifecycleEditorFlush', () => ({
+vi.mock(
+  '@src/renderer/editor/runtime/coordinator/editorStateCoordinator',
+  () => ({
+    editorCoordinator: {
+      getState: () => mocks.coordinator!.getState(),
+      subscribe: (
+        listener: Parameters<
+          ReturnType<typeof createEditorCoordinator>['subscribe']
+        >[0],
+      ) => mocks.coordinator!.subscribe(listener),
+      flush: () => mocks.coordinator!.flush(),
+    },
+  }),
+);
+vi.mock('@src/renderer/editor/runtime/lifecycle/lifecycleEditorFlush', () => ({
   flushFocusedEditor: mocks.settle,
 }));
 vi.mock('@contexts/useTranslation', () => ({

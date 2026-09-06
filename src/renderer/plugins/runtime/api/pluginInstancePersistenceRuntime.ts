@@ -1,4 +1,4 @@
-import { pluginInstancesApi } from '@api/modules/pluginInstancesApi';
+import { pluginInstancesApi } from '@api/modules/plugin/pluginInstancesApi';
 import { buildValidTabIdSet } from '@constants/keyModes';
 import { getPluginAuthorityGeneration } from '@plugins/runtime/pluginAuthorityGeneration';
 import { noteBackendPluginRevision } from '@plugins/runtime/pluginModelRevision';
@@ -9,7 +9,7 @@ import {
 } from '@stores/data/useHistoryStatusStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import { trackEditorWrite } from '@src/renderer/editor/runtime/editorWriteBarrier';
+import { trackEditorWrite } from '@src/renderer/editor/runtime/lifecycle/editorWriteBarrier';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import { removeDisplayElementsInternal } from '../displayElement/displayElementApi';
 import {

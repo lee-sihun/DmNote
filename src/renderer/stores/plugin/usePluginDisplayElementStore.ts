@@ -9,7 +9,7 @@ import { isLocalPluginRuntimeReady } from '@plugins/runtime/pluginRuntimeReadine
 import {
   registerLoadedPluginIdsProvider,
   registerPluginGroupMemberProvider,
-} from '@src/renderer/editor/runtime/pluginGroupMembers';
+} from '@src/renderer/editor/runtime/intent/pluginGroupMembers';
 import { useKeyStore } from '../data/useKeyStore';
 
 // syncToOverlay 쓰로틀링을 위한 변수

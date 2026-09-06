@@ -35,7 +35,7 @@ const mocks = vi.hoisted(() => ({
   enqueueGate: null as Promise<void> | null,
 }));
 
-vi.mock('@api/modules/pluginInstancesApi', () => ({
+vi.mock('@api/modules/plugin/pluginInstancesApi', () => ({
   pluginInstancesApi: {
     commit: mocks.instancesCommit,
     reconcile: mocks.instancesReconcile,
@@ -115,7 +115,7 @@ vi.mock('@stores/data/useHistoryStatusStore', () => ({
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import { drainEditorWrites } from '@src/renderer/editor/runtime/editorWriteBarrier';
+import { drainEditorWrites } from '@src/renderer/editor/runtime/lifecycle/editorWriteBarrier';
 import {
   beginMixedGestureTransaction,
   cancelUncommittedMixedGestureTransaction,

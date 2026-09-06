@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { appApi } from '@api/modules/appApi';
+import { appApi } from '@api/modules/app/appApi';
 import type { UpdateProgressEvent } from '@src/types/plugin/api';
 
 export type AutoUpdatePhase =

@@ -10,8 +10,8 @@ use unicode_normalization::UnicodeNormalization;
 use uuid::Uuid;
 
 use super::super::{
-    image_asset::{import_image_bytes, import_image_file, probe_local_raster_size},
-    local_asset_path::{file_url_to_path, path_identity_key, FileUrlPath},
+    assets::image_asset::{import_image_bytes, import_image_file, probe_local_raster_size},
+    assets::local_asset_path::{file_url_to_path, path_identity_key, FileUrlPath},
 };
 use crate::{
     models::{

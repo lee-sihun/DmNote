@@ -6,14 +6,14 @@ import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
 import type { NoteSettings } from '@src/types/settings/noteSettings';
 // 레이아웃이 읽을 수 있는 플러그인 필드는 투영 타입으로 제한 —
 // 필드 추가 시 selectPluginLayoutElements·pluginLayoutElementsEqual 동반 수정 필요
-import type { PluginLayoutElement } from '@utils/plugin/pluginLayoutElements';
+import type { PluginLayoutElement } from '@utils/plugin/layout/pluginLayoutElements';
 import {
   computeSpriteReachAabb,
   spriteReachEnumerationCost,
 } from '@utils/sprite/spriteReach';
 import { buildSpriteKeyCanonicalMap } from '@utils/sprite/spriteKeyBinding';
 import { DEFAULT_SPRITE_SIZE } from '@src/types/key/sprites';
-import { rotatedRectAabb } from '@utils/core/rotation';
+import { rotatedRectAabb } from '@utils/element/rotation';
 import {
   computeTrackGeometry,
   groupSameFlowAngles,

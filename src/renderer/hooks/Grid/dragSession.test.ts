@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { releaseDragSession, tryAcquireDragSession } from './dragSession';
+import { releaseDragSession, tryAcquireDragSession } from './drag/dragSession';
 import {
   acquireHistoryEditorFlushLock,
   releaseHistoryEditorFlushLock,
   resetHistoryEditorFlushLock,
-} from '@src/renderer/editor/runtime/historyEditorFlushLock';
+} from '@src/renderer/editor/runtime/lifecycle/historyEditorFlushLock';
 
 afterEach(() => {
   releaseDragSession();

@@ -53,7 +53,7 @@ if (after >= before) {
 
 const correctness = spawnSync(
   npx,
-  ['vitest', 'run', 'src/renderer/hooks/Grid/useGridKeyboard.test.tsx'],
+  ['vitest', 'run', 'src/renderer/hooks/Grid/selection/useGridKeyboard.test.tsx'],
   { cwd: root, stdio: 'inherit' },
 );
 if (correctness.status !== 0) process.exit(correctness.status ?? 1);

@@ -41,7 +41,7 @@ const runtime = vi.hoisted(() => {
   };
 });
 
-vi.mock('@api/modules/editorApi', () => ({
+vi.mock('@api/modules/editor/editorApi', () => ({
   editorApi: {
     get: runtime.get,
     commit: runtime.commit,
@@ -49,7 +49,7 @@ vi.mock('@api/modules/editorApi', () => ({
   },
 }));
 
-vi.mock('@api/modules/previewApi', () => ({
+vi.mock('@api/modules/editor/previewApi', () => ({
   previewApi: {
     cancel: runtime.cancel,
     subscribe: runtime.subscribe,
@@ -59,10 +59,10 @@ vi.mock('@api/modules/previewApi', () => ({
 // coordinator 싱글턴은 stop이 종결이라 케이스마다 모듈 그래프를 새로 얹는다
 const loadHarness = async () => {
   const [itemsApi, spriteStore, wireShape, coordinator] = await Promise.all([
-    import('@api/modules/itemsApi'),
+    import('@api/modules/editor/itemsApi'),
     import('@stores/data/useSpriteStore'),
     import('@utils/sprite/spriteWireShape'),
-    import('./editorStateCoordinator'),
+    import('./coordinator/editorStateCoordinator'),
   ]);
   return {
     spriteItemsApi: itemsApi.spriteItemsApi,

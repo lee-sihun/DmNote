@@ -1,7 +1,7 @@
 import React from 'react';
 import type { ElementBounds as SmartGuideElementBounds } from '@utils/grid/smartGuides';
 import { getCursor } from '@utils/grid/cursorUtils';
-import { useCustomCursorHover } from '@hooks/Grid/useCustomCursorHover';
+import { useCustomCursorHover } from '@hooks/Grid/viewport/useCustomCursorHover';
 import type { ContinuousInputStrategy } from '@utils/animation/rafLatestScheduler';
 import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
@@ -14,7 +14,7 @@ import {
 } from './groupResizeUtils';
 import type { GroupResizeHandle, GroupResizeResult } from './groupResizePlan';
 import { useGroupResizeSession } from './useGroupResizeSession';
-import { rotatePointAround } from '@utils/core/rotation';
+import { rotatePointAround } from '@utils/element/rotation';
 import { resizeCursorForHandle } from './rotatedResize';
 import type { GroupRotationFrame } from './rotatedGroupResize';
 

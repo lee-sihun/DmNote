@@ -6,7 +6,7 @@ const api = vi.hoisted(() => ({ saveProcessedWav: vi.fn() }));
 vi.mock('@contexts/useTranslation', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
-vi.mock('@api/modules/resourceApi', () => ({ soundApi: api }));
+vi.mock('@api/modules/resources/resourceApi', () => ({ soundApi: api }));
 
 import SoundTrimModal from './SoundTrimModal';
 

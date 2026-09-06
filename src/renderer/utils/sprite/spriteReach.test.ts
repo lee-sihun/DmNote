@@ -12,7 +12,7 @@ import {
   type SpriteReachGeometry,
 } from './spriteReach';
 import { makeSpritePose } from './spriteFixtures';
-import { rotatePointAround } from '@utils/core/rotation';
+import { rotatePointAround } from '@utils/element/rotation';
 import {
   placeSpriteVisual,
   spriteIdleVisual,

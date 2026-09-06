@@ -7,7 +7,7 @@ import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import {
   reportElementOpError,
   reportElementOpSkipped,
-} from '@src/renderer/editor/runtime/elementIntent';
+} from '@src/renderer/editor/runtime/intent/elementIntent';
 import { useState, useRef, useEffect } from 'react';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';

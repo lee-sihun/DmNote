@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
   get: vi.fn(),
   alert: vi.fn(),
 }));
-vi.mock('@api/modules/settingsApi', () => ({ settingsApi: mocks }));
+vi.mock('@api/modules/app/settingsApi', () => ({ settingsApi: mocks }));
 vi.mock('@contexts/useTranslation', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));

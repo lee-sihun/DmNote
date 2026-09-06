@@ -12,7 +12,9 @@ import {
   findMatchingPresetId,
   normalizeCounterAnimationLibrary,
 } from '@src/types/key/counterAnimation';
-import ListPopup, { type ListItem } from '@components/main/Modal/ListPopup';
+import ListPopup, {
+  type ListItem,
+} from '@components/main/Modal/listPopup/ListPopup';
 import { usePickerItemMenu } from '@hooks/usePickerItemMenu';
 import CommonListPickerPage from './CommonListPickerPage';
 import {
@@ -22,11 +24,11 @@ import {
   pickerMoreButtonHiddenClass,
 } from './pickerRowClass';
 import CounterAnimationEditorModal from '../editors/CounterAnimationEditorModal';
-import type { CounterAnimationKeyVisual } from '@utils/core/counterAnimationPreview';
+import type { CounterAnimationKeyVisual } from '@utils/counter/counterAnimationPreview';
 import { useEditSessionCompletionGuard } from '@src/renderer/contexts/EditSessionScope';
 
 import type { CompletionBinding } from '@src/renderer/contexts/EditSessionScope';
-import { counterAnimationApi } from '@api/modules/resourceApi';
+import { counterAnimationApi } from '@api/modules/resources/resourceApi';
 
 interface CounterAnimationPickerProps {
   open: boolean;

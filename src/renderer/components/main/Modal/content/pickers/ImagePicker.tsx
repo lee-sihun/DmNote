@@ -1,20 +1,20 @@
 import React, { useRef, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
-import PickerSurface from '@components/main/Grid/PropertiesPanel/PickerSurface';
-import Checkbox from '@components/main/common/Checkbox';
-import Dropdown from '@components/main/common/Dropdown';
-import { NumberInput } from '@components/main/common/NumberInput';
+import PickerSurface from '@components/main/Grid/PropertiesPanel/controls/PickerSurface';
+import Checkbox from '@components/main/common/checkbox/Checkbox';
+import Dropdown from '@components/main/common/dropdown/Dropdown';
+import { NumberInput } from '@components/main/common/numberInput/NumberInput';
 import TabSwitch from '@components/main/common/TabSwitch';
 import {
   AngleGlyph,
   ScaleGlyph,
 } from '@components/main/common/TransformGlyphs';
-import { PropertySection } from '@components/main/Grid/PropertiesPanel/PropertyInputs';
-import { resolveImageSource } from '@utils/core/imageSource';
+import { PropertySection } from '@components/main/Grid/PropertiesPanel/controls/PropertyInputs';
+import { resolveImageSource } from '@utils/media/imageSource';
 import {
   pickValidatedImagePath,
   runImageCompletion,
-} from '@utils/core/pickValidatedImage';
+} from '@utils/media/pickValidatedImage';
 import { useEditSessionCompletionGuard } from '@src/renderer/contexts/EditSessionScope';
 
 import type { CompletionBinding } from '@src/renderer/contexts/EditSessionScope';

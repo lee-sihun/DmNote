@@ -6,7 +6,7 @@ import { useSettingsStore } from '@stores/useSettingsStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { getDefaultSettingsState } from '@src/renderer/defaults';
-import { beginEditorWriteBarrier } from '@src/renderer/editor/runtime/editorWriteBarrier';
+import { beginEditorWriteBarrier } from '@src/renderer/editor/runtime/lifecycle/editorWriteBarrier';
 
 const mocks = vi.hoisted(() => ({
   update: vi.fn(),
@@ -38,24 +38,26 @@ vi.mock('@hooks/useLenis', () => ({
 vi.mock('@hooks/app/useUpdateCheck', () => ({
   useUpdateCheck: () => ({ checkForUpdates: vi.fn(), isChecking: false }),
 }));
-vi.mock('@api/modules/settingsApi', () => ({
+vi.mock('@api/modules/app/settingsApi', () => ({
   settingsApi: { update: mocks.update },
 }));
-vi.mock('@api/modules/appApi', () => ({
+vi.mock('@api/modules/app/appApi', () => ({
   appApi: { restart: mocks.restart },
   windowApi: { openDevtoolsAll: vi.fn() },
 }));
-vi.mock('@api/modules/keysApi', () => ({
+vi.mock('@api/modules/editor/keysApi', () => ({
   keysApi: { resetAll: mocks.resetAll },
 }));
-vi.mock('@api/modules/overlayApi', () => ({
+vi.mock('@api/modules/window/overlayApi', () => ({
   overlayApi: { setLock: mocks.setLock, setAnchor: mocks.setAnchor },
 }));
-vi.mock('@api/modules/cssApi', () => ({ cssApi: { toggle: mocks.toggleCss } }));
-vi.mock('@api/modules/jsApi', () => ({
+vi.mock('@api/modules/resources/cssApi', () => ({
+  cssApi: { toggle: mocks.toggleCss },
+}));
+vi.mock('@api/modules/plugin/jsApi', () => ({
   jsApi: { remove: mocks.removePlugin, toggle: mocks.toggleJs },
 }));
-vi.mock('@api/modules/pluginApi', () => ({
+vi.mock('@api/modules/plugin/pluginApi', () => ({
   pluginApi: {
     storage: {
       hasData: mocks.hasPluginData,
@@ -63,7 +65,7 @@ vi.mock('@api/modules/pluginApi', () => ({
     },
   },
 }));
-vi.mock('@api/modules/obsApi', () => ({
+vi.mock('@api/modules/window/obsApi', () => ({
   obsApi: {
     status: vi.fn(async () => ({
       running: true,
@@ -76,7 +78,7 @@ vi.mock('@api/modules/obsApi', () => ({
     stop: mocks.stopObs,
   },
 }));
-vi.mock('@api/modules/resourceApi', () => ({
+vi.mock('@api/modules/resources/resourceApi', () => ({
   keySoundOutputApi: {
     listDevices: vi.fn(async () => ({
       defaultDevice: true,
@@ -87,7 +89,7 @@ vi.mock('@api/modules/resourceApi', () => ({
     setBackend: mocks.setSoundBackend,
   },
 }));
-vi.mock('@components/main/common/Dropdown', () => ({
+vi.mock('@components/main/common/dropdown/Dropdown', () => ({
   default: ({
     value,
     onChange,

@@ -2,7 +2,7 @@ import React, { act, useEffect, useRef } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PopupExit from './PopupExit';
-import FloatingPopup from './FloatingPopup';
+import FloatingPopup from './floatingPopup/FloatingPopup';
 
 // 피커를 대신하는 최소 자식.
 // commitOnUnmount는 colorPickerPrimitives의 "드래그 중 언마운트돼도 마지막 값을

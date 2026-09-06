@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSettingsStore } from '@stores/useSettingsStore';
-import { settingsApi } from '@api/modules/settingsApi';
+import { settingsApi } from '@api/modules/app/settingsApi';
 import { useTranslation } from '@contexts/useTranslation';
 
 export function usePalette() {

@@ -3,8 +3,8 @@ import type {
   SpriteTransform,
 } from '@src/types/key/sprites';
 
-import { isRenderableImageRef } from '@utils/core/imageSource';
-import { pointsAabb, rotatePointAround } from '@utils/core/rotation';
+import { isRenderableImageRef } from '@utils/media/imageSource';
+import { pointsAabb, rotatePointAround } from '@utils/element/rotation';
 
 import {
   resolveSpriteTarget,

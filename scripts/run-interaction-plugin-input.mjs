@@ -56,7 +56,7 @@ const correctness = spawnSync(
   [
     'vitest',
     'run',
-    'src/renderer/utils/plugin/pluginHandlerDispatcher.test.ts',
+    'src/renderer/utils/plugin/interactions/pluginHandlerDispatcher.test.ts',
   ],
   { cwd: root, stdio: 'inherit' },
 );

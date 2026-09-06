@@ -22,17 +22,19 @@ vi.mock('@contexts/useTranslation', () => ({
 vi.mock('@hooks/useIconMotion', () => ({
   useIconMotion: () => ({ motionProps: {} }),
 }));
-vi.mock('@api/modules/keysApi', () => ({
+vi.mock('@api/modules/editor/keysApi', () => ({
   keysApi: { tabs: { swap: vi.fn(() => Promise.resolve({})) } },
 }));
 vi.mock('@hooks/useLenis', () => ({ scrollLenisBy: vi.fn() }));
 vi.mock('./icons/TabGridIcon', () => ({ default: () => null }));
-vi.mock('../Modal/FloatingPopup', () => ({ default: () => null }));
+vi.mock('../Modal/floatingPopup/FloatingPopup', () => ({
+  default: () => null,
+}));
 vi.mock('../Modal/content/settings/TabList', () => ({ default: () => null }));
-vi.mock('../Modal/FloatingTooltip', () => ({
+vi.mock('../Modal/tooltip/FloatingTooltip', () => ({
   default: ({ children }: { children: React.ReactNode }) => children,
 }));
-vi.mock('../Modal/TooltipGroup', () => ({
+vi.mock('../Modal/tooltip/TooltipGroup', () => ({
   TooltipGroup: ({ children }: { children: React.ReactNode }) => children,
 }));
 vi.mock('./tabActions', () => ({
@@ -40,7 +42,7 @@ vi.mock('./tabActions', () => ({
 }));
 vi.mock('./tabActionsContext', () => ({ useTabActions: () => actions }));
 // 메뉴 항목을 눌러볼 수 있게 평평한 버튼으로 편다
-vi.mock('../Modal/ListPopup', () => ({
+vi.mock('../Modal/listPopup/ListPopup', () => ({
   default: ({
     open,
     items,

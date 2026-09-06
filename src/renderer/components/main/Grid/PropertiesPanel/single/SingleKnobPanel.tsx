@@ -1,25 +1,25 @@
 /* eslint-disable react-hooks/refs */
 import React, { useEffect, useRef, useState } from 'react';
 import { ACTION_BUTTON_CHROME_CLASS } from '@utils/cardRecipes';
-import { patchKnobAxisIdById } from '@src/renderer/editor/runtime/elementOps';
-import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
-import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
+import { patchKnobAxisIdById } from '@src/renderer/editor/runtime/operations/elementOps';
+import { reportElementOpError } from '@src/renderer/editor/runtime/intent/elementIntent';
+import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import type { EditStateAnchor } from '@stores/grid/useEditStatePreviewStore';
 import type { ImageFit } from '@src/types/key/keys';
 import type { KnobItemPosition } from '@src/types/key/knobs';
 import { gradientToCss } from '@src/types/color';
-import { axisEventBus } from '@utils/core/axisEventBus';
+import { axisEventBus } from '@utils/input/axisEventBus';
 import {
   DEFAULT_ELEMENT_BORDER_WIDTH,
   DEFAULT_ELEMENT_SHADOW_SPEC,
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
-} from '@utils/core/elementDefaults';
+} from '@utils/element/elementDefaults';
 import {
   elementShadowLeafFromPartial,
   resolveElementShadowForPosition,
 } from '@src/types/key/shadows';
-import { PANEL_ROOT_CLASS } from '../panelChrome';
+import { PANEL_ROOT_CLASS } from '../navigation/panelChrome';
 import {
   PropertyRow,
   NumberInput,
@@ -28,13 +28,13 @@ import {
   TABS,
   type TabType,
 } from '../index';
-import Checkbox from '@components/main/common/Checkbox';
-import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
+import Checkbox from '@components/main/common/checkbox/Checkbox';
+import ColorPicker from '@components/main/Modal/content/pickers/color/ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
-import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
-import ShadowControls from '../ShadowControls';
-import EditSessionBoundary from '../EditSessionBoundary';
-import type { GeometryField } from '@src/renderer/editor/runtime/elementOps';
+import { ColorSwatchButton } from '@components/main/Modal/content/pickers/color/ColorSwatch';
+import ShadowControls from '../controls/ShadowControls';
+import EditSessionBoundary from '../selection/EditSessionBoundary';
+import type { GeometryField } from '@src/renderer/editor/runtime/operations/elementOps';
 import type {
   EditorPaintPropertyPatchV1,
   EditorShadowPropertyPatchV1,

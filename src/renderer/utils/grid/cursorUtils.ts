@@ -5,7 +5,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { isMac } from '../core/platform';
-import { beginDragCursor, endDragCursor } from '../core/dragCursor';
+import { beginDragCursor, endDragCursor } from '../dom/dragCursor';
 
 /** 커서 설정 응답 타입 */
 export interface CursorSettings {

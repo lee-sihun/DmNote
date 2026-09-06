@@ -39,8 +39,8 @@ const runtime = vi.hoisted(() => {
   };
 });
 
-vi.mock('@api/modules/editorApi', () => ({ editorApi: runtime }));
-vi.mock('@api/modules/previewApi', () => ({ previewApi: runtime }));
+vi.mock('@api/modules/editor/editorApi', () => ({ editorApi: runtime }));
+vi.mock('@api/modules/editor/previewApi', () => ({ previewApi: runtime }));
 
 const MODE = '4key';
 const IDS = [
@@ -122,15 +122,15 @@ const loadHarness = async () => {
     selectionStore,
     ticks,
   ] = await Promise.all([
-    import('./editorStateCoordinator'),
-    import('./editGestureController'),
+    import('./coordinator/editorStateCoordinator'),
+    import('./gesture/editGestureController'),
     import('@utils/grid/groupActions'),
     import('@utils/grid/groupSelection'),
     import('@components/main/Grid/PropertiesPanel/batch/batchPanelShared'),
-    import('./elementGeometryOps'),
+    import('./operations/elementGeometryOps'),
     import('@components/main/Grid/handles/groupResizePlan'),
     import('@components/main/Grid/handles/groupResizeUtils'),
-    import('./previewOverlay'),
+    import('./gesture/previewOverlay'),
     import('@stores/data/useKeyStore'),
     import('@stores/grid/useGridSelectionStore'),
     import('@stores/data/useCommittedApplyStore'),

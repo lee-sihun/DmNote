@@ -2,8 +2,8 @@ import { act, useRef, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createNativePositionDragReceipt } from './elementIntent';
-import { useGridSelection } from '@hooks/Grid/useGridSelection';
+import { createNativePositionDragReceipt } from './intent/elementIntent';
+import { useGridSelection } from '@hooks/Grid/selection/useGridSelection';
 import { createDefaultKeyPosition } from '../model/keys';
 import { makeCanonicalSpritePosition } from '@utils/sprite/spriteFixtures';
 import { useKeyStore } from '@stores/data/useKeyStore';
@@ -12,13 +12,13 @@ import { createPluginPositionDragReceipt } from '@plugins/runtime/displayElement
 import {
   applyEditorDocument,
   captureEditorDocument,
-} from './editorStateCoordinator';
-import { useSelectionDrag } from '@hooks/Grid/useSelectionDrag';
-import { useDraggable } from '@hooks/Grid/useDraggable';
-import { useGridResize } from '@hooks/Grid/useGridResize';
+} from './coordinator/editorStateCoordinator';
+import { useSelectionDrag } from '@hooks/Grid/drag/useSelectionDrag';
+import { useDraggable } from '@hooks/Grid/drag/useDraggable';
+import { useGridResize } from '@hooks/Grid/resize/useGridResize';
 import { useScrubDrag } from '@hooks/ui/useScrubDrag';
 import { createPluginGeometryGestureController } from '@hooks/Grid/usePluginGeometryGesture';
-import { releaseDragSession } from '@hooks/Grid/dragSession';
+import { releaseDragSession } from '@hooks/Grid/drag/dragSession';
 import {
   beginMixedGestureTransaction,
   cancelUncommittedMixedGestureTransaction,
@@ -30,13 +30,16 @@ import {
 import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import { flushFocusedEditor } from './lifecycleEditorFlush';
-import { drainEditorWrites, trackEditorWrite } from './editorWriteBarrier';
+import { flushFocusedEditor } from './lifecycle/lifecycleEditorFlush';
+import {
+  drainEditorWrites,
+  trackEditorWrite,
+} from './lifecycle/editorWriteBarrier';
 import {
   acquireHistoryEditorFlushLock,
   resetHistoryEditorFlushLock,
   releaseHistoryEditorFlushLock,
-} from './historyEditorFlushLock';
+} from './lifecycle/historyEditorFlushLock';
 
 const PLUGIN_ID = 'history-lock-plugin';
 const GESTURE_ID = 'history-lock-gesture';

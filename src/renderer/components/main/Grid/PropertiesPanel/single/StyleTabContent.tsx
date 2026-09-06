@@ -2,12 +2,16 @@ import React from 'react';
 import type { StyleTabContentProps } from '../types';
 import type { EditorElementPropertyPatchV1 } from '@src/types/editor';
 import type { KeyPosition } from '@src/types/key/keys';
-import { PropertyRow, PropertySection, TextInput } from '../PropertyInputs';
-import ColorPicker from '../../../Modal/content/pickers/ColorPicker';
+import {
+  PropertyRow,
+  PropertySection,
+  TextInput,
+} from '../controls/PropertyInputs';
+import ColorPicker from '../../../Modal/content/pickers/color/ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
-import Checkbox from '../../../common/Checkbox';
-import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
-import SoundSection from '../SoundSection';
+import Checkbox from '../../../common/checkbox/Checkbox';
+import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
+import SoundSection from '../controls/SoundSection';
 import SingleGeometrySection from './SingleGeometrySection';
 import SingleTypographySection from './SingleTypographySection';
 import SingleSurfaceSection from './SingleSurfaceSection';

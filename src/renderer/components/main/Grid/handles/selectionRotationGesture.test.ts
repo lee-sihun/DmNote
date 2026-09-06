@@ -27,8 +27,8 @@ const transport = vi.hoisted(() => {
   };
 });
 
-vi.mock('@api/modules/editorApi', () => ({ editorApi: transport }));
-vi.mock('@api/modules/previewApi', () => ({ previewApi: transport }));
+vi.mock('@api/modules/editor/editorApi', () => ({ editorApi: transport }));
+vi.mock('@api/modules/editor/previewApi', () => ({ previewApi: transport }));
 
 const MODE = '4key';
 const IDS = [
@@ -54,10 +54,10 @@ const initialDocument = (): CanonicalEditorDocumentV1 => ({
 const loadHarness = async () => {
   const [state, gesture, preview, geometry, session, keys, selection] =
     await Promise.all([
-      import('@src/renderer/editor/runtime/editorStateCoordinator'),
-      import('@src/renderer/editor/runtime/editGestureController'),
-      import('@src/renderer/editor/runtime/previewOverlay'),
-      import('@utils/core/selectionRotation'),
+      import('@src/renderer/editor/runtime/coordinator/editorStateCoordinator'),
+      import('@src/renderer/editor/runtime/gesture/editGestureController'),
+      import('@src/renderer/editor/runtime/gesture/previewOverlay'),
+      import('@utils/element/selectionRotation'),
       import('./selectionRotationGesture'),
       import('@stores/data/useKeyStore'),
       import('@stores/grid/useGridSelectionStore'),

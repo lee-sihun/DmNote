@@ -3,7 +3,7 @@
  * 오버레이에서 키/통계 요소의 스타일을 일관되게 계산
  */
 
-import { resolveImageSource } from '@utils/core/imageSource';
+import { resolveImageSource } from '@utils/media/imageSource';
 import {
   gradientToCss,
   gradientRingStyle,
@@ -20,14 +20,14 @@ import {
   DEFAULT_ELEMENT_FONT_BOLD,
   DEFAULT_ELEMENT_SHADOW_SPEC,
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
-} from '@utils/core/elementDefaults';
-import { resolveElementBorder } from '@utils/core/elementBorder';
+} from '@utils/element/elementDefaults';
+import { resolveElementBorder } from '@utils/element/elementBorder';
 import {
   elementShadowToCss,
   resolveElementShadow,
   type ElementShadowSpec,
 } from '@src/types/key/shadows';
-import { resolveEffectiveFontWeight } from '@utils/core/fontWeights';
+import { resolveEffectiveFontWeight } from '@utils/typography/fontWeights';
 import {
   DEFAULT_IMAGE_MODE,
   IDENTITY_IMAGE_TRANSFORM,
@@ -35,7 +35,7 @@ import {
   type ImageMode,
   type ImageTransform,
 } from '@src/types/key/imageLayer';
-import { elementRotationTransform } from '@utils/core/rotation';
+import { elementRotationTransform } from '@utils/element/rotation';
 
 export interface KeyElementPosition {
   hidden?: boolean;

@@ -1,5 +1,5 @@
 import type { KeySlot, MultiKeySlot, SlotMatch } from '@src/types/key/keys';
-import { getKeyInfoByGlobalKey } from './core/KeyMaps';
+import { getKeyInfoByGlobalKey } from './input/KeyMaps';
 
 // 계약 v4 §2: 슬롯당 멤버 상한
 export const MAX_SLOT_KEYS = 8;

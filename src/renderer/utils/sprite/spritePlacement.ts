@@ -8,10 +8,10 @@ import type {
 } from '@src/types/key/sprites';
 import { SPRITE_CONSTRAINTS } from '@src/types/key/sprites';
 
-import { toRenderableImageRef } from '@utils/core/imageSource';
+import { toRenderableImageRef } from '@utils/media/imageSource';
 
-import { clamp } from '@utils/core/clamp';
-import { rotatePointAround } from '@utils/core/rotation';
+import { clamp } from '@utils/number/clamp';
+import { rotatePointAround } from '@utils/element/rotation';
 import {
   DEG_TO_RAD,
   SPRITE_ANCHOR_PRESETS,

@@ -74,14 +74,14 @@ const runtime = vi.hoisted(() => {
   };
 });
 
-vi.mock('@api/modules/editorApi', () => ({
+vi.mock('@api/modules/editor/editorApi', () => ({
   editorApi: {
     get: runtime.get,
     commit: runtime.commit,
     onCommitted: runtime.onCommitted,
   },
 }));
-vi.mock('@api/modules/previewApi', () => ({
+vi.mock('@api/modules/editor/previewApi', () => ({
   previewApi: {
     publish: runtime.previewPublish,
     cancel: runtime.previewCancel,
@@ -91,10 +91,10 @@ vi.mock('@api/modules/previewApi', () => ({
 vi.mock('@contexts/useTranslation', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
-vi.mock('@api/modules/resourceApi', () => ({
+vi.mock('@api/modules/resources/resourceApi', () => ({
   imageApi: { load: vi.fn(() => Promise.resolve({ success: false })) },
 }));
-vi.mock('@utils/core/assetProbe', () => ({
+vi.mock('@utils/media/assetProbe', () => ({
   canDecodeImage: vi.fn(() => Promise.resolve(true)),
   probeImageSize: vi.fn(() => Promise.resolve({ width: 64, height: 32 })),
   canLoadFont: vi.fn(() => Promise.resolve(true)),
@@ -102,7 +102,7 @@ vi.mock('@utils/core/assetProbe', () => ({
 vi.mock('@hooks/useLenis', () => ({
   useLenis: () => ({ scrollContainerRef: vi.fn() }),
 }));
-vi.mock('@components/main/Grid/PropertiesPanel/PickerSurface', () => ({
+vi.mock('@components/main/Grid/PropertiesPanel/controls/PickerSurface', () => ({
   default: ({
     open,
     children,
@@ -191,12 +191,12 @@ const loadHarness = async () => {
   ] = await Promise.all([
     import('./SpriteCanvasHandles'),
     import('@components/main/Grid/PropertiesPanel/single/SingleSpritePanel'),
-    import('@src/renderer/editor/runtime/previewOverlay'),
+    import('@src/renderer/editor/runtime/gesture/previewOverlay'),
     import('@stores/data/useSpriteStore'),
-    import('@src/renderer/editor/runtime/editorStateCoordinator'),
-    import('@hooks/Grid/dragSession'),
-    import('@src/renderer/editor/runtime/historyEditorFlushLock'),
-    import('@src/renderer/editor/runtime/lifecycleEditorFlush'),
+    import('@src/renderer/editor/runtime/coordinator/editorStateCoordinator'),
+    import('@hooks/Grid/drag/dragSession'),
+    import('@src/renderer/editor/runtime/lifecycle/historyEditorFlushLock'),
+    import('@src/renderer/editor/runtime/lifecycle/lifecycleEditorFlush'),
     import('@stores/data/useCommittedApplyStore'),
   ]);
   return {

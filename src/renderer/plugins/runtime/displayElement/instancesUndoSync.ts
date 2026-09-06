@@ -7,7 +7,7 @@
 import {
   pluginInstancesApi,
   type SavedPluginInstanceWire,
-} from '@api/modules/pluginInstancesApi';
+} from '@api/modules/plugin/pluginInstancesApi';
 import { noteBackendPluginRevision } from '@plugins/runtime/pluginModelRevision';
 import { pruneStalePluginSelection } from '@stores/grid/useGridSelectionStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';

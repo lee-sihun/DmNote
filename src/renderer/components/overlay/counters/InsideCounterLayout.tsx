@@ -7,7 +7,7 @@ import React from 'react';
 import type { Signal } from '@preact/signals-react';
 import CountDisplay from './CountDisplay';
 import SignalCountDisplay from './SignalCountDisplay';
-import KeyLabel from '@components/shared/KeyLabel';
+import KeyLabel from '@components/shared/key/KeyLabel';
 import type { KeyCounterSettings } from '@src/types/key/keys';
 
 // 오버레이는 countSignal(구독 격리), 에디터 프리뷰는 count(숫자) — 타입으로 둘 중 하나만 허용.

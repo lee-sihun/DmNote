@@ -2,7 +2,7 @@
 // 회전·배율이 걸린 요소는 화면 꼭짓점을 복원한 뒤 얇은 가로 띠로 쪼개 같은 계약에 싣는다.
 // 알파 기반 창 모양처럼 플랫폼이 보장하지 않는 기제에 기대지 않고, 오차는 띠 높이 이내다
 
-import { pointsAabb } from '@utils/core/rotation';
+import { pointsAabb } from '@utils/element/rotation';
 
 export interface HitPoint {
   x: number;

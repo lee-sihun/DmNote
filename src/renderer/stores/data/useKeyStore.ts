@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { CustomTab, KeyMappings } from '@src/types/key/keys';
 import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
-import { setKeyMode } from '@api/modules/keyModeApi';
+import { setKeyMode } from '@api/modules/editor/keyModeApi';
 import { clampBarCount, MAX_BAR_SLOTS } from '@utils/tabOrder';
 
 type CanonicalKeyPositions = CanonicalEditorDocumentV1['keyPositions'];

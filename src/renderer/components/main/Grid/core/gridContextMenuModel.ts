@@ -1,4 +1,4 @@
-import type { ListItem } from '@components/main/Modal/ListPopup';
+import type { ListItem } from '@components/main/Modal/listPopup/ListPopup';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import type {
   IndexedSelectableElementType,

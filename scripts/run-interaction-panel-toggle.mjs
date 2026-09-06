@@ -59,8 +59,8 @@ const correctness = spawnSync(
   [
     'vitest',
     'run',
-    'src/renderer/components/main/Grid/PropertiesPanel/PanelToggleButton.test.tsx',
-    'src/renderer/hooks/useOptimisticBooleanCommit.test.tsx',
+    'src/renderer/components/main/Grid/PropertiesPanel/navigation/PanelToggleButton.test.tsx',
+    'src/renderer/hooks/useOptimisticCommit.childWindow.test.tsx',
   ],
   { cwd: root, stdio: 'inherit' },
 );

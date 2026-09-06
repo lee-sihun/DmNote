@@ -6,8 +6,8 @@ import {
 import { toCssRgba } from '@utils/color/colorUtils';
 import { gradientToCss } from '@src/types/color';
 import type { useGradientPreviewSession } from '@stores/grid/useGradientEditStore';
-import { DEFAULT_COUNTER_FONT_SIZE } from '@utils/core/elementDefaults';
-import { getCounterTypographyStyle } from '@utils/core/counterStyles';
+import { DEFAULT_COUNTER_FONT_SIZE } from '@utils/element/elementDefaults';
+import { getCounterTypographyStyle } from '@utils/counter/counterStyles';
 import { useCounterAxisAnchor } from '@hooks/shared/useCounterAxisAnchor';
 import { useCounterGlyphPaint } from '@hooks/shared/useCounterGlyphPaint';
 

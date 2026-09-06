@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { previewOverlay, composePreviewPositions } from './previewOverlay';
+import {
+  previewOverlay,
+  composePreviewPositions,
+} from './gesture/previewOverlay';
 
 const canonical = {
   '4key': [{ id: 'sprite-a', value: 0, remote: 0 }],
