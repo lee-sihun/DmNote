@@ -325,6 +325,15 @@ pub(super) fn apply_element_patch(
                 patch,
             )
         }
+        EditorElementPropertyPatchV1::Rotation(patch) => {
+            let position = position_at_mut(candidate, location)?;
+            if position.rotation == *patch {
+                false
+            } else {
+                position.rotation = *patch;
+                true
+            }
+        }
         EditorElementPropertyPatchV1::BorderWidth(patch) => {
             let position = position_at_mut(candidate, location)?;
             if position.border_width == Some(*patch) {

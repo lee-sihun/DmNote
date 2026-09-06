@@ -1,4 +1,5 @@
 use super::*;
+use crate::models::{ELEMENT_ROTATION_MAX, ELEMENT_ROTATION_MIN};
 
 pub(super) fn read_preset_file(path: &Path) -> CmdResult<PresetFile> {
     let content = fs::read_to_string(path)?;
@@ -62,6 +63,16 @@ pub(super) fn invalid_position_style_detail(preset: &serde_json::Value) -> Optio
                 let Some(entry) = entry.as_object() else {
                     continue;
                 };
+                if let Some(value) = entry.get("rotation") {
+                    if !value.as_f64().is_some_and(|rotation| {
+                        rotation.is_finite()
+                            && (ELEMENT_ROTATION_MIN..=ELEMENT_ROTATION_MAX).contains(&rotation)
+                    }) {
+                        return Some(format!(
+                            "{collection_name}[{mode:?}][{index}].rotation: must be a finite number between {ELEMENT_ROTATION_MIN} and {ELEMENT_ROTATION_MAX}"
+                        ));
+                    }
+                }
                 for field in ELEMENT_FIELDS {
                     let error = match field {
                         "noteBorderGradient" => invalid_note_gradient_error(

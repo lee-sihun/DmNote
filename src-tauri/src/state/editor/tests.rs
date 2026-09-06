@@ -1832,7 +1832,7 @@ fn frozen_insert_is_a_bounded_sole_op_with_unique_disjoint_ids() {
 fn editor_ops_enforce_version_count_ids_and_global_target_uniqueness() {
     let id = Uuid::new_v4().to_string();
     // 구버전과 미래 버전 모두 거부, 다중 버전 수용 없음
-    for unsupported_version in [1, 2, 4] {
+    for unsupported_version in (1..EDITOR_OPS_VERSION).chain([EDITOR_OPS_VERSION + 1]) {
         let mut unsupported = ops_request(vec![set_bounds_op(&id, EditorElementTypeV1::Key)]);
         unsupported.ops_version = Some(unsupported_version);
         assert_eq!(
@@ -2426,6 +2426,74 @@ fn editor_rejects_new_shadow_violations_in_every_position_collection() {
             Some("INVALID_ELEMENT_SHADOW")
         );
         assert!(error.message.contains(expected_path));
+    }
+}
+
+#[test]
+fn element_rotation_document_validation_checks_all_position_types() {
+    let store = store_with_each_position_collection();
+    let current = EditorDocumentV1::from_store(&store);
+    for collection in crate::models::POSITION_COLLECTION_FIELDS {
+        for rotation in [-180.0, -45.5, 0.0, 180.0] {
+            let mut candidate = current.clone();
+            position_mut(&mut candidate, collection).rotation = rotation;
+            let mut candidate_store = store.clone();
+            candidate.apply_to_store(&mut candidate_store);
+            validate_document_transition(&current, &candidate, &store, &candidate_store).unwrap();
+        }
+        for rotation in [-180.1, 180.1, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let mut candidate = current.clone();
+            position_mut(&mut candidate, collection).rotation = rotation;
+            let mut candidate_store = store.clone();
+            candidate.apply_to_store(&mut candidate_store);
+            let error =
+                validate_document_transition(&current, &candidate, &store, &candidate_store)
+                    .unwrap_err();
+            assert_eq!(validation_code(&error), Some("INVALID_ROTATION"));
+            assert_eq!(
+                error.message,
+                format!("{collection} 4key[0].rotation must be finite within -180..=180")
+            );
+        }
+    }
+}
+
+#[test]
+fn element_rotation_grandfathers_only_unchanged_value_and_identity() {
+    let base = store_with_each_position_collection();
+    for collection in crate::models::POSITION_COLLECTION_FIELDS {
+        for rotation in [-999.0, 999.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let mut current = EditorDocumentV1::from_store(&base);
+            position_mut(&mut current, collection).rotation = rotation;
+            let mut store = base.clone();
+            current.apply_to_store(&mut store);
+
+            let mut unrelated = current.clone();
+            position_mut(&mut unrelated, collection).font_size = Some(18.0);
+            let mut candidate_store = store.clone();
+            unrelated.apply_to_store(&mut candidate_store);
+            validate_document_transition(&current, &unrelated, &store, &candidate_store).unwrap();
+
+            for change_identity in [false, true] {
+                let mut candidate = unrelated.clone();
+                let position = position_mut(&mut candidate, collection);
+                if change_identity {
+                    position.id = uuid::Uuid::new_v4().to_string();
+                } else {
+                    position.rotation = 998.0;
+                }
+                candidate.apply_to_store(&mut candidate_store);
+                let error =
+                    validate_document_transition(&current, &candidate, &store, &candidate_store)
+                        .unwrap_err();
+                assert_eq!(validation_code(&error), Some("INVALID_ROTATION"));
+            }
+
+            let mut repaired = current.clone();
+            position_mut(&mut repaired, collection).rotation = 0.0;
+            repaired.apply_to_store(&mut candidate_store);
+            validate_document_transition(&current, &repaired, &store, &candidate_store).unwrap();
+        }
     }
 }
 

@@ -358,20 +358,19 @@ pub(crate) fn normalize_sprite_triggers(data: &mut AppStoreData) -> bool {
     changed
 }
 
-pub(super) fn repair_sprite_numeric_ranges(data: &mut AppStoreData) -> bool {
-    // 복구 경계는 커밋 검증과 같은 상수를 그대로 쓴다
-
-    fn repair_bounded<T>(value: &mut T, fallback: T, minimum: T, maximum: T) -> bool
-    where
-        T: Copy + PartialOrd,
-    {
-        if (minimum..=maximum).contains(value) {
-            return false;
-        }
-        *value = fallback;
-        true
+// 복구 경계는 커밋 검증과 같은 상수를 그대로 쓴다. contains는 NaN·무한도 거절한다
+fn repair_bounded<T>(value: &mut T, fallback: T, minimum: T, maximum: T) -> bool
+where
+    T: Copy + PartialOrd,
+{
+    if (minimum..=maximum).contains(value) {
+        return false;
     }
+    *value = fallback;
+    true
+}
 
+pub(super) fn repair_sprite_numeric_ranges(data: &mut AppStoreData) -> bool {
     fn repair_finite(value: &mut f64, fallback: f64) -> bool {
         if value.is_finite() {
             return false;
@@ -426,6 +425,12 @@ pub(super) fn repair_sprite_numeric_ranges(data: &mut AppStoreData) -> bool {
             | repair_finite(&mut position.dy, fallback.dy)
             | repair_positive(&mut position.width, fallback.width, None)
             | repair_positive(&mut position.height, fallback.height, None)
+            | repair_bounded(
+                &mut position.rotation,
+                fallback.rotation,
+                ELEMENT_ROTATION_MIN,
+                ELEMENT_ROTATION_MAX,
+            )
             | repair_anchor(&mut position.pivot, SpriteAnchor::default())
             | repair_transform(&mut position.idle_transform)
             | repair_bounded(
@@ -476,7 +481,8 @@ pub(super) fn repair_sprite_numeric_ranges(data: &mut AppStoreData) -> bool {
     repaired
 }
 
-pub(super) fn repair_image_transforms(data: &mut AppStoreData) -> bool {
+// 네이티브 4종 공통 KeyPosition의 이미지 변환·요소 회전 범위 보정
+pub(super) fn repair_native_position_ranges(data: &mut AppStoreData) -> bool {
     fn repair_transform(transform: &mut Option<ImageTransform>) -> bool {
         let Some(transform) = transform else {
             return false;
@@ -520,6 +526,12 @@ pub(super) fn repair_image_transforms(data: &mut AppStoreData) -> bool {
     fn repair_position(position: &mut KeyPosition) -> bool {
         repair_transform(&mut position.idle_image_transform)
             | repair_transform(&mut position.active_image_transform)
+            | repair_bounded(
+                &mut position.rotation,
+                0.0,
+                ELEMENT_ROTATION_MIN,
+                ELEMENT_ROTATION_MAX,
+            )
     }
 
     let mut repaired = false;

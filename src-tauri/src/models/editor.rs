@@ -12,7 +12,7 @@ use super::{
 
 pub const EDITOR_SCHEMA_VERSION: u16 = 1;
 pub const EDITOR_COMMIT_SCHEMA_VERSION_V2: u16 = 2;
-pub const EDITOR_OPS_VERSION: u16 = 3;
+pub const EDITOR_OPS_VERSION: u16 = 4;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -154,6 +154,7 @@ pub(crate) struct SpritePosePatchPresence {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SpritePositionPatchPresence {
+    rotation: bool,
     base_image: bool,
     reference_natural_size: bool,
     activation: bool,
@@ -206,6 +207,8 @@ impl SpritePositionsPatchPresence {
                                     })
                                     .unwrap_or_default();
                                 SpritePositionPatchPresence {
+                                    rotation: object
+                                        .is_some_and(|sprite| sprite.contains_key("rotation")),
                                     base_image: object
                                         .is_some_and(|sprite| sprite.contains_key("baseImage")),
                                     reference_natural_size: object.is_some_and(|sprite| {
@@ -361,6 +364,9 @@ impl EditorPatchV1 {
                     continue;
                 };
 
+                if !sprite_presence.rotation {
+                    sprite.rotation = current_sprite.rotation;
+                }
                 if !sprite_presence.base_image {
                     sprite.base_image = current_sprite.base_image.clone();
                 }
@@ -531,6 +537,7 @@ pub enum EditorElementPropertyPatchV1 {
     NoteAutoYCorrection(bool),
     NoteAlignment(NoteAlignment),
     NoteBorderSide(EditorNoteBorderSideV1),
+    Rotation(f64),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

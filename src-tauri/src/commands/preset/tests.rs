@@ -58,6 +58,7 @@ fn preset_sprite_wire_keys_include_oneshot_fields_and_exclude_removed_match_mode
             "4key".to_string(),
             vec![ReactiveSpritePosition {
                 id: uuid::Uuid::new_v4().to_string(),
+                rotation: 45.5,
                 poses: vec![SpritePose {
                     pose_id: uuid::Uuid::new_v4().to_string(),
                     triggers: vec![uuid::Uuid::new_v4().to_string()],
@@ -97,6 +98,7 @@ fn preset_sprite_wire_keys_include_oneshot_fields_and_exclude_removed_match_mode
             "poses",
             "pressDurationMs",
             "referenceNaturalSize",
+            "rotation",
             "transitionEasing",
             "transitionMs",
             "useInlineStyles",
@@ -104,6 +106,7 @@ fn preset_sprite_wire_keys_include_oneshot_fields_and_exclude_removed_match_mode
             "zIndex",
         ]
     );
+    assert_eq!(sprite["rotation"], 45.5);
     let pose = sprite["poses"][0].as_object().unwrap();
     let mut pose_keys = pose.keys().map(String::as_str).collect::<Vec<_>>();
     pose_keys.sort_unstable();

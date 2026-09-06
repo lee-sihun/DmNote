@@ -46,7 +46,7 @@ pub(super) fn repair_legacy_state(mut value: Value) -> AppStoreData {
     prepare_tab_order_for_load(&mut data, has_tab_order);
     prepare_bar_count_for_load(&mut data, has_bar_count);
     migrate_legacy_knob_sensitivity(&mut data);
-    repair_image_transforms(&mut data);
+    repair_native_position_ranges(&mut data);
     repair_sprite_numeric_ranges(&mut data);
     repair_semantic_identities(&mut data);
     repair_custom_tab_key_layout_pairs(
@@ -144,6 +144,23 @@ pub(super) fn recover_collection_field(field: &str, value: &Value) -> Option<Val
         "spritePositions" => {
             let mut value = value.clone();
             migrate_legacy_sprite_positions_value(&mut value);
+            for sprite in value
+                .as_object_mut()?
+                .values_mut()
+                .filter_map(Value::as_array_mut)
+                .flatten()
+                .filter_map(Value::as_object_mut)
+            {
+                if sprite
+                    .get("rotation")
+                    .is_some_and(|rotation| rotation.as_f64().is_none())
+                {
+                    log::warn!(
+                        "[Store] Resetting invalid spritePositions rotation to default during recovery"
+                    );
+                    sprite.remove("rotation");
+                }
+            }
             recover_position_entries::<ReactiveSpritePosition>(field, &value)
         }
         "layerGroups" => recover_position_entries::<LayerGroupDef>(field, value),

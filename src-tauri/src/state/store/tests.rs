@@ -25,9 +25,9 @@ use crate::{
         PanelBounds, PendingProcessedWavReplacement, PluginInstancesCommitRequest,
         PluginInstancesReconcileRequest, PluginPoint, ReactiveSpritePosition, SavedPluginInstance,
         SettingsPatchInput, SlotMatch, SoundLibraryEntry, SoundSource, SpriteActivation,
-        SpriteImageMetrics, SpritePose, SpriteReferenceNaturalSize, SpriteTransform, StatPosition,
-        StatType, TabCss, TabNoteSettings, EDITOR_COMMIT_SCHEMA_VERSION_V2, EDITOR_OPS_VERSION,
-        EDITOR_SCHEMA_VERSION,
+        SpriteAnchor, SpriteImageMetrics, SpritePose, SpriteReferenceNaturalSize, SpriteTransform,
+        StatPosition, StatType, TabCss, TabNoteSettings, EDITOR_COMMIT_SCHEMA_VERSION_V2,
+        EDITOR_OPS_VERSION, EDITOR_SCHEMA_VERSION,
     },
     services::{css_watcher::commit_css_reload, settings::apply_patch_to_store},
     state::{
@@ -5351,6 +5351,412 @@ fn editor_commit_history_skips_no_op_and_deduplicates_mutation() {
 
     store.flush_and_shutdown().unwrap();
     let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn element_rotation_survives_legacy_updates_gesture_history_and_restart() {
+    fn native_positions_mut(document: &mut EditorDocumentV1) -> [&mut KeyPosition; 4] {
+        [
+            &mut document.key_positions.get_mut("4key").unwrap()[0],
+            &mut document.stat_positions.get_mut("4key").unwrap()[0].position,
+            &mut document.graph_positions.get_mut("4key").unwrap()[0].position,
+            &mut document.knob_positions.get_mut("4key").unwrap()[0].position,
+        ]
+    }
+
+    let directory = tempfile::tempdir().unwrap();
+    let store = initialize_neutral_editor_store(directory.path());
+    let new_position = |rotation| KeyPosition {
+        id: uuid::Uuid::new_v4().to_string(),
+        rotation,
+        ..KeyPosition::default()
+    };
+    let mut key_positions = store.editor_get().document.key_positions;
+    key_positions.get_mut("4key").unwrap()[0].rotation = 45.0;
+    store
+        .commit_editor_document(editor_request(
+            store.editor_get().revision,
+            uuid::Uuid::new_v4().to_string(),
+            EditorPatchV1 {
+                schema_version: EDITOR_COMMIT_SCHEMA_VERSION_V2,
+                key_positions: Some(key_positions),
+                stat_positions: Some(HashMap::from([(
+                    "4key".to_string(),
+                    vec![StatPosition {
+                        stat_type: StatType::Kps,
+                        position: new_position(-30.0),
+                    }],
+                )])),
+                graph_positions: Some(HashMap::from([(
+                    "4key".to_string(),
+                    vec![GraphPosition {
+                        stat_type: GraphStatType::Kps,
+                        graph_type: GraphType::Line,
+                        graph_speed: 100,
+                        graph_color: "#123456".to_string(),
+                        show_avg_line: true,
+                        position: new_position(180.0),
+                    }],
+                )])),
+                knob_positions: Some(HashMap::from([(
+                    "4key".to_string(),
+                    vec![KnobPosition {
+                        axis_id: "axis".to_string(),
+                        sensitivity: 1.0,
+                        reverse: false,
+                        position: new_position(-180.0),
+                    }],
+                )])),
+                ..EditorPatchV1::default()
+            },
+        ))
+        .unwrap();
+    let initial = store.editor_get().document;
+    let targets = [
+        (
+            EditorElementTypeV1::Key,
+            initial.key_positions["4key"][0].id.clone(),
+        ),
+        (
+            EditorElementTypeV1::Stat,
+            initial.stat_positions["4key"][0].position.id.clone(),
+        ),
+        (
+            EditorElementTypeV1::Graph,
+            initial.graph_positions["4key"][0].position.id.clone(),
+        ),
+        (
+            EditorElementTypeV1::Knob,
+            initial.knob_positions["4key"][0].position.id.clone(),
+        ),
+    ];
+    let group_targets = targets
+        .iter()
+        .map(|(element_type, id)| EditorElementGroupTargetV1 {
+            element_type: *element_type,
+            id: id.clone(),
+        })
+        .collect::<Vec<_>>();
+    let group_id = "rotation-group";
+    let mut grouped = initial.clone();
+    for position in native_positions_mut(&mut grouped) {
+        position.group_id = Some(group_id.to_string());
+    }
+    grouped.layer_groups.insert(
+        "4key".to_string(),
+        vec![LayerGroupDef {
+            id: group_id.to_string(),
+            name: "Rotation Group".to_string(),
+        }],
+    );
+    let change = store
+        .commit_editor_document(editor_ops_request(
+            store.editor_get().revision,
+            uuid::Uuid::new_v4().to_string(),
+            vec![EditorOpV1::SetElementGroups {
+                mode: "4key".to_string(),
+                targets: group_targets.clone(),
+                target_group: Some(EditorTargetGroupV1::Create {
+                    id: group_id.to_string(),
+                    name: "Rotation Group".to_string(),
+                }),
+            }],
+        ))
+        .unwrap();
+    assert_eq!(change.document, grouped);
+
+    let gesture_id = uuid::Uuid::new_v4().to_string();
+    let mut rotated = grouped.clone();
+    for rotation in [-45.5, 90.0] {
+        let mut request = editor_ops_request(
+            store.editor_get().revision,
+            uuid::Uuid::new_v4().to_string(),
+            targets
+                .iter()
+                .map(|(element_type, id)| {
+                    patch_property_op(
+                        *element_type,
+                        id,
+                        EditorElementPropertyPatchV1::Rotation(rotation),
+                    )
+                })
+                .collect(),
+        );
+        request.gesture_id = Some(gesture_id.clone());
+        let change = store.commit_editor_document(request).unwrap();
+        rotated.key_positions.get_mut("4key").unwrap()[0].rotation = rotation;
+        rotated.stat_positions.get_mut("4key").unwrap()[0]
+            .position
+            .rotation = rotation;
+        rotated.graph_positions.get_mut("4key").unwrap()[0]
+            .position
+            .rotation = rotation;
+        rotated.knob_positions.get_mut("4key").unwrap()[0]
+            .position
+            .rotation = rotation;
+        assert_eq!(change.document, rotated);
+        let patch = serde_json::to_value(&change.event.unwrap().patch).unwrap();
+        for field in crate::models::POSITION_COLLECTION_FIELDS {
+            assert_eq!(patch[field]["4key"][0]["rotation"], rotation);
+        }
+    }
+
+    let mut moved = rotated.clone();
+    moved.key_positions.get_mut("4key").unwrap()[0].dx += 25.0;
+    moved.stat_positions.get_mut("4key").unwrap()[0].position.dy += 25.0;
+    moved.graph_positions.get_mut("4key").unwrap()[0]
+        .position
+        .width += 25.0;
+    moved.knob_positions.get_mut("4key").unwrap()[0]
+        .position
+        .height += 25.0;
+    let change = store
+        .commit_editor_document(editor_request(
+            store.editor_get().revision,
+            uuid::Uuid::new_v4().to_string(),
+            EditorPatchV1 {
+                key_positions: Some(moved.key_positions.clone()),
+                stat_positions: Some(moved.stat_positions.clone()),
+                graph_positions: Some(moved.graph_positions.clone()),
+                knob_positions: Some(moved.knob_positions.clone()),
+                ..EditorPatchV1::default()
+            },
+        ))
+        .unwrap();
+    assert_eq!(change.document, moved);
+
+    let mut resized = moved.clone();
+    let resized_bounds = native_positions_mut(&mut resized)
+        .into_iter()
+        .map(|position| {
+            position.dx *= 1.5;
+            position.dy *= 2.0;
+            position.width *= 1.5;
+            position.height *= 2.0;
+            bounds(position)
+        })
+        .collect::<Vec<_>>();
+    let resize_gesture_id = uuid::Uuid::new_v4().to_string();
+    let mut request = editor_ops_request(
+        store.editor_get().revision,
+        uuid::Uuid::new_v4().to_string(),
+        targets
+            .iter()
+            .zip(resized_bounds)
+            .map(|((element_type, id), bounds)| set_bounds_op(*element_type, id, bounds))
+            .collect(),
+    );
+    request.gesture_id = Some(resize_gesture_id.clone());
+    let change = store.commit_editor_document(request).unwrap();
+    assert_eq!(change.document, resized);
+    assert_eq!(change.event.unwrap().gesture_id, Some(resize_gesture_id));
+
+    let mut ungrouped = resized.clone();
+    for position in native_positions_mut(&mut ungrouped) {
+        position.group_id = None;
+    }
+    ungrouped.layer_groups.get_mut("4key").unwrap().clear();
+    let change = store
+        .commit_editor_document(editor_ops_request(
+            store.editor_get().revision,
+            uuid::Uuid::new_v4().to_string(),
+            vec![EditorOpV1::SetElementGroups {
+                mode: "4key".to_string(),
+                targets: group_targets,
+                target_group: None,
+            }],
+        ))
+        .unwrap();
+    assert_eq!(change.document, ungrouped);
+
+    for (direction, expected) in [
+        (HistoryDirection::Undo, &resized),
+        (HistoryDirection::Undo, &moved),
+        (HistoryDirection::Undo, &rotated),
+        (HistoryDirection::Undo, &grouped),
+        (HistoryDirection::Undo, &initial),
+        (HistoryDirection::Redo, &grouped),
+        (HistoryDirection::Redo, &rotated),
+        (HistoryDirection::Redo, &moved),
+        (HistoryDirection::Redo, &resized),
+        (HistoryDirection::Redo, &ungrouped),
+    ] {
+        let operation_id = uuid::Uuid::new_v4().to_string();
+        let gate = store.history_gate();
+        let barrier = gate.close(&operation_id).unwrap();
+        store
+            .apply_history_operation(
+                direction,
+                &operation_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        assert_eq!(&store.editor_get().document, expected);
+    }
+
+    store.flush_and_shutdown().unwrap();
+    let disk: AppStoreData =
+        serde_json::from_slice(&std::fs::read(directory.path().join("store.json")).unwrap())
+            .unwrap();
+    assert_eq!(EditorDocumentV1::from_store(&disk), ungrouped);
+    drop(store);
+    let reopened = AppStore::initialize_for_test(directory.path()).unwrap();
+    assert_eq!(reopened.editor_get().document, ungrouped);
+    reopened.flush_and_shutdown().unwrap();
+}
+
+#[test]
+fn sprite_layout_rotation_commits_atomically_with_keys_and_preserves_pose_history() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = initialize_neutral_editor_store(directory.path());
+    let mut keys = store.editor_get().document.key_positions;
+    let key = &mut keys.get_mut("4key").unwrap()[0];
+    key.rotation = 170.0;
+    let sprite = ReactiveSpritePosition {
+        id: uuid::Uuid::new_v4().to_string(),
+        dx: 100.0,
+        dy: -50.0,
+        rotation: 175.0,
+        idle_transform: SpriteTransform {
+            rotation: 170.0,
+            x: 25.0,
+            ..SpriteTransform::default()
+        },
+        poses: vec![SpritePose {
+            pose_id: uuid::Uuid::new_v4().to_string(),
+            triggers: vec![key.id.clone()],
+            pivot: Some(SpriteAnchor { x: 0.2, y: 0.8 }),
+            transform: SpriteTransform {
+                rotation: -170.0,
+                y: -35.0,
+                ..SpriteTransform::default()
+            },
+            ..SpritePose::default()
+        }],
+        ..ReactiveSpritePosition::default()
+    };
+    store
+        .commit_editor_document(editor_request(
+            store.editor_get().revision,
+            uuid::Uuid::new_v4().to_string(),
+            EditorPatchV1 {
+                schema_version: EDITOR_COMMIT_SCHEMA_VERSION_V2,
+                key_positions: Some(keys),
+                sprite_positions: Some(HashMap::from([("4key".to_string(), vec![sprite.clone()])])),
+                ..EditorPatchV1::default()
+            },
+        ))
+        .unwrap();
+    let initial = store.editor_get().document;
+    let gesture_id = uuid::Uuid::new_v4().to_string();
+    let mut rotated = initial.clone();
+    for (delta, key_rotation, sprite_rotation) in [(10.0, 180.0, -175.0), (20.0, -170.0, -165.0)] {
+        rotated = initial.clone();
+        let key = &mut rotated.key_positions.get_mut("4key").unwrap()[0];
+        key.dx += delta;
+        key.dy -= delta;
+        key.rotation = key_rotation;
+        let sprite = &mut rotated.sprite_positions.get_mut("4key").unwrap()[0];
+        sprite.dx -= delta;
+        sprite.dy += delta;
+        sprite.rotation = sprite_rotation;
+        let mut request = editor_request(
+            store.editor_get().revision,
+            uuid::Uuid::new_v4().to_string(),
+            EditorPatchV1 {
+                schema_version: EDITOR_COMMIT_SCHEMA_VERSION_V2,
+                key_positions: Some(rotated.key_positions.clone()),
+                sprite_positions: Some(rotated.sprite_positions.clone()),
+                ..EditorPatchV1::default()
+            },
+        );
+        request.gesture_id = Some(gesture_id.clone());
+        let change = store.commit_editor_document(request).unwrap();
+        assert_eq!(change.document, rotated);
+        assert_eq!(
+            change.result.changed_fields,
+            vec![EditorField::KeyPositions, EditorField::SpritePositions]
+        );
+        let event = change.event.unwrap();
+        assert_eq!(event.gesture_id, Some(gesture_id.clone()));
+        assert_eq!(
+            event.patch.sprite_positions.unwrap()["4key"][0].rotation,
+            sprite_rotation
+        );
+    }
+    assert_eq!(
+        rotated.sprite_positions["4key"][0].idle_transform,
+        sprite.idle_transform
+    );
+    assert_eq!(rotated.sprite_positions["4key"][0].poses, sprite.poses);
+
+    let revision = store.editor_get().revision;
+    let mut invalid = rotated.clone();
+    invalid.key_positions.get_mut("4key").unwrap()[0].dx += 25.0;
+    invalid.sprite_positions.get_mut("4key").unwrap()[0].rotation = 181.0;
+    assert!(store
+        .commit_editor_document(editor_request(
+            revision,
+            uuid::Uuid::new_v4().to_string(),
+            EditorPatchV1 {
+                schema_version: EDITOR_COMMIT_SCHEMA_VERSION_V2,
+                key_positions: Some(invalid.key_positions),
+                sprite_positions: Some(invalid.sprite_positions),
+                ..EditorPatchV1::default()
+            },
+        ))
+        .is_err());
+    assert_eq!(store.editor_get().revision, revision);
+    assert_eq!(store.editor_get().document, rotated);
+
+    let mut legacy_updated = rotated.clone();
+    legacy_updated.sprite_positions.get_mut("4key").unwrap()[0].class_name =
+        Some("legacy-style".to_string());
+    let mut legacy = serde_json::to_value(EditorPatchV1 {
+        sprite_positions: Some(legacy_updated.sprite_positions.clone()),
+        ..EditorPatchV1::default()
+    })
+    .unwrap();
+    legacy["spritePositions"]["4key"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("rotation");
+    let change = store
+        .commit_editor_document(editor_request(
+            revision,
+            uuid::Uuid::new_v4().to_string(),
+            serde_json::from_value(legacy).unwrap(),
+        ))
+        .unwrap();
+    assert_eq!(change.document, legacy_updated);
+
+    for (direction, expected) in [
+        (HistoryDirection::Undo, &rotated),
+        (HistoryDirection::Undo, &initial),
+        (HistoryDirection::Redo, &rotated),
+        (HistoryDirection::Redo, &legacy_updated),
+    ] {
+        let operation_id = uuid::Uuid::new_v4().to_string();
+        let gate = store.history_gate();
+        let barrier = gate.close(&operation_id).unwrap();
+        store
+            .apply_history_operation(
+                direction,
+                &operation_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        assert_eq!(&store.editor_get().document, expected);
+    }
+    store.flush_and_shutdown().unwrap();
+    drop(store);
+    let reopened = AppStore::initialize_for_test(directory.path()).unwrap();
+    assert_eq!(reopened.editor_get().document, legacy_updated);
+    reopened.flush_and_shutdown().unwrap();
 }
 
 #[test]

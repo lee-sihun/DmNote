@@ -26,6 +26,128 @@ struct ValidNoteBorderStopColor {
 }
 
 #[test]
+fn element_rotation_constants_and_default_match_shared_fixture() {
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Range {
+        min: f64,
+        max: f64,
+    }
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Fixture {
+        rotation: Range,
+        default: f64,
+    }
+    let fixture: Fixture = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/element-rotation-parity.json"
+    ))
+    .unwrap();
+    assert_eq!(super::ELEMENT_ROTATION_MIN, fixture.rotation.min);
+    assert_eq!(super::ELEMENT_ROTATION_MAX, fixture.rotation.max);
+    assert_eq!(super::default_element_rotation(), fixture.default);
+    assert_eq!(KeyPosition::default().rotation, fixture.default);
+    assert_eq!(ReactiveSpritePosition::default().rotation, fixture.default);
+}
+
+#[test]
+fn rotated_position_coordinates_survive_exact_json_round_trip() {
+    fn check<T: serde::Serialize + serde::de::DeserializeOwned>(
+        position: T,
+        field: &str,
+        decimal: &str,
+    ) {
+        let expected: f64 = decimal.parse().unwrap();
+        let mut payload = serde_json::to_value(position).unwrap();
+        payload[field] = serde_json::json!(expected);
+        let wire = serde_json::to_string(&payload).unwrap();
+        let assert_exact = |position: &T| {
+            let encoded = serde_json::to_value(position).unwrap();
+            assert_eq!(
+                encoded[field].as_f64().unwrap().to_bits(),
+                expected.to_bits()
+            );
+        };
+
+        let direct: T = serde_json::from_str(&wire).unwrap();
+        assert_exact(&direct);
+        let ipc_payload: serde_json::Value = serde_json::from_str(&wire).unwrap();
+        let decoded: T = serde_json::from_value(ipc_payload).unwrap();
+        assert_exact(&decoded);
+        let stored = serde_json::to_string(&decoded).unwrap();
+        let restored: T = serde_json::from_str(&stored).unwrap();
+        assert_exact(&restored);
+    }
+
+    check(KeyPosition::default(), "dy", "209.77425768631718");
+    check(
+        ReactiveSpritePosition::default(),
+        "dx",
+        "114.55722993194729",
+    );
+}
+
+#[test]
+fn element_rotation_defaults_and_round_trips_flattened_positions() {
+    fn check<T: serde::de::DeserializeOwned + serde::Serialize>(mut value: serde_json::Value) {
+        value.as_object_mut().unwrap().remove("rotation");
+        let legacy: T = serde_json::from_value(value.clone()).unwrap();
+        let serialized = serde_json::to_value(legacy).unwrap();
+        assert_eq!(serialized["rotation"], 0.0);
+        assert!(serialized.get("position").is_none());
+        for rotation in [-180.0, -45.5, 0.0, 45.5, 180.0] {
+            value["rotation"] = serde_json::json!(rotation);
+            let decoded: T = serde_json::from_value(value.clone()).unwrap();
+            let wire = serde_json::to_value(decoded).unwrap();
+            assert_eq!(wire["rotation"], rotation);
+            let restored: T = serde_json::from_value(wire.clone()).unwrap();
+            assert_eq!(serde_json::to_value(restored).unwrap(), wire);
+        }
+        for invalid in [
+            serde_json::Value::Null,
+            serde_json::json!("45"),
+            serde_json::json!(true),
+        ] {
+            value["rotation"] = invalid;
+            assert!(serde_json::from_value::<T>(value.clone()).is_err());
+        }
+    }
+
+    let position = KeyPosition::default();
+    check::<KeyPosition>(serde_json::to_value(&position).unwrap());
+    check::<ReactiveSpritePosition>(
+        serde_json::to_value(ReactiveSpritePosition::default()).unwrap(),
+    );
+    check::<StatPosition>(
+        serde_json::to_value(StatPosition {
+            stat_type: StatType::Kps,
+            position: position.clone(),
+        })
+        .unwrap(),
+    );
+    check::<GraphPosition>(
+        serde_json::to_value(GraphPosition {
+            stat_type: GraphStatType::Kps,
+            graph_type: GraphType::Line,
+            graph_speed: 100,
+            graph_color: "#123456".to_string(),
+            show_avg_line: true,
+            position: position.clone(),
+        })
+        .unwrap(),
+    );
+    check::<KnobPosition>(
+        serde_json::to_value(KnobPosition {
+            axis_id: "axis".to_string(),
+            sensitivity: 1.0,
+            reverse: false,
+            position,
+        })
+        .unwrap(),
+    );
+}
+
+#[test]
 fn app_store_data_defaults_missing_bar_count_to_four() {
     let mut value = serde_json::to_value(AppStoreData::default()).unwrap();
     value.as_object_mut().unwrap().remove("barCount");
@@ -302,7 +424,7 @@ fn position_wrappers_preserve_legacy_missing_field_defaults_and_round_trip() {
 fn position_serialization_field_order_and_related_defaults_are_stable() {
     let position = KeyPosition::default();
     assert!(serde_json::to_string(&position).unwrap().starts_with(
-        r#"{"dx":0.0,"dy":0.0,"width":60.0,"height":60.0,"hidden":false,"activeImage":null"#
+        r#"{"dx":0.0,"dy":0.0,"width":60.0,"height":60.0,"rotation":0.0,"hidden":false,"activeImage":null"#
     ));
     assert!(serde_json::to_string(&StatPosition {
         stat_type: StatType::Kps,

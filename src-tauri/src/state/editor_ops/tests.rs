@@ -803,6 +803,7 @@ fn patch_target_type_matrix() -> Vec<PatchTargetMatrixRow> {
             KEY_ONLY,
             Patch::NoteBorderSide(EditorNoteBorderSideV1::Vertical),
         ),
+        row("rotation", KEY_POSITION_TYPES, Patch::Rotation(45.5)),
     ]
 }
 
@@ -4337,6 +4338,85 @@ fn image_fit_patches_materialize_state_specific_values_and_preserve_siblings() {
         .unwrap_err();
         assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
         assert_eq!(store.key_positions["4key"][0].idle_image_fit, None);
+    }
+}
+
+#[test]
+fn element_rotation_patches_apply_noop_reset_and_reject_invalid_values() {
+    let base = store_with_every_reorder_type();
+    for (element_type, id, field) in [
+        (
+            EditorElementTypeV1::Key,
+            base.key_positions["4key"][0].id.clone(),
+            EditorField::KeyPositions,
+        ),
+        (
+            EditorElementTypeV1::Stat,
+            base.stat_positions["4key"][0].position.id.clone(),
+            EditorField::StatPositions,
+        ),
+        (
+            EditorElementTypeV1::Graph,
+            base.graph_positions["4key"][0].position.id.clone(),
+            EditorField::GraphPositions,
+        ),
+        (
+            EditorElementTypeV1::Knob,
+            base.knob_positions["4key"][0].position.id.clone(),
+            EditorField::KnobPositions,
+        ),
+    ] {
+        let mut store = base.clone();
+        for rotation in [-180.0, 45.5, 180.0, 0.0] {
+            let op = patch_property_op(
+                element_type,
+                &id,
+                EditorElementPropertyPatchV1::Rotation(rotation),
+            );
+            let transition =
+                prepare_editor_ops_transition(&store, std::slice::from_ref(&op)).unwrap();
+            assert_eq!(
+                transition.op_results[0].status,
+                EditorOpResultStatusV1::Applied
+            );
+            assert_eq!(transition.changed_fields, [field]);
+            let mut expected = EditorDocumentV1::from_store(&store);
+            let position = match element_type {
+                EditorElementTypeV1::Key => &mut expected.key_positions.get_mut("4key").unwrap()[0],
+                EditorElementTypeV1::Stat => {
+                    &mut expected.stat_positions.get_mut("4key").unwrap()[0].position
+                }
+                EditorElementTypeV1::Graph => {
+                    &mut expected.graph_positions.get_mut("4key").unwrap()[0].position
+                }
+                EditorElementTypeV1::Knob => {
+                    &mut expected.knob_positions.get_mut("4key").unwrap()[0].position
+                }
+                EditorElementTypeV1::Sprite => unreachable!(),
+            };
+            position.rotation = rotation;
+            assert_eq!(transition.candidate, expected);
+            store = transition.scratch;
+            let replay = prepare_editor_ops_transition(&store, &[op]).unwrap();
+            assert_eq!(
+                replay.op_results[0].status,
+                EditorOpResultStatusV1::NoChange
+            );
+            assert!(replay.changed_fields.is_empty());
+            assert_eq!(replay.candidate, expected);
+        }
+        for rotation in [-180.1, 180.1, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[patch_property_op(
+                    element_type,
+                    &id,
+                    EditorElementPropertyPatchV1::Rotation(rotation),
+                )],
+            )
+            .unwrap_err();
+            assert_eq!(validation_code(&error), Some("ROTATION_OUT_OF_RANGE"));
+        }
     }
 }
 

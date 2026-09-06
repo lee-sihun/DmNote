@@ -97,6 +97,7 @@ fn preset_reader_migrates_legacy_sprite_wire_before_deserialization() {
     })
     .unwrap();
     let sprite = value["spritePositions"]["4key"][0].as_object_mut().unwrap();
+    sprite.remove("rotation");
     sprite.insert(
         "imageRect".to_string(),
         serde_json::json!({ "x": 5.0, "y": -2.0, "width": 320.0, "height": 180.0 }),
@@ -107,6 +108,7 @@ fn preset_reader_migrates_legacy_sprite_wire_before_deserialization() {
 
     let preset = read_preset_file(&path).unwrap();
     let sprite = &preset.sprite_positions.unwrap()["4key"][0];
+    assert_eq!(sprite.rotation, 0.0);
     assert_eq!((sprite.dx, sprite.dy), (15.0, 18.0));
     assert_eq!((sprite.width, sprite.height), (320.0, 180.0));
     let wire = serde_json::to_value(sprite).unwrap();
@@ -760,6 +762,39 @@ fn damaged_gradient_preset_reports_element_and_field_with_existing_error_code() 
     );
 
     let _ = std::fs::remove_dir_all(temp_dir);
+}
+
+#[test]
+fn preset_rejects_invalid_element_rotations_with_path_for_all_position_types() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("preset.json");
+    for collection in POSITION_COLLECTION_FIELDS {
+        for invalid in [
+            serde_json::json!(-180.1),
+            serde_json::json!(180.1),
+            serde_json::Value::Null,
+            serde_json::json!("45"),
+            serde_json::json!(true),
+        ] {
+            let mut preset = serde_json::json!({});
+            preset[collection] = serde_json::json!({
+                "custom mode": [{}, { "rotation": invalid }]
+            });
+            std::fs::write(&path, serde_json::to_vec(&preset).unwrap()).unwrap();
+            let error = read_preset_file(&path)
+                .err()
+                .expect("invalid rotation must be rejected");
+            assert_eq!(error.to_string(), format!(
+                "invalid-preset: {collection}[\"custom mode\"][1].rotation: must be a finite number between -180 and 180"
+            ));
+        }
+        for rotation in [-180.0, -45.5, 0.0, 180.0] {
+            let mut preset = serde_json::json!({});
+            preset[collection] =
+                serde_json::json!({ "custom mode": [{}, { "rotation": rotation }] });
+            assert_eq!(invalid_position_style_detail(&preset), None);
+        }
+    }
 }
 
 #[test]

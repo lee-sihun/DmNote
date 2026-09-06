@@ -115,6 +115,32 @@ fn publish_injects_source_label_and_defaults_to_patch() {
 }
 
 #[test]
+fn element_rotation_preview_round_trips_for_native_position_domains() {
+    let broker = PreviewBroker::default();
+    subscribe(&broker, "owner");
+    let messages = Arc::new(Mutex::new(Vec::new()));
+    broker
+        .subscribe("observer", recording_channel(messages.clone()))
+        .unwrap();
+    for domain in [
+        PreviewDomain::KeyPosition,
+        PreviewDomain::StatPosition,
+        PreviewDomain::GraphPosition,
+        PreviewDomain::KnobPosition,
+        PreviewDomain::SpritePosition,
+    ] {
+        let mut request = request_for_domain(&session_id(), 1, domain);
+        request.patch = Map::from_iter([("rotation".to_string(), Value::from(45.5))]);
+        broker.publish("owner", request).unwrap();
+        let messages = messages.lock();
+        let message = messages.last().unwrap();
+        assert_eq!(message.domain, domain);
+        assert_eq!(message.patch["rotation"], 45.5);
+    }
+    assert_eq!(messages.lock().len(), 5);
+}
+
+#[test]
 fn image_transform_preview_fields_round_trip_through_channel() {
     let broker = PreviewBroker::default();
     subscribe(&broker, "owner");
@@ -306,6 +332,7 @@ fn sprite_position_domain_validates_and_round_trips_through_subscribers() {
         "dy": -8,
         "width": 320,
         "height": 180,
+        "rotation": -45.5,
         "pivot": { "x": 0.5, "y": 0.75 },
         "idleTransform": { "x": 0, "y": 0, "rotation": 0, "scale": 1 },
         "poses": [{ "poseId": "pose-id", "triggers": [] }],
@@ -350,6 +377,7 @@ fn sprite_position_preview_allowlist_matches_supported_contract() {
             "dy",
             "width",
             "height",
+            "rotation",
             "pivot",
             "idleTransform",
             "poses",
@@ -374,7 +402,7 @@ fn preview_patch_allowlist_rejects_unknown_and_cross_domain_fields() {
 
     assert!(unknown_error.contains("unknownSpriteField"));
 
-    for (seq, field) in ["x", "y", "rotation", "scale"].into_iter().enumerate() {
+    for (seq, field) in ["x", "y", "scale"].into_iter().enumerate() {
         let mut removed_field =
             request_for_domain(&session_id, seq as u64 + 2, PreviewDomain::SpritePosition);
         removed_field.patch = Map::from_iter([(field.to_string(), serde_json::json!(1.0))]);

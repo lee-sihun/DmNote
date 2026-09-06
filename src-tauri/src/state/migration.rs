@@ -26,13 +26,13 @@ use crate::{
         KeySlot, KnobPosition, KnobPositions, LayerGroupDef, LayerGroups, NoteSettings,
         ReactiveSpritePosition, ShortcutsState, SoundLibraryEntry, SpriteAnchor, SpritePositions,
         SpriteTransform, StatPosition, StatPositions, StatType, StoredOverlayBounds, TabCss,
-        TabNoteSettings, IMAGE_TRANSFORM_OFFSET_MAX, IMAGE_TRANSFORM_OFFSET_MIN,
-        IMAGE_TRANSFORM_ROTATION_MAX, IMAGE_TRANSFORM_ROTATION_MIN, IMAGE_TRANSFORM_SCALE_MAX,
-        IMAGE_TRANSFORM_SCALE_MIN, POSITION_COLLECTION_FIELDS, SPRITE_IMAGE_DIMENSION_MAX,
-        SPRITE_IMAGE_DIMENSION_MIN, SPRITE_PRESS_DURATION_MS_MAX, SPRITE_PRESS_DURATION_MS_MIN,
-        SPRITE_TRANSFORM_OFFSET_MAX, SPRITE_TRANSFORM_OFFSET_MIN, SPRITE_TRANSFORM_ROTATION_MAX,
-        SPRITE_TRANSFORM_ROTATION_MIN, SPRITE_TRANSFORM_SCALE_MAX, SPRITE_TRANSFORM_SCALE_MIN,
-        SPRITE_TRANSITION_MS_MAX,
+        TabNoteSettings, ELEMENT_ROTATION_MAX, ELEMENT_ROTATION_MIN, IMAGE_TRANSFORM_OFFSET_MAX,
+        IMAGE_TRANSFORM_OFFSET_MIN, IMAGE_TRANSFORM_ROTATION_MAX, IMAGE_TRANSFORM_ROTATION_MIN,
+        IMAGE_TRANSFORM_SCALE_MAX, IMAGE_TRANSFORM_SCALE_MIN, POSITION_COLLECTION_FIELDS,
+        SPRITE_IMAGE_DIMENSION_MAX, SPRITE_IMAGE_DIMENSION_MIN, SPRITE_PRESS_DURATION_MS_MAX,
+        SPRITE_PRESS_DURATION_MS_MIN, SPRITE_TRANSFORM_OFFSET_MAX, SPRITE_TRANSFORM_OFFSET_MIN,
+        SPRITE_TRANSFORM_ROTATION_MAX, SPRITE_TRANSFORM_ROTATION_MIN, SPRITE_TRANSFORM_SCALE_MAX,
+        SPRITE_TRANSFORM_SCALE_MIN, SPRITE_TRANSITION_MS_MAX,
     },
 };
 
@@ -72,7 +72,7 @@ use normalization::{
     has_legacy_font_weight_state, has_valid_selected_key_type, key_position_lengths_mismatch,
     migrate_legacy_knob_sensitivity, migrate_legacy_sprite_positions_value,
     migrate_sound_library_enabled, normalize_blank_font_colors, remove_legacy_panel_detach_setting,
-    repair_editor_revision, repair_image_transforms, repair_semantic_identities,
+    repair_editor_revision, repair_native_position_ranges, repair_semantic_identities,
     repair_sprite_numeric_ranges,
 };
 #[cfg(test)]
@@ -132,8 +132,8 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
                         if migrate_legacy_knob_sensitivity(&mut data) {
                             needs_persist = true;
                         }
-                        let image_transform_repaired = repair_image_transforms(&mut data);
-                        needs_persist |= image_transform_repaired;
+                        let position_range_repaired = repair_native_position_ranges(&mut data);
+                        needs_persist |= position_range_repaired;
                         let sprite_numeric_repaired = repair_sprite_numeric_ranges(&mut data);
                         needs_persist |= sprite_numeric_repaired;
                         needs_persist |= has_legacy_font_weight_state(&data);
@@ -176,7 +176,7 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
                                 || (has_bar_count && bar_count_changed)
                                 || editor_revision_repaired
                                 || gradient_pair_repaired
-                                || image_transform_repaired
+                                || position_range_repaired
                                 || sprite_numeric_repaired,
                             seed_active_css_history,
                             explicit_invalid_element_id,

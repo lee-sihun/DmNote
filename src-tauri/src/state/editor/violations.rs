@@ -1,4 +1,5 @@
 use super::*;
+use crate::models::{ELEMENT_ROTATION_MAX, ELEMENT_ROTATION_MIN};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) enum NativeElementKind {
@@ -35,6 +36,7 @@ pub(super) enum ViolationPropertyPath {
     GroupId,
     GroupReference,
     KnobSensitivity,
+    Rotation,
     Shadow {
         name: &'static str,
         property: &'static str,
@@ -608,6 +610,22 @@ fn collect_position_style_violations(
                 }),
         )
     {
+        if !position.rotation.is_finite()
+            || !(ELEMENT_ROTATION_MIN..=ELEMENT_ROTATION_MAX).contains(&position.rotation)
+        {
+            violations.insert(ValidationViolation::new(
+                native_violation_key(
+                    kind,
+                    &position.id,
+                    "INVALID_ROTATION",
+                    ViolationPropertyPath::Rotation,
+                    InvalidValueSignature::FloatBits(position.rotation.to_bits()),
+                ),
+                format!(
+                    "{field} {mode}[{index}].rotation must be finite within {ELEMENT_ROTATION_MIN}..={ELEMENT_ROTATION_MAX}"
+                ),
+            ));
+        }
         for (name, shadow) in [
             ("shadow", position.shadow.as_ref()),
             ("activeShadow", position.active_shadow.as_ref()),
@@ -660,6 +678,22 @@ pub(super) fn collect_sprite_violations(
 ) {
     for (mode, sprites) in &document.sprite_positions {
         for (sprite_index, sprite) in sprites.iter().enumerate() {
+            if !sprite.rotation.is_finite()
+                || !(ELEMENT_ROTATION_MIN..=ELEMENT_ROTATION_MAX).contains(&sprite.rotation)
+            {
+                violations.insert(ValidationViolation::new(
+                    native_violation_key(
+                        NativeElementKind::Sprite,
+                        &sprite.id,
+                        "INVALID_ROTATION",
+                        ViolationPropertyPath::Rotation,
+                        InvalidValueSignature::FloatBits(sprite.rotation.to_bits()),
+                    ),
+                    format!(
+                        "spritePositions {mode}[{sprite_index}].rotation must be finite within {ELEMENT_ROTATION_MIN}..={ELEMENT_ROTATION_MAX}"
+                    ),
+                ));
+            }
             collect_sprite_transform_violations(
                 sprite,
                 mode,

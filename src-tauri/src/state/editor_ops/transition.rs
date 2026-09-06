@@ -1,4 +1,5 @@
 use super::*;
+use crate::models::{ELEMENT_ROTATION_MAX, ELEMENT_ROTATION_MIN};
 
 mod element_patch;
 
@@ -421,6 +422,18 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                     }
                 }
                 // 타입 무제약, 값 범위 검증만
+                EditorElementPropertyPatchV1::Rotation(patch) => {
+                    if !patch.is_finite()
+                        || !(ELEMENT_ROTATION_MIN..=ELEMENT_ROTATION_MAX).contains(patch)
+                    {
+                        return Err(EditorCommitError::validation(
+                            "ROTATION_OUT_OF_RANGE",
+                            format!(
+                                "editor op {op_index} rotation must be finite and between {ELEMENT_ROTATION_MIN} and {ELEMENT_ROTATION_MAX}"
+                            ),
+                        ));
+                    }
+                }
                 EditorElementPropertyPatchV1::BorderWidth(patch) => {
                     if !patch.is_finite() || !(0.0..=20.0).contains(patch) {
                         return Err(EditorCommitError::validation(

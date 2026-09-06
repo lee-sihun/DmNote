@@ -78,6 +78,7 @@ fn changes_presence_merge_preserves_omitted_existing_sprite_fields() {
         let pose_id = uuid::Uuid::new_v4().to_string();
         let current_sprite = ReactiveSpritePosition {
             id: sprite_id,
+            rotation: -45.5,
             base_image: Some("/images/base.png".to_string()),
             reference_natural_size: Some(SpriteReferenceNaturalSize {
                 source: Some("/images/base.png".to_string()),
@@ -114,6 +115,7 @@ fn changes_presence_merge_preserves_omitted_existing_sprite_fields() {
             .and_then(Value::as_object_mut)
             .unwrap();
         for field in [
+            "rotation",
             "baseImage",
             "referenceNaturalSize",
             "activation",
@@ -130,6 +132,7 @@ fn changes_presence_merge_preserves_omitted_existing_sprite_fields() {
         patch.merge_omitted_sprite_fields(&current);
         let merged = &patch.sprite_positions.as_ref().unwrap()["4key"][0];
         let expected = &current["4key"][0];
+        assert_eq!(merged.rotation, expected.rotation);
         assert_eq!(merged.base_image, expected.base_image);
         assert_eq!(
             merged.reference_natural_size,
@@ -153,6 +156,7 @@ fn changes_presence_merge_preserves_omitted_existing_sprite_fields() {
 #[test]
 fn changes_presence_merge_keeps_new_defaults_and_applies_nullable_nulls() {
     let mut existing = sprite_with_pose();
+    existing.rotation = 45.5;
     existing.reference_natural_size = Some(SpriteReferenceNaturalSize {
         source: Some("/images/base.png".to_string()),
         width: 800,
@@ -179,12 +183,18 @@ fn changes_presence_merge_keeps_new_defaults_and_applies_nullable_nulls() {
     .unwrap();
     let sprites = raw["spritePositions"]["4key"].as_array_mut().unwrap();
     let existing_raw = sprites[0].as_object_mut().unwrap();
+    existing_raw.insert("rotation".to_string(), serde_json::json!(0.0));
     existing_raw.insert("referenceNaturalSize".to_string(), Value::Null);
     let existing_pose = existing_raw["poses"][0].as_object_mut().unwrap();
     existing_pose.insert("pivot".to_string(), Value::Null);
     existing_pose.insert("imageOverrideMetrics".to_string(), Value::Null);
     let new_raw = sprites[1].as_object_mut().unwrap();
-    for field in ["referenceNaturalSize", "activation", "pressDurationMs"] {
+    for field in [
+        "rotation",
+        "referenceNaturalSize",
+        "activation",
+        "pressDurationMs",
+    ] {
         new_raw.remove(field);
     }
     let new_pose = new_raw["poses"][0].as_object_mut().unwrap();
@@ -193,6 +203,8 @@ fn changes_presence_merge_keeps_new_defaults_and_applies_nullable_nulls() {
     let mut patch: EditorPatchV1 = serde_json::from_value(raw).unwrap();
     patch.merge_omitted_sprite_fields(&current);
     let sprites = &patch.sprite_positions.as_ref().unwrap()["4key"];
+    assert_eq!(sprites[0].rotation, 0.0);
+    assert_eq!(sprites[1].rotation, 0.0);
     assert_eq!(sprites[0].reference_natural_size, None);
     assert_eq!(sprites[0].poses[0].pivot, None);
     assert_eq!(sprites[0].poses[0].image_override_metrics, None);
@@ -385,7 +397,7 @@ fn paint(color: &str) -> EditorPaintDescriptorV1 {
     }
 }
 
-// 75개 variant 전수: (patch, property 태그, value wire) 고정 표본
+// 76개 variant 전수: (patch, property 태그, value wire) 고정 표본
 fn property_patch_samples() -> Vec<(
     EditorElementPropertyPatchV1,
     &'static str,
@@ -649,13 +661,14 @@ fn property_patch_samples() -> Vec<(
             "noteBorderSide",
             json!("vertical"),
         ),
+        (P::Rotation(-45.5), "rotation", json!(-45.5)),
     ]
 }
 
 #[test]
 fn property_patch_wire_pins_all_tag_value_pairs_and_roundtrips() {
     let samples = property_patch_samples();
-    assert_eq!(samples.len(), 75);
+    assert_eq!(samples.len(), 76);
     for (patch, tag, value) in samples {
         let wire = serde_json::to_value(&patch).unwrap();
         assert_eq!(

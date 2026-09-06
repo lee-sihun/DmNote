@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    default_key_height, default_key_note_color, default_key_note_opacity,
+    default_element_rotation, default_key_height, default_key_note_color, default_key_note_opacity,
     default_note_auto_y_correction, default_note_border_opacity, default_note_effect_enabled,
     default_note_glow_enabled, default_note_glow_opacity, default_note_glow_size, GradientSpec,
     ImageFit, KeyCounterSettings, NoteColor,
@@ -44,6 +44,9 @@ pub const IMAGE_TRANSFORM_ROTATION_MIN: f64 = -180.0;
 pub const IMAGE_TRANSFORM_ROTATION_MAX: f64 = 180.0;
 pub const IMAGE_TRANSFORM_SCALE_MIN: f64 = 0.1;
 pub const IMAGE_TRANSFORM_SCALE_MAX: f64 = 10.0;
+
+pub const ELEMENT_ROTATION_MIN: f64 = -180.0;
+pub const ELEMENT_ROTATION_MAX: f64 = 180.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -92,6 +95,8 @@ pub struct KeyPosition {
     pub width: f64,
     #[serde(default = "default_key_height")]
     pub height: f64,
+    #[serde(default = "default_element_rotation")]
+    pub rotation: f64,
     /// 레이어 표시 여부 (true면 숨김)
     #[serde(default)]
     pub hidden: bool,
@@ -268,6 +273,7 @@ impl Default for KeyPosition {
             dy: 0.0,
             width: 60.0,
             height: default_key_height(),
+            rotation: default_element_rotation(),
             hidden: false,
             active_image: None,
             inactive_image: None,
@@ -593,6 +599,8 @@ pub struct ReactiveSpritePosition {
     pub dy: f64,
     pub width: f64,
     pub height: f64,
+    #[serde(default = "default_element_rotation")]
+    pub rotation: f64,
     #[serde(default)]
     pub hidden: bool,
     #[serde(default)]
@@ -631,6 +639,7 @@ impl Default for ReactiveSpritePosition {
             dy: 0.0,
             width: 200.0,
             height: 200.0,
+            rotation: default_element_rotation(),
             hidden: false,
             z_index: None,
             layer_name: None,
