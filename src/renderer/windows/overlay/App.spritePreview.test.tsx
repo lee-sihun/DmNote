@@ -136,6 +136,7 @@ const SESSION_ID = '00000000-0000-4000-8000-0000000000aa';
 const spritePosition = (dx: number): CanonicalReactiveSpritePosition => ({
   activation: 'whileHeld',
   pressDurationMs: 300,
+  rotation: 0,
   id: SPRITE_ID,
   dx,
   dy: 25,

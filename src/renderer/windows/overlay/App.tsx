@@ -215,7 +215,6 @@ export default function App() {
     ],
   );
   const {
-    bounds,
     backgroundBox,
     contentBounds,
     displayPositions,
@@ -224,7 +223,6 @@ export default function App() {
     displayKnobPositions,
     displaySpritePositions,
     positionOffset,
-    topOffset,
     topMostY,
     leftMostX,
     webglTracks,
@@ -233,20 +231,10 @@ export default function App() {
   // 레이아웃이 DOM에 반영된 뒤 키 rect를 실측해 네이티브 히트 창과 동기화
   useOverlayHitRegions(layout);
 
-  // 창 크기는 창 바운즈(스프라이트 이미지 도달 범위 포함) 기준.
-  // 배경 박스는 computeLayout의 backgroundBox(콘텐츠 바운즈 기준)를 쓰므로
-  // 스프라이트 오버행이 있을 때만 창이 배경보다 커지고 여유 영역은 투명하다.
-  // 높이는 computeLayout의 topOffset을 그대로 재사용 - 공식이 한 곳에만 있다
-  const contentSize = useMemo(
-    () =>
-      bounds
-        ? {
-            width: bounds.maxX - bounds.minX + overlayPadding * 2,
-            height: bounds.maxY - bounds.minY + overlayPadding + topOffset,
-          }
-        : undefined,
-    [bounds, overlayPadding, topOffset],
-  );
+  // 창 크기는 computeLayout의 contentSize 하나로 - 창 바운즈(스프라이트 도달
+  // 범위·회전 얼굴 포함)와 트랙 밴드·회전 트랙·패딩 공식이 한 곳에만 있다.
+  // 배경 박스는 backgroundBox(콘텐츠 바운즈 기준)를 쓰므로 오버행 여유는 투명하다
+  const contentSize = layout.contentSize ?? undefined;
 
   // updateTrackLayouts는 useNoteSystem이 마운트 1회 고정 참조를 보장하므로
   // deps 포함이 재실행을 유발하지 않으며, 훅이 updater를 교체하는 미래 변경에도 안전
@@ -269,7 +257,7 @@ export default function App() {
   } | null>(null);
 
   useEffect(() => {
-    if (!bounds || !contentBounds || !contentSize) return;
+    if (!contentBounds || !contentSize) return;
     // OBS 오버레이에는 네이티브 창이 없다 - allowlist 밖이라 호출이 항상 거부되고,
     // 기준선을 지우는 실패 처리와 맞물려 레이아웃이 바뀔 때마다 헛호출이 반복된다
     if (window.__dmn_runtime === 'obs') return;
@@ -344,7 +332,6 @@ export default function App() {
         setResizeInFlight((count) => Math.max(0, count - 1));
       });
   }, [
-    bounds,
     contentBounds,
     contentSize,
     topMostY,

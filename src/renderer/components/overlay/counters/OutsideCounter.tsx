@@ -12,6 +12,7 @@ import {
 
 interface OutsideCounterProps {
   position: {
+    rotation?: number;
     dx?: number;
     dy?: number;
     width?: number;
@@ -49,6 +50,7 @@ const OutsideCounter = ({
     width,
     height,
     counterSettings.gap,
+    position.rotation,
   );
 
   const fillColor = active

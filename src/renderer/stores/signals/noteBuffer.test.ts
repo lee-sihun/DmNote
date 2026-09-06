@@ -14,6 +14,48 @@ const layoutFor = (trackKey: string) => ({
   noteOpacity: 80,
 });
 
+describe('NoteBuffer 회전 방향', () => {
+  it('정렬 삽입과 개별·일괄 해제 후에도 각 노트의 방향을 보존한다', () => {
+    const buffer = createNoteBuffer();
+    buffer.updateTrackLayouts([
+      { ...layoutFor('up'), trackIndex: 0 },
+      { ...layoutFor('right'), trackIndex: 1, direction: { x: 1, y: 0 } },
+      { ...layoutFor('down'), trackIndex: 2, direction: { x: 0, y: 1 } },
+    ]);
+    buffer.allocate('down', 'down-1', 1000);
+    buffer.allocate('up', 'up-1', 1010);
+    buffer.allocate('right', 'right-1', 1020);
+    buffer.allocate('down', 'down-2', 1030);
+    expect(Array.from(buffer.noteDir.slice(0, 8))).toEqual([
+      0, -1, 1, 0, 0, 1, 0, 1,
+    ]);
+
+    buffer.release('right-1');
+    expect(Array.from(buffer.noteDir.slice(0, 8))).toEqual([
+      0, -1, 0, 1, 0, 1, 0, 0,
+    ]);
+    buffer.releaseBatch(['up-1', 'down-1']);
+    expect(Array.from(buffer.noteDir.slice(0, 8))).toEqual([
+      0, 1, 0, 0, 0, 0, 0, 0,
+    ]);
+    buffer.finalize('down-2', 1200);
+    expect(buffer.noteInfo[1]).toBe(1200);
+    buffer.clear();
+    expect(Array.from(buffer.noteDir.slice(0, 8))).toEqual(Array(8).fill(0));
+  });
+
+  it('회전 편집 뒤 새 노트만 새 방향을 쓰고 생존 노트는 기존 기하를 유지한다', () => {
+    const buffer = createNoteBuffer();
+    buffer.updateTrackLayouts([layoutFor('key')]);
+    buffer.allocate('key', 'before', 1000);
+    buffer.updateTrackLayouts([
+      { ...layoutFor('key'), direction: { x: 1, y: 0 } },
+    ]);
+    buffer.allocate('key', 'after', 1010);
+    expect(Array.from(buffer.noteDir.slice(0, 4))).toEqual([0, -1, 1, 0]);
+  });
+});
+
 describe('NoteBuffer 시각 저장', () => {
   it('서브 프레임 노트 시작 시각을 프레임 단위로 양자화하지 않고 보존한다', () => {
     const buffer = createNoteBuffer();

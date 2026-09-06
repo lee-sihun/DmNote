@@ -1,4 +1,5 @@
 'use no memo';
+import { elementRotationTransform } from '@utils/core/rotation';
 import React, { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useSignals } from '@preact/signals-react/runtime';
 import {
@@ -441,7 +442,10 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
       style={{
         left: 0,
         top: 0,
-        transform: `translate3d(${position.dx}px, ${position.dy}px, 0)`,
+        transform: `translate3d(${position.dx}px, ${
+          position.dy
+        }px, 0)${elementRotationTransform(position.rotation)}`,
+        transformOrigin: '50% 50%',
         width: `${position.width}px`,
         height: `${position.height}px`,
         zIndex: position.zIndex ?? 0,

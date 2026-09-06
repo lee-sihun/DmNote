@@ -410,6 +410,7 @@ describe('렌더 DOM 계약', () => {
             position={{
               activation: 'whileHeld',
               pressDurationMs: 300,
+              rotation: 0,
               id: 'sprite-contract',
               dx: 4,
               dy: 8,

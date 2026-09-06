@@ -127,6 +127,40 @@ describe('OverlaySpriteItem', () => {
     );
   });
 
+  it('배치 회전은 히트 상자에만 적용하고 whileHeld 전환 각도는 보존한다', () => {
+    const position = makeSprite({
+      rotation: 179,
+      idleTransform: { x: 0, y: 0, rotation: -179, scale: 1 },
+      poses: [
+        makePose('p1', ['el-a'], {
+          transform: { x: 10, y: -6, rotation: 179, scale: 1.2 },
+        }),
+      ],
+    });
+    render(position);
+    const idle = imgEl()!.style.getPropertyValue(
+      '--dmn-sprite-transform-default',
+    );
+    act(() => setKeyActive('KeyA', true));
+    const active = imgEl()!.style.getPropertyValue(
+      '--dmn-sprite-transform-default',
+    );
+    render({ ...position, rotation: -179 });
+    expect(
+      imgEl()!.style.getPropertyValue('--dmn-sprite-transform-default'),
+    ).toBe(active);
+    expect(wrapperEl()!.style.transform).toBe(
+      'translate3d(12px, 24px, 0) rotate(-179deg)',
+    );
+    expect(wrapperEl()!.style.transformOrigin).toBe('50% 50%');
+    act(() => setKeyActive('KeyA', false));
+    expect(
+      imgEl()!.style.getPropertyValue('--dmn-sprite-transform-default'),
+    ).toBe(idle);
+    expect(active).toContain('rotate(179deg)');
+    expect(idle).toContain('rotate(-179deg)');
+  });
+
   it('트리거 눌림이 pose transform과 active 상태로 바꾸고, 뗌은 idle로 되돌린다', () => {
     render(makeSprite());
 
@@ -390,6 +424,30 @@ describe('OverlaySpriteItem onPress', () => {
 
     act(() => animations[0].onfinish?.());
     expect(img.src).toContain(BASE_IMAGE);
+  });
+
+  it('배치 ±180도 전환은 진행 중 WAAPI를 끊거나 자세 각도 경로를 바꾸지 않는다', () => {
+    const position = oneShotSprite({
+      rotation: 179,
+      idleTransform: { x: 0, y: 0, rotation: -179, scale: 1 },
+      poses: [
+        makePose('p1', ['el-a'], {
+          transform: { x: 10, y: -6, rotation: 179, scale: 1.2 },
+        }),
+      ],
+    });
+    render(position);
+    act(() => applyEventKeyState('KeyA', true));
+    expect(animations).toHaveLength(1);
+    const frames = structuredClone(animations[0].keyframes);
+    for (const rotation of [180, -180, -179]) {
+      render({ ...position, rotation });
+      expect(animations).toHaveLength(1);
+      expect(animations[0].cancelled).toBe(false);
+      expect(animations[0].keyframes).toEqual(frames);
+    }
+    expect(frames[0].transform).toContain('rotate(179deg)');
+    expect(frames[1].transform).toContain('rotate(-179deg)');
   });
 
   it('하이드레이션 레벨 세팅은 재생을 트리거하지 않는다 - 유령 단발 방지', () => {

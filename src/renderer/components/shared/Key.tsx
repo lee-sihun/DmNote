@@ -23,6 +23,7 @@ import {
   useGridElementInteraction,
   type GridElementInteractionProps,
 } from '@hooks/Grid/useGridElementInteraction';
+import { elementRotationTransform } from '@utils/core/rotation';
 
 // DraggableKey에서 counter가 KeyCounterSettings 타입인 확장 position
 interface KeyPosition extends KeyElementPosition {
@@ -118,6 +119,7 @@ const DraggableKey = React.memo(
       '.counter',
       'counterFill',
       anchorOrigin,
+      position.rotation,
     );
     useCounterAxisAnchor(
       previewSession,
@@ -126,6 +128,7 @@ const DraggableKey = React.memo(
       '[data-key-label]',
       'font',
       anchorOrigin,
+      position.rotation,
     );
 
     const interaction = useGridElementInteraction({
@@ -213,7 +216,9 @@ const DraggableKey = React.memo(
     // 이동 키는 매 프레임 손상 영역만 재페인트하는 쪽이 선명하고 충분히 싸다
     const keyStyle: React.CSSProperties = {
       ...computedKeyStyle,
-      transform: `translate(calc(${renderDx}px + var(--key-offset-x, 0px)), calc(${renderDy}px + var(--key-offset-y, 0px)))`,
+      transform: `translate(calc(${renderDx}px + var(--key-offset-x, 0px)), calc(${renderDy}px + var(--key-offset-y, 0px)))${elementRotationTransform(
+        position.rotation,
+      )}`,
       willChange: 'auto',
       backfaceVisibility: 'visible',
       transformStyle: 'flat',

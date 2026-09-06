@@ -10,6 +10,7 @@ const GRAPH_TICK_MS = 50;
 
 interface GraphPosition {
   hidden?: boolean;
+  rotation?: number;
   statType?: string;
   graphType?: string;
   graphSpeed?: number;
@@ -175,6 +176,7 @@ const OverlayGraphItem = ({ position, index = 0 }: OverlayGraphItemProps) => {
     <GraphPanel
       dx={dx}
       dy={dy}
+      rotation={position.rotation}
       width={width}
       height={height}
       zIndex={position.zIndex ?? index}

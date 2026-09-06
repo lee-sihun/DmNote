@@ -13,6 +13,13 @@ import {
 } from '@utils/sprite/spriteReach';
 import { buildSpriteKeyCanonicalMap } from '@utils/sprite/spriteKeyBinding';
 import { DEFAULT_SPRITE_SIZE } from '@src/types/key/sprites';
+import { rotatedRectAabb } from '@utils/core/rotation';
+import {
+  computeTrackGeometry,
+  groupSameFlowAngles,
+  sameFlowStartShift,
+  translateTrackGeometry,
+} from '@utils/layout/trackGeometry';
 
 interface LayoutInput {
   // canonical 슬롯 식별자 배열 (slotCanonical 결과, 원본 KeySlot 아님)
@@ -80,7 +87,9 @@ export function computeLayout(input: LayoutInput) {
       widths.push(pos.dx + pos.width);
       heights.push(pos.dy + pos.height);
 
-      // 노트 오프셋에 의한 트랙 영역 확장 반영
+      // 노트 오프셋에 의한 트랙 영역 확장 반영. 회전 키도 회전 전 오프셋 영역으로
+      // 확장해 회전 각도가 콘텐츠 기준점(창 원점·히트라인)을 바꾸지 않게 한다.
+      // 회전한 트랙의 실제 AABB는 창·배경 계산에 따로 합산된다
       const userOffsetX = pos.noteOffsetX ?? 0;
       const userOffsetY = pos.noteOffsetY ?? 0;
       if (userOffsetX !== 0) {
@@ -188,10 +197,56 @@ export function computeLayout(input: LayoutInput) {
     };
   })();
 
+  const unionBounds = (a: Bounds, b: Bounds): Bounds => ({
+    minX: Math.min(a.minX, b.minX),
+    minY: Math.min(a.minY, b.minY),
+    maxX: Math.max(a.maxX, b.maxX),
+    maxY: Math.max(a.maxY, b.maxY),
+  });
+
+  // 회전한 얼굴은 논리 상자를 벗어난다. 창·배경은 회전 AABB까지 감싸되
+  // 논리 콘텐츠 바운즈(히트라인·창 원점 기준)는 그대로 둔다
+  const rotatedFaceBounds: Bounds | null = (() => {
+    let acc: Bounds | null = null;
+    const collect = (
+      pos:
+        | {
+            dx: number;
+            dy: number;
+            width?: number;
+            height?: number;
+            rotation?: number;
+            hidden?: boolean;
+          }
+        | null
+        | undefined,
+      defaultWidth: number,
+      defaultHeight: number,
+    ) => {
+      if (!pos || pos.hidden) return;
+      const rotation = pos.rotation ?? 0;
+      if (rotation === 0) return;
+      const aabb = rotatedRectAabb(
+        pos.dx,
+        pos.dy,
+        pos.width ?? defaultWidth,
+        pos.height ?? defaultHeight,
+        rotation,
+      );
+      acc = acc ? unionBounds(acc, aabb) : aabb;
+    };
+    currentPositions.forEach((pos) => collect(pos, 60, 60));
+    currentStatPositions.forEach((pos) => collect(pos, 60, 60));
+    currentGraphPositions.forEach((pos) => collect(pos, 200, 100));
+    currentKnobPositions.forEach((pos) => collect(pos, 60, 60));
+    currentSpritePositions.forEach((pos) => collect(pos, 200, 200));
+    return acc;
+  })();
+
   // 창 바운즈 계산 - 스프라이트는 클리핑하지 않으므로 이미지 도달 범위
   // (모든 자세의 회전·확대·오프셋 AABB 합집합, 전환 오버슈트 여유 포함)가
   // 요소 상자를 넘으면 그만큼 창을 넓혀 네이티브 창 가장자리 잘림을 막는다.
-  // 배경 박스는 콘텐츠 바운즈 기준을 유지해 눈에 보이는 크기는 변하지 않는다
+  // 회전한 얼굴 AABB도 같은 자격이다. 배경 박스는 콘텐츠 바운즈 기준을 유지한다
   const bounds: Bounds | null = (() => {
     if (!contentBounds) return null;
     let { minX, minY, maxX, maxY } = contentBounds;
@@ -224,6 +279,12 @@ export function computeLayout(input: LayoutInput) {
       maxX = Math.max(maxX, pos.dx + reach.maxX);
       maxY = Math.max(maxY, pos.dy + reach.maxY);
     });
+    if (rotatedFaceBounds) {
+      minX = Math.min(minX, rotatedFaceBounds.minX);
+      minY = Math.min(minY, rotatedFaceBounds.minY);
+      maxX = Math.max(maxX, rotatedFaceBounds.maxX);
+      maxY = Math.max(maxY, rotatedFaceBounds.maxY);
+    }
     if (
       minX === contentBounds.minX &&
       minY === contentBounds.minY &&
@@ -235,23 +296,139 @@ export function computeLayout(input: LayoutInput) {
     return { minX, minY, maxX, maxY };
   })();
 
-  // 오프셋 계산
-  const topOffset = trackHeight + PADDING;
-  const offsetX = bounds ? PADDING - bounds.minX : 0;
-  const offsetY = bounds ? topOffset - bounds.minY : 0;
+  // 트랙 예약 - 축 정렬 키의 트랙은 콘텐츠 상단 위 밴드 하나로 예약하고,
+  // 회전 키의 트랙은 자기 상변에서 기울어져 흐르므로 회전 AABB를 창·배경에 합산한다
+  const trackKeyPositions = currentKeys.map(
+    (_key, index) => currentPositions[index],
+  );
+  const visibleTrackKeys = trackKeyPositions.filter(
+    (pos) => pos && !pos.hidden,
+  );
+  const hasUnrotatedTrackKey = visibleTrackKeys.some(
+    (pos) => (pos.rotation ?? 0) === 0,
+  );
+  const reserveTop =
+    hasUnrotatedTrackKey || visibleTrackKeys.length === 0 ? trackHeight : 0;
 
-  // 배경 박스 - 콘텐츠 바운즈 + 패딩, 창 좌표 기준.
+  // 회전 키의 자동 시작선 보정 - 같은 방향(각도 오차 안)으로 흐르는 키끼리 오프셋 없는
+  // 상변을 진행축에 투영해 가장 앞선 선에 맞춘다. 회전 0의 "한 줄에서 시작"을 방향별로
+  // 일반화한 것이고, 혼자면 자기 상변. 사용자 노트 오프셋은 보정 뒤 로컬 프레임으로
+  // 얹는다(회전 0의 topMostY + offsetY와 같은 순서). 이동량은 평행이동에 불변이라
+  // 창 오프셋 전(창 크기)과 후(트랙 배치)에 같은 값을 쓴다
+  const trackGeometry = (
+    pos: (typeof trackKeyPositions)[number],
+    withUserOffset: boolean,
+    hitline?: number,
+  ) =>
+    computeTrackGeometry({
+      keyX: pos.dx,
+      keyY: pos.dy,
+      keyWidth: pos.width,
+      keyHeight: pos.height,
+      rotation: pos.rotation ?? 0,
+      trackHeight,
+      noteWidth: pos.noteWidth,
+      noteAlignment: pos.noteAlignment,
+      noteOffsetX: withUserOffset ? pos.noteOffsetX : undefined,
+      noteOffsetY: withUserOffset ? pos.noteOffsetY : undefined,
+      hitline,
+    });
+  const rotatedFlowShiftByIndex = new Map<number, number>();
+  (() => {
+    // 0° 키도 기준선에 참여한다 - 오차 안의 미세 회전 키가 0° 키의 히트라인과 이어지도록.
+    // 0° 키 자신은 기존 히트라인 경로를 타므로 이동량은 회전 키에만 준다
+    const candidates: number[] = [];
+    let hasRotated = false;
+    trackKeyPositions.forEach((pos, index) => {
+      if (!pos || pos.hidden) return;
+      candidates.push(index);
+      if ((pos.rotation ?? 0) !== 0) hasRotated = true;
+    });
+    if (!hasRotated) return;
+    const baseGeometry = candidates.map((index) => {
+      const pos = trackKeyPositions[index];
+      const onHitline =
+        (pos.rotation ?? 0) === 0 && pos.noteAutoYCorrection !== false;
+      return trackGeometry(
+        pos,
+        false,
+        onHitline ? contentBounds?.minY : undefined,
+      );
+    });
+    groupSameFlowAngles(
+      candidates.map((index) => trackKeyPositions[index].rotation ?? 0),
+    ).forEach((group) => {
+      const origins = group.map((member) => baseGeometry[member].origin);
+      group.forEach((member) => {
+        const index = candidates[member];
+        const pos = trackKeyPositions[index];
+        // 보정을 끈 키도 같은 방향이면 기준선에는 참여한다
+        if ((pos.rotation ?? 0) === 0 || pos.noteAutoYCorrection === false)
+          return;
+        const { origin, direction } = baseGeometry[member];
+        rotatedFlowShiftByIndex.set(
+          index,
+          sameFlowStartShift(origin, direction, origins),
+        );
+      });
+    });
+  })();
+
+  // 노트 효과가 꺼져 트랙 높이가 0이면 창을 넓힐 트랙이 없다
+  const trackBounds: Bounds | null = (() => {
+    if (trackHeight <= 0) return null;
+    let acc: Bounds | null = null;
+    trackKeyPositions.forEach((pos, index) => {
+      if (!pos || pos.hidden) return;
+      const onHitline =
+        (pos.rotation ?? 0) === 0 && pos.noteAutoYCorrection !== false;
+      const { rect } = translateTrackGeometry(
+        trackGeometry(pos, true, onHitline ? contentBounds?.minY : undefined),
+        rotatedFlowShiftByIndex.get(index) ?? 0,
+      );
+      acc = acc ? unionBounds(acc, rect) : rect;
+    });
+    return acc;
+  })();
+
+  // 음수 오프셋·키보다 넓은 노트도 회전 여부와 관계없이 실제 트랙 끝까지 예약
+  // 창 바운즈 = 콘텐츠·도달 범위 + 위쪽 트랙 밴드 + 트랙 AABB
+  const windowBounds: Bounds | null = (() => {
+    if (!bounds) return null;
+    const banded = { ...bounds, minY: bounds.minY - reserveTop };
+    return trackBounds ? unionBounds(banded, trackBounds) : banded;
+  })();
+
+  // 오프셋 계산 - 창 바운즈 원점이 PADDING 안쪽에 오도록
+  const offsetX = windowBounds ? PADDING - windowBounds.minX : 0;
+  const offsetY = windowBounds ? PADDING - windowBounds.minY : 0;
+
+  // 네이티브 창 크기. 회전 0 레이아웃은 기존 공식(바운즈 + 패딩 + 트랙 밴드)과 같다
+  const contentSize = windowBounds
+    ? {
+        width: windowBounds.maxX - windowBounds.minX + PADDING * 2,
+        height: windowBounds.maxY - windowBounds.minY + PADDING * 2,
+      }
+    : null;
+
+  // 배경 박스 - 콘텐츠 바운즈 + 트랙 밴드 + 회전 얼굴·트랙 + 패딩, 창 좌표 기준.
   // 스프라이트 도달 여유로 창 원점이 왼쪽·위로 밀리면 x·y가 그만큼 커져
   // 배경의 화면상 위치·크기는 오버행 유무와 무관하게 동일하다
-  const backgroundBox =
-    bounds && contentBounds
-      ? {
-          x: contentBounds.minX - bounds.minX,
-          y: contentBounds.minY - bounds.minY,
-          width: contentBounds.maxX - contentBounds.minX + PADDING * 2,
-          height: contentBounds.maxY - contentBounds.minY + PADDING + topOffset,
-        }
-      : null;
+  const backgroundBox = (() => {
+    if (!contentBounds || !windowBounds) return null;
+    let area: Bounds = {
+      ...contentBounds,
+      minY: contentBounds.minY - reserveTop,
+    };
+    if (rotatedFaceBounds) area = unionBounds(area, rotatedFaceBounds);
+    if (trackBounds) area = unionBounds(area, trackBounds);
+    return {
+      x: area.minX + offsetX - PADDING,
+      y: area.minY + offsetY - PADDING,
+      width: area.maxX - area.minX + PADDING * 2,
+      height: area.maxY - area.minY + PADDING * 2,
+    };
+  })();
 
   // 원본 객체와 오프셋이 그대로면 이전 결과를 재사용한다.
   // 매번 새 객체를 만들면 아래쪽 Key의 React.memo가 항상 깨져,
@@ -259,7 +436,7 @@ export function computeLayout(input: LayoutInput) {
   const applyOffset = <T extends { dx: number; dy: number }>(
     items: T[],
   ): T[] => {
-    if (!bounds || !items.length) return items;
+    if (!windowBounds || !items.length) return items;
     return items.map((item) => {
       const cached = offsetCache.get(item);
       if (cached && cached.x === offsetX && cached.y === offsetY) {
@@ -281,47 +458,54 @@ export function computeLayout(input: LayoutInput) {
   const displayKnobPositions = applyOffset(currentKnobPositions);
   const displaySpritePositions = applyOffset(currentSpritePositions);
 
-  const positionOffset = bounds ? { x: offsetX, y: offsetY } : { x: 0, y: 0 };
+  const positionOffset = windowBounds
+    ? { x: offsetX, y: offsetY }
+    : { x: 0, y: 0 };
 
-  // 콘텐츠 상단의 창 좌표. 스프라이트 오버행이 위로 없으면 topOffset과 같다
+  // 콘텐츠 상단의 창 좌표. 위쪽 오버행이 없으면 트랙 밴드 + PADDING과 같다
   const topMostY = contentBounds ? contentBounds.minY + offsetY : 0;
   // 콘텐츠 왼쪽의 창 좌표. 왼쪽 오버행이 없으면 PADDING과 같다
   const leftMostX = contentBounds ? contentBounds.minX + offsetX : 0;
 
-  // WebGL 트랙 계산
+  // WebGL 트랙 계산 - 지오메트리는 trackGeometry 단일 정의.
+  // 회전 0은 콘텐츠 상단(topMostY), 회전 키는 같은 방향 키들의 공통 시작선에 맞춘다
   const webglTracks = currentKeys
     .map((key, index) => {
       const originalPosition = currentPositions[index];
       if (!originalPosition) return null;
       if (originalPosition.hidden) return null;
       const position = displayPositions[index] ?? originalPosition;
-      const useAutoCorrection = position.noteAutoYCorrection !== false;
-      const trackStartY = useAutoCorrection ? topMostY : position.dy;
-      const keyWidth = position.width;
-      const desiredNoteWidth =
-        typeof position.noteWidth === 'number' &&
-        Number.isFinite(position.noteWidth)
-          ? Math.max(1, position.noteWidth)
-          : keyWidth;
-      const noteAlign = position.noteAlignment ?? 'center';
-      const noteAlignOffsetX =
-        noteAlign === 'left'
-          ? 0
-          : noteAlign === 'right'
-          ? keyWidth - desiredNoteWidth
-          : (keyWidth - desiredNoteWidth) / 2;
-      const userOffsetX = position.noteOffsetX ?? 0;
-      const userOffsetY = position.noteOffsetY ?? 0;
+      const rotation = position.rotation ?? 0;
+      const useAutoCorrection =
+        rotation === 0 && position.noteAutoYCorrection !== false;
+      const geometry = translateTrackGeometry(
+        computeTrackGeometry({
+          keyX: position.dx,
+          keyY: position.dy,
+          keyWidth: position.width,
+          keyHeight: position.height,
+          rotation,
+          trackHeight,
+          noteWidth: position.noteWidth,
+          noteAlignment: position.noteAlignment,
+          noteOffsetX: position.noteOffsetX,
+          noteOffsetY: position.noteOffsetY,
+          hitline: useAutoCorrection ? topMostY : undefined,
+        }),
+        rotatedFlowShiftByIndex.get(index) ?? 0,
+      );
 
       return {
         trackKey: key,
         trackIndex: position.zIndex ?? index,
         position: {
           ...position,
-          dx: position.dx + noteAlignOffsetX + userOffsetX,
-          dy: trackStartY + userOffsetY,
+          dx: geometry.origin.x,
+          dy: geometry.origin.y,
         },
-        width: desiredNoteWidth,
+        // 진행 방향 단위벡터 - 노트 버퍼가 allocate 시점에 스냅샷한다
+        direction: geometry.direction,
+        width: geometry.crossSize,
         height: trackHeight,
         noteColor: position.noteColor,
         noteOpacity: position.noteOpacity,
@@ -350,8 +534,10 @@ export function computeLayout(input: LayoutInput) {
     .filter(Boolean);
 
   return {
-    // 창 크기 계산이 쓰는 창 바운즈 (콘텐츠 + 스프라이트 이미지 도달 범위)
+    // 창 바운즈 (콘텐츠 + 스프라이트 이미지 도달 범위 + 회전 얼굴) - 트랙 밴드 제외
     bounds,
+    // 네이티브 창 크기 - 창 바운즈 + 트랙 밴드 + 회전 트랙 + 패딩
+    contentSize,
     // 배경이 덮는 박스 - 창 좌표 기준, 오버행 여유는 배경 밖 투명으로 남는다
     backgroundBox,
     displayPositions,
@@ -360,8 +546,6 @@ export function computeLayout(input: LayoutInput) {
     displayKnobPositions,
     displaySpritePositions,
     positionOffset,
-    // 창 높이·배경 박스가 같은 값을 쓰도록 노출
-    topOffset,
     topMostY,
     leftMostX,
     // fixed-position 델타의 기준점 - 창 바운즈가 아니라 콘텐츠 원점을 쓴다
