@@ -29,8 +29,8 @@ use crate::{
     },
     services::settings::apply_patch_to_store,
     state::{
+        assets::image_asset::{import_image_bytes, import_image_file},
         editor::validate_history_restore_metadata,
-        image_asset::{import_image_bytes, import_image_file},
         tab_metadata::{
             legacy_tab_order, normalize_bar_count, normalize_tab_order,
             reconcile_custom_tab_metadata,

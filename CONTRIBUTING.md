@@ -67,6 +67,16 @@ src-tauri/src/         # Rust 백엔드
 └── audio/            # 사운드 엔진
 ```
 
+### 편집 런타임과 네이티브 상태
+
+`src/renderer/editor/runtime/`은 책임별로 나눕니다. `coordinator`는 커밋 조정·충돌 재조정, `projection`은 의미 연산의 문서 투영, `operations`는 요소 편집, `intent`는 편집 대상 결정, `geometry`는 배치 계산, `gesture`는 프리뷰·세션, `lifecycle`은 flush·쓰기 차단을 담당합니다. 테스트는 구현 옆에 둡니다. 커밋 엔진에 UI 스토어 의존성이 유입되지 않도록 소유 모듈을 직접 import하고 공통 barrel은 만들지 않습니다.
+
+`PropertiesPanel/`은 재사용 입력을 `controls`, 패널 탐색·외형을 `navigation`, 선택 어댑터를 `selection`, 플러그인 설정을 `plugin`으로 묶습니다. 기존 `single`·`batch`·`layer` 그룹은 유지합니다. 파일을 옮길 때 테스트도 구현과 함께 이동합니다.
+
+`src-tauri/src/state/assets/`는 로컬 자산 경로·가져오기를, `state/window/`는 플랫폼 창 연동·패널 드래그를 담당합니다. 패널 게스처 상태 전이는 `panel_drag/machine.rs`에 둡니다. 문서 커밋·저장·복구는 기존 상태 모듈이 계속 소유합니다.
+
+`npm run type-check`는 `tsconfig.strict.json`도 실행합니다. 공유 계약, 편집 모델, 커밋 엔진, 의미 연산 투영, 순수 배치 계획과 이들이 import하는 의존성을 strict로 검사합니다. UI 통합과 테스트 fixture는 기존 설정을 사용하며, 해당 영역을 정리할 때 strict 범위도 확장합니다. 오류를 non-null assertion이나 `any`로 덮지 않습니다.
+
 ## 📌 코딩 규칙
 
 ### 파일 네이밍
@@ -106,7 +116,7 @@ src-tauri/src/         # Rust 백엔드
 ### 프론트엔드 변경 시
 
 ```bash
-npx tsc --noEmit    # 타입 체크
+npm run type-check  # 전체 타입 체크 + 핵심 영역 strict 검사
 npm run lint        # 린트
 npm run format      # 포맷팅
 ```

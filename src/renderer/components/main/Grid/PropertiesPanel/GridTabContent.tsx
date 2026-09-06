@@ -1,9 +1,13 @@
 import React from 'react';
-import { settingsApi } from '@api/modules/settingsApi';
+import { settingsApi } from '@api/modules/app/settingsApi';
 import { useTranslation } from '@contexts/useTranslation';
 import { useSettingsStore, type GridSettings } from '@stores/useSettingsStore';
-import { PropertySection, PropertyRow, NumberInput } from './PropertyInputs';
-import Checkbox from '@components/main/common/Checkbox';
+import {
+  PropertySection,
+  PropertyRow,
+  NumberInput,
+} from './controls/PropertyInputs';
+import Checkbox from '@components/main/common/checkbox/Checkbox';
 
 // ============================================================================
 // 그리드 탭 콘텐츠 컴포넌트

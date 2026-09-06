@@ -385,7 +385,7 @@ export function canonicalGradientOrNull(value: unknown): GradientSpec | null {
 export function canonicalizePositionGradients<
   T extends Record<string, unknown>,
 >(position: T): T {
-  let next: Record<string, unknown> | null = null;
+  let next: T | null = null;
   const ensure = (): Record<string, unknown> => (next ??= { ...position });
 
   for (const [baseField, siblingField] of KEY_PAIR_FIELDS) {
@@ -562,7 +562,7 @@ export function canonicalizePositionGradients<
     }
   }
 
-  return (next as T) ?? position;
+  return next ?? position;
 }
 
 export type ColorModeValue =

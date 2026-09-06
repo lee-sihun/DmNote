@@ -293,7 +293,7 @@ const projectNotePaintPatchBase = (
           noteGradient: spec,
         };
   }
-  if ('color' in value) {
+  if ('color' in value && value.color !== undefined) {
     // 기존 {color} = 구형 적용 + sibling 제거 (§9-5 전이 표)
     return glow
       ? {

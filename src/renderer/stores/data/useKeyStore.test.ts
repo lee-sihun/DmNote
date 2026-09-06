@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const apiMocks = vi.hoisted(() => ({ setMode: vi.fn() }));
 
-vi.mock('@api/modules/keyModeApi', () => ({
+vi.mock('@api/modules/editor/keyModeApi', () => ({
   setKeyMode: (...args: unknown[]) => apiMocks.setMode(...args),
 }));
 

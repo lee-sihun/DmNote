@@ -6,7 +6,7 @@
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Key } from '@components/shared/Key';
+import { Key } from '@components/shared/key/Key';
 import StatItem from './StatItem';
 import { setKeyActive } from '@stores/signals/keySignals';
 import {

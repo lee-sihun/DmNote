@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { drainEditorWrites } from '@src/renderer/editor/runtime/editorWriteBarrier';
+import { drainEditorWrites } from '@src/renderer/editor/runtime/lifecycle/editorWriteBarrier';
 import {
   beginPluginInstancesEditSession,
   clearPluginInstancesEditSessions,

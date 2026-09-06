@@ -77,7 +77,7 @@ const implementationCommit = execFileSync(
     '-1',
     '--format=%H',
     '--',
-    'src/renderer/components/main/Grid/PropertiesPanel/PropertyInputs.tsx',
+    'src/renderer/components/main/Grid/PropertiesPanel/controls/PropertyInputs.tsx',
     'src/renderer/components/main/common/SearchField.tsx',
   ],
   { cwd: root, encoding: 'utf8' },
@@ -96,7 +96,7 @@ const correctnessResult = spawnSync(
   [
     'vitest',
     'run',
-    'src/renderer/components/main/Grid/PropertiesPanel/PropertyInputs.test.tsx',
+    'src/renderer/components/main/Grid/PropertiesPanel/controls/PropertyInputs.test.tsx',
     'src/renderer/components/main/common/SearchField.test.tsx',
   ],
   { cwd: root, stdio: 'inherit' },

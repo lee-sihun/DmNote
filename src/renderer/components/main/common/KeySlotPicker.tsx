@@ -1,8 +1,8 @@
 import React, { useCallback } from 'react';
-import PickerSurface from '@components/main/Grid/PropertiesPanel/PickerSurface';
+import PickerSurface from '@components/main/Grid/PropertiesPanel/controls/PickerSurface';
 import TabSwitch from '@components/main/common/TabSwitch';
 import ListAddRow from '@components/main/common/ListAddRow';
-import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
+import { getKeyInfoByGlobalKey } from '@utils/input/KeyMaps';
 import { MAX_SLOT_KEYS } from '@utils/keySlot';
 import type { KeySlotUiMode } from '@utils/keySlot';
 

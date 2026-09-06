@@ -24,13 +24,13 @@ import PropertiesPanelHost from '@components/main/Grid/PropertiesPanelHost';
 import { isModalLayerActive } from '@components/main/Modal/popupLayer';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import type { ShortcutBinding } from '@src/types/settings/shortcuts';
-import FloatingPopup from '@components/main/Modal/FloatingPopup';
+import FloatingPopup from '@components/main/Modal/floatingPopup/FloatingPopup';
 import { CANVAS_POPUP_CHROME_CLASS } from '@components/main/Modal/popupChrome';
 import { useModalPresence } from '@hooks/ui/usePopupPresence';
 import { useRetainedWhileOpen } from '@hooks/ui/useRetainedValue';
 import PopupExit from '@components/main/Modal/PopupExit';
-import Palette from '@components/main/Modal/content/pickers/Palette';
-import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
+import Palette from '@components/main/Modal/content/pickers/color/Palette';
+import ColorPicker from '@components/main/Modal/content/pickers/color/ColorPicker';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { orderedTabIds } from '@utils/tabOrder';
 import { useAppBootstrap } from '@hooks/app/useAppBootstrap';
@@ -44,11 +44,11 @@ import {
 import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 import { usePanelHostStore } from '@stores/grid/usePanelHostStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
-import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
+import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/lifecycle/historyEditorFlushLock';
 import { useOptimisticBooleanCommit } from '@hooks/useOptimisticBooleanCommit';
-import { keysApi } from '@api/modules/keysApi';
-import { settingsApi } from '@api/modules/settingsApi';
-import { appApi } from '@api/modules/appApi';
+import { keysApi } from '@api/modules/editor/keysApi';
+import { settingsApi } from '@api/modules/app/settingsApi';
+import { appApi } from '@api/modules/app/appApi';
 
 import { useUIStore } from '@stores/useUIStore';
 

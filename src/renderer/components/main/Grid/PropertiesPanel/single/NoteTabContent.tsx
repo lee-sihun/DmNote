@@ -6,23 +6,23 @@ import {
   PropertySection,
   NumberInput,
   OptionalNumberInput,
-} from '../PropertyInputs';
-import Checkbox from '@components/main/common/Checkbox';
-import Dropdown from '@components/main/common/Dropdown';
-import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
+} from '../controls/PropertyInputs';
+import Checkbox from '@components/main/common/checkbox/Checkbox';
+import Dropdown from '@components/main/common/dropdown/Dropdown';
+import ColorPicker from '@components/main/Modal/content/pickers/color/ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
 import {
   parseAlphaPercent,
   hexWithAlphaPercent,
 } from '@utils/color/colorUtils';
 import { gradientToCss } from '@src/types/color';
-import { toNoteHexColor } from '../notePaintColorUtils';
+import { toNoteHexColor } from '../selection/notePaintColorUtils';
 import { NOTE_SETTINGS_CONSTRAINTS } from '@src/types/settings/noteSettingsConstraints';
 import { useSettingsStore } from '@stores/useSettingsStore';
-import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
-import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
+import { ColorSwatchButton } from '@components/main/Modal/content/pickers/color/ColorSwatch';
+import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
-import NoteGlowPaintSourceDropdown from '../NoteGlowPaintSourceDropdown';
+import NoteGlowPaintSourceDropdown from '../controls/NoteGlowPaintSourceDropdown';
 import { useSingleNotePaint } from './useSingleNotePaint';
 
 const NoteTabContent: React.FC<NoteTabContentProps> = ({

@@ -1,7 +1,7 @@
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import FloatingPopup from './FloatingPopup';
+import FloatingPopup from './floatingPopup/FloatingPopup';
 import Modal from './Modal';
 import { isModalLayerActive } from './popupLayer';
 import {

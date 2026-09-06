@@ -13,7 +13,7 @@ import {
   createRafLatestScheduler,
   type ContinuousInputStrategy,
 } from '@utils/animation/rafLatestScheduler';
-import { beginDragCursor, endDragCursor } from '@utils/core/dragCursor';
+import { beginDragCursor, endDragCursor } from '@utils/dom/dragCursor';
 import {
   applyGradientAxisMagnet,
   buildGradientAxisGeometry,

@@ -1,7 +1,7 @@
 import type {
   KeySoundOutputDevices,
   KeySoundOutputState,
-} from '@api/modules/resourceApi';
+} from '@api/modules/resources/resourceApi';
 
 export const ASIO_BUFFER_SIZES = [64, 128, 256, 512, 1024] as const;
 export const DEFAULT_ASIO_BUFFER = 64;

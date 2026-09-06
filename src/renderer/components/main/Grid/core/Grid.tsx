@@ -4,7 +4,7 @@ import React, {
   useState,
   useSyncExternalStore,
 } from 'react';
-import { keysApi } from '@api/modules/keysApi';
+import { keysApi } from '@api/modules/editor/keysApi';
 
 declare global {
   interface Window {
@@ -15,36 +15,36 @@ import { useTranslation } from '@contexts/useTranslation';
 import {
   commitStableLayerZOrder,
   orderStableZTargetsForBatch,
-} from '@src/renderer/editor/runtime/layerZOrderIntent';
+} from '@src/renderer/editor/runtime/intent/layerZOrderIntent';
 import {
   reportElementOpError,
   reportElementOpSkipped,
-} from '@src/renderer/editor/runtime/elementIntent';
+} from '@src/renderer/editor/runtime/intent/elementIntent';
 import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import TabCssModal from '../../Modal/content/editors/TabCssModal';
 import TabNoteSettingModal from '../../Modal/content/editors/TabNoteSettingModal';
-import ListPopup from '../../Modal/ListPopup';
+import ListPopup from '../../Modal/listPopup/ListPopup';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import { PluginElementsRenderer } from '@components/shared/PluginElementsRenderer';
-import { useGridZoomPan } from '@hooks/Grid/useGridZoomPan';
+import { PluginElementsRenderer } from '@components/shared/plugin/PluginElementsRenderer';
+import { useGridZoomPan } from '@hooks/Grid/viewport/useGridZoomPan';
 import {
   addCanvasElementAt,
   placeFrozenDuplicateAt,
   useGridCanvasActions,
-} from '@hooks/Grid/useGridCanvasActions';
-import type { DuplicateState } from '@hooks/Grid/useGridCanvasActions';
+} from '@hooks/Grid/contextMenu/useGridCanvasActions';
+import type { DuplicateState } from '@hooks/Grid/contextMenu/useGridCanvasActions';
 import GridMinimap from './GridMinimap';
 import GridBackground from './GridBackground';
 import SmartGuidesOverlay from '../overlays/SmartGuidesOverlay';
 import MarqueeSelectionOverlay from '../overlays/MarqueeSelectionOverlay';
 import { useGradientEditStore } from '@stores/grid/useGradientEditStore';
-import { getGridViewportLayerStyles } from '@utils/core/gridViewportStyles';
+import { getGridViewportLayerStyles } from '@utils/grid/gridViewportStyles';
 import KeyCounterPreviewLayer from '../layers/KeyCounterPreviewLayer';
 import StatCounterLayer from '../layers/StatCounterLayer';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
@@ -68,8 +68,8 @@ import type {
   CounterAnimationBezier,
 } from '@src/types/key/keys';
 import { slotCanonical, slotDisplayName } from '@utils/keySlot';
-import { overlayApi } from '@api/modules/overlayApi';
-import { panelWindowApi } from '@api/modules/panelWindowApi';
+import { overlayApi } from '@api/modules/window/overlayApi';
+import { panelWindowApi } from '@api/modules/window/panelWindowApi';
 import {
   groupSelectedElements,
   ungroupSelectedElements,
@@ -79,7 +79,7 @@ import {
   composePreviewPositions,
   getPreviewOverlayVersion,
   subscribePreviewOverlay,
-} from '@src/renderer/editor/runtime/previewOverlay';
+} from '@src/renderer/editor/runtime/gesture/previewOverlay';
 import {
   buildMixedSelectionMenuItems,
   gridAddTypeForMenuItem,
@@ -90,7 +90,7 @@ import DuplicateElementGhost from './DuplicateElementGhost';
 import NativeGridElements from './NativeGridElements';
 import GridSelectionOverlays from '../overlays/GridSelectionOverlays';
 import { executeNativeContextMenuAction } from './nativeContextMenuActions';
-import { useSelectedElementDragLifecycle } from '@hooks/Grid/useSelectedElementDragLifecycle';
+import { useSelectedElementDragLifecycle } from '@hooks/Grid/drag/useSelectedElementDragLifecycle';
 
 type ToolbarAddRequest = {
   id: number;

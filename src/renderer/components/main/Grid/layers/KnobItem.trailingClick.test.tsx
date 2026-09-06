@@ -34,7 +34,7 @@ vi.mock('@hooks/Grid', async (importOriginal) => {
   };
 });
 
-vi.mock('@hooks/Grid/useSelectionDrag', () => ({
+vi.mock('@hooks/Grid/drag/useSelectionDrag', () => ({
   useSelectionDrag: () => ({
     handlePointerDown: () => {},
     movedDuringPressRef: { current: false },

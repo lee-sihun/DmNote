@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   KeySoundOutputBackend,
   KeySoundOutputState,
-} from '@api/modules/resourceApi';
+} from '@api/modules/resources/resourceApi';
 import {
   useKeySoundOutput,
   type KeySoundOutputController,
@@ -17,7 +17,7 @@ const apiMocks = vi.hoisted(() => ({
   setBackend: vi.fn(),
 }));
 
-vi.mock('@api/modules/resourceApi', () => ({
+vi.mock('@api/modules/resources/resourceApi', () => ({
   keySoundOutputApi: apiMocks,
 }));
 

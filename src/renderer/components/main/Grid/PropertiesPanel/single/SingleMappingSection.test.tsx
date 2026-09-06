@@ -33,7 +33,7 @@ vi.mock('@components/main/common/KeySlotPicker', () => ({
   },
 }));
 
-vi.mock('../PropertyInputs', () => ({
+vi.mock('../controls/PropertyInputs', () => ({
   PropertySection: ({ children }: { children: React.ReactNode }) => (
     <section>{children}</section>
   ),

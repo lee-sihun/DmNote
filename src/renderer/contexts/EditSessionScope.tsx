@@ -6,7 +6,7 @@ import {
   type ReactNode,
 } from 'react';
 
-import { getEditSessionMode } from '@src/renderer/editor/runtime/editSessionTarget';
+import { getEditSessionMode } from '@src/renderer/editor/runtime/intent/editSessionTarget';
 
 // 이 아래 트리는 캔버스 편집 대상에 묶여 있다는 표시.
 //

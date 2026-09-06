@@ -57,30 +57,45 @@ src-tauri/src/
 └── main.rs          # 진입점
 ```
 
+## 새 파일의 배치와 모듈 경계
+
+- 폴더당 파일 수의 강제 상한은 두지 않는다. 기능·변경 이유·실제 사용처를 기준으로 기존 폴더를 먼저 활용한다.
+- 같은 기능의 구현·전용 타입·단위 테스트를 함께 둔다. 여러 기능을 가로지르는 계약 테스트는 `src/renderer/__tests__/{editor,panel,popup,rendering,plugin}`에 둔다.
+- 공용 입력 컴포넌트는 `components/main/common/{numberInput,dropdown,checkbox}`, popup은 `components/main/Modal/{floatingPopup,listPopup,tooltip}`, picker는 `content/pickers/{color,font,sound}`에 둔다. 공유 popup layer·chrome·exit의 소유자는 `Modal` 상위에 유지한다.
+- Grid 훅은 `hooks/Grid/{selection,drag,resize,viewport,contextMenu}`로 구분한다. `hooks/Grid/index.ts`는 외부 진입점이며 내부 모듈은 실제 정의 파일을 참조한다.
+- batch 패널의 다파일 기능은 `PropertiesPanel/batch/{geometry,style,note,graph}`에 둔다. 공통 집계·commit은 batch 상위에서 소유한다. 내부에서 `PropertiesPanel/index.ts`를 거쳐 자기 구현을 다시 참조하지 않는다.
+- 메인·오버레이가 공유하는 요소 표면은 `components/shared/{key,graph,plugin}`에 둔다.
+- API 구현은 `api/modules/{app,editor,plugin,resources,window}`로 구분한다. `dmnoteApi.ts`, `internalApi.ts`, `hostGlobalApi.ts`의 기존 진입점과 IPC shim 계약을 유지한다.
+- 유틸리티는 `media`, `typography`, `input`, `number`, `element` 등 실제 역할에 배치한다. `utils/core`에 기능별 코드를 다시 쌓지 않는다. 공용 유틸리티가 상위 UI에 새로 의존하지 않도록 한다.
+- 플러그인 보조 구현은 `utils/plugin/{components,interactions,layout,menu}`에 둔다. runtime의 권한·상태 소유권은 기존 `plugins/runtime`에 유지한다.
+- 벤치마크 화면과 시나리오는 `benchmarks/{controls,grid,overlay}`에 함께 둔다. 이동 시 `package.json` 실행 경로, mock·lazy import, 소스 파일을 읽는 계약 테스트, WebView 진입점과 strict include를 함께 확인한다.
+- 모든 폴더에 `index.ts`나 한 파일만 감싸는 하위 폴더를 추가하지 않는다. Rust 파일 이동을 위해 가시성을 넓히거나 저장·복구 트랜잭션의 소유 경계를 바꾸지 않는다.
+- 폴더별 판단과 이동 전후 통계는 [소스 분류 결과](docs/source-organization-report.md), 실행 기준은 [후속 계획](docs/source-organization-plan.md)을 참고한다.
+
 ## 네이밍 컨벤션
 
 ### TypeScript / React
 
-| 대상 | 규칙 | 예시 |
-|------|------|------|
-| 컴포넌트 파일 | PascalCase | `GridBackground.tsx`, `StatItem.tsx` |
-| 훅 파일 | camelCase + `use` 접두사 | `useKeyManager.ts`, `useLenis.ts` |
-| 스토어 파일 | camelCase + `use` 접두사 | `useFontStore.ts`, `useKeyStore.ts` |
-| 유틸리티 파일 | camelCase | `cubicBezier.ts`, `keyStatsService.ts` |
-| 컴포넌트명 | PascalCase | `const GridBackground = () => {}` |
-| Props 타입 | PascalCase + `Props` 접미사 | `interface GridBackgroundProps` |
-| 타입/인터페이스 | PascalCase | `type SelectedKey`, `interface FontState` |
-| 변수/함수 | camelCase | `isChecked`, `handleClick()` |
-| Zustand 스토어 | `use` + PascalCase + `Store` | `useFontStore`, `useUIStore` |
+| 대상            | 규칙                         | 예시                                      |
+| --------------- | ---------------------------- | ----------------------------------------- |
+| 컴포넌트 파일   | PascalCase                   | `GridBackground.tsx`, `StatItem.tsx`      |
+| 훅 파일         | camelCase + `use` 접두사     | `useKeyManager.ts`, `useLenis.ts`         |
+| 스토어 파일     | camelCase + `use` 접두사     | `useFontStore.ts`, `useKeyStore.ts`       |
+| 유틸리티 파일   | camelCase                    | `cubicBezier.ts`, `keyStatsService.ts`    |
+| 컴포넌트명      | PascalCase                   | `const GridBackground = () => {}`         |
+| Props 타입      | PascalCase + `Props` 접미사  | `interface GridBackgroundProps`           |
+| 타입/인터페이스 | PascalCase                   | `type SelectedKey`, `interface FontState` |
+| 변수/함수       | camelCase                    | `isChecked`, `handleClick()`              |
+| Zustand 스토어  | `use` + PascalCase + `Store` | `useFontStore`, `useUIStore`              |
 
 ### Rust
 
-| 대상 | 규칙 | 예시 |
-|------|------|------|
-| 파일명 | snake_case | `app_state.rs`, `key_sound.rs` |
-| 구조체/열거형 | PascalCase | `struct AppState`, `enum FontType` |
-| 함수/메서드 | snake_case | `sync_counters()`, `initialize_runtime()` |
-| 상수 | UPPER_SNAKE_CASE | `OVERLAY_LABEL`, `DEFAULT_OVERLAY_WIDTH` |
+| 대상          | 규칙             | 예시                                      |
+| ------------- | ---------------- | ----------------------------------------- |
+| 파일명        | snake_case       | `app_state.rs`, `key_sound.rs`            |
+| 구조체/열거형 | PascalCase       | `struct AppState`, `enum FontType`        |
+| 함수/메서드   | snake_case       | `sync_counters()`, `initialize_runtime()` |
+| 상수          | UPPER_SNAKE_CASE | `OVERLAY_LABEL`, `DEFAULT_OVERLAY_WIDTH`  |
 
 ## 코딩 컨벤션
 
@@ -92,6 +107,7 @@ src-tauri/src/
 ### React 컴포넌트
 
 - **화살표 함수** + **Props 인라인 구조분해** 패턴 사용:
+
   ```tsx
   const UserProfile = ({ name, age }: UserProfileProps) => {
     return <div>{name}</div>;
@@ -99,6 +115,7 @@ src-tauri/src/
 
   export default UserProfile;
   ```
+
 - Props 타입은 `interface`로 정의, 컴포넌트 바로 위에 선언
 - 기본 export는 `export default` 사용 (컴포넌트)
 - 훅/유틸리티는 named export 사용

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
-import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
+import { getKeyInfoByGlobalKey } from '@utils/input/KeyMaps';
+import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/lifecycle/historyEditorFlushLock';
 
 interface UseKeySlotCaptureOptions {
   // 캡처 완료 콜백. listenIndex가 number면 해당 멤버 교체, null이면 추가

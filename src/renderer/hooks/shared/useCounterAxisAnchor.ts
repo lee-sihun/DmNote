@@ -4,7 +4,7 @@ import {
   type GradientEditSession,
   type GradientPreviewSurface,
 } from '@stores/grid/useGradientEditStore';
-import { gridAnchorBoundsFor } from '@utils/core/gridAnchorBounds';
+import { gridAnchorBoundsFor } from '@utils/grid/gridAnchorBounds';
 import { GLYPH_BOX_CHANGE_EVENT } from './useCounterGlyphPaint';
 
 /**

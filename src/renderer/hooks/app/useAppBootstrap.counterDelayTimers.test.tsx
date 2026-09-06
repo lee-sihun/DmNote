@@ -138,7 +138,7 @@ vi.mock('@stores/useFontStore', () => ({
 vi.mock('@api/pluginDisplayElements', () => ({
   getUndoRedoInProgress: vi.fn(() => false),
 }));
-vi.mock('@api/modules/obsApi', () => ({
+vi.mock('@api/modules/window/obsApi', () => ({
   obsApi: {
     onResync: vi.fn((listener: () => void) => {
       mocks.resyncListener = listener;
@@ -155,24 +155,27 @@ vi.mock('@api/modules/shared', () => ({
     return vi.fn();
   }),
 }));
-vi.mock('@api/modules/appApi', () => ({
+vi.mock('@api/modules/app/appApi', () => ({
   acknowledgeLifecycleAfterEditorFlush: vi.fn(),
   cancelLifecycleEditorFlush: vi.fn(),
 }));
-vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
-  editorCoordinator: {
-    subscribe: vi.fn(() => vi.fn()),
-    getState: vi.fn(() => ({
-      conflict: null,
-      failureKind: null,
-      error: null,
-    })),
-    resolveConflict: vi.fn(),
-    start: vi.fn(),
-    sync: vi.fn(),
-  },
-}));
-vi.mock('@api/modules/panelWindowApi', () => ({
+vi.mock(
+  '@src/renderer/editor/runtime/coordinator/editorStateCoordinator',
+  () => ({
+    editorCoordinator: {
+      subscribe: vi.fn(() => vi.fn()),
+      getState: vi.fn(() => ({
+        conflict: null,
+        failureKind: null,
+        error: null,
+      })),
+      resolveConflict: vi.fn(),
+      start: vi.fn(),
+      sync: vi.fn(),
+    },
+  }),
+);
+vi.mock('@api/modules/window/panelWindowApi', () => ({
   panelWindowApi: {
     onVisibility: vi.fn(() => vi.fn()),
     onCloseRequested: vi.fn(() => vi.fn()),
@@ -183,21 +186,24 @@ vi.mock('@api/modules/panelWindowApi', () => ({
 vi.mock('@plugins/runtime/displayElement/instancesUndoSync', () => ({
   initPluginInstancesUndoSync: vi.fn(),
 }));
-vi.mock('@api/modules/historyApi', () => ({
+vi.mock('@api/modules/editor/historyApi', () => ({
   historyApi: { onStatus: vi.fn(() => vi.fn()) },
 }));
 vi.mock('@stores/data/useHistoryStatusStore', () => ({
   useHistoryStatusStore: { getState: vi.fn(() => ({ applyStatus: vi.fn() })) },
   syncHistoryStatus: vi.fn(),
 }));
-vi.mock('@src/renderer/editor/runtime/lifecycleEditorFlush', () => ({
+vi.mock('@src/renderer/editor/runtime/lifecycle/lifecycleEditorFlush', () => ({
   flushFocusedEditor: vi.fn(),
 }));
-vi.mock('@src/renderer/editor/runtime/historyEditorFlushLock', () => ({
-  acquireHistoryEditorFlushLock: vi.fn(),
-  releaseHistoryEditorFlushLock: vi.fn(),
-  resetHistoryEditorFlushLock: vi.fn(),
-}));
+vi.mock(
+  '@src/renderer/editor/runtime/lifecycle/historyEditorFlushLock',
+  () => ({
+    acquireHistoryEditorFlushLock: vi.fn(),
+    releaseHistoryEditorFlushLock: vi.fn(),
+    resetHistoryEditorFlushLock: vi.fn(),
+  }),
+);
 vi.mock('@src/renderer/defaults', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@src/renderer/defaults')>()),
   initDefaults: vi.fn(),

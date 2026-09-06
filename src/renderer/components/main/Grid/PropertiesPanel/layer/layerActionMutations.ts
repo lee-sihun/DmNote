@@ -8,16 +8,16 @@ import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import type { LayerGroups } from '@src/types/layerGroups';
 import type { LayerItem } from '../types';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
-import { reportElementOpSkipped } from '@src/renderer/editor/runtime/elementIntent';
+import { reportElementOpSkipped } from '@src/renderer/editor/runtime/intent/elementIntent';
 import {
   patchElementHiddenById,
   patchElementLayerNameById,
   renameLayerGroupById,
-} from '@src/renderer/editor/runtime/elementOps';
+} from '@src/renderer/editor/runtime/operations/elementOps';
 import {
   setMixedElementGroups,
   setMixedLayerGroupHidden,
-} from '@src/renderer/editor/runtime/mixedElementGroups';
+} from '@src/renderer/editor/runtime/intent/mixedElementGroups';
 import {
   selectPropertyPanelPluginElements,
   usePluginDisplayElementStore,

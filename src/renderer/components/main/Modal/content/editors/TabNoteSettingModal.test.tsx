@@ -15,7 +15,7 @@ const testState = vi.hoisted(() => ({
 }));
 const apiMocks = vi.hoisted(() => ({ noteTabSet: vi.fn() }));
 
-vi.mock('@api/modules/noteTabApi', () => ({
+vi.mock('@api/modules/editor/noteTabApi', () => ({
   noteTabApi: {
     set: (...args: unknown[]) => apiMocks.noteTabSet(...args),
   },

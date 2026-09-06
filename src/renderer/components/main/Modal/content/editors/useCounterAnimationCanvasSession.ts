@@ -1,4 +1,4 @@
-import { beginDragCursor, endDragCursor } from '@utils/core/dragCursor';
+import { beginDragCursor, endDragCursor } from '@utils/dom/dragCursor';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { CounterAnimationBezier } from '@src/types/key/keys';
 import type { CounterAnimationPreset } from '@src/types/key/counterAnimation';

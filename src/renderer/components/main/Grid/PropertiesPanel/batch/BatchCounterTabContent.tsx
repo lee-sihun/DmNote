@@ -2,8 +2,8 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import type { KeyCounterSettings } from '@src/types/key/keys';
 import { createCounterAnimationPresetIntent } from '@src/types/key/counterAnimation';
-import { patchCounterAnimationPresetByTargets } from '@src/renderer/editor/runtime/elementOps';
-import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
+import { patchCounterAnimationPresetByTargets } from '@src/renderer/editor/runtime/operations/elementOps';
+import { reportElementOpError } from '@src/renderer/editor/runtime/intent/elementIntent';
 import {
   EMPTY_BATCH_ELEMENT_BINDING,
   type BatchElementBinding,
@@ -13,22 +13,22 @@ import {
   NumberInput,
   FontStyleToggle,
   PropertySection,
-} from '../index';
-import Checkbox from '@components/main/common/Checkbox';
-import Dropdown from '@components/main/common/Dropdown';
-import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
-import FontPickerOpenButton from '@components/main/Modal/content/pickers/FontPickerOpenButton';
-import FontWeightDropdown from '../FontWeightDropdown';
+} from '../controls/PropertyInputs';
+import Checkbox from '@components/main/common/checkbox/Checkbox';
+import Dropdown from '@components/main/common/dropdown/Dropdown';
+import FontPicker from '@components/main/Modal/content/pickers/font/FontPicker';
+import FontPickerOpenButton from '@components/main/Modal/content/pickers/font/FontPickerOpenButton';
+import FontWeightDropdown from '../controls/FontWeightDropdown';
 import CounterAnimationPicker from '@components/main/Modal/content/pickers/CounterAnimationPicker';
-import type { CounterAnimationKeyVisual } from '@utils/core/counterAnimationPreview';
-import { usePanelNav } from '../PanelNavContext';
-import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
+import type { CounterAnimationKeyVisual } from '@utils/counter/counterAnimationPreview';
+import { usePanelNav } from '../navigation/PanelNavContext';
+import { ColorSwatchButton } from '@components/main/Modal/content/pickers/color/ColorSwatch';
 import {
   DEFAULT_COUNTER_FONT_SIZE,
   DEFAULT_COUNTER_FONT_WEIGHT,
-} from '@utils/core/elementDefaults';
+} from '@utils/element/elementDefaults';
 import { useFontStore } from '@stores/useFontStore';
-import { resolveSupportedFontWeight } from '@utils/core/fontWeights';
+import { resolveSupportedFontWeight } from '@utils/typography/fontWeights';
 import type {
   EditorCounterLayoutPropertyPatchV1,
   EditorCounterTypographyPropertyPatchV1,

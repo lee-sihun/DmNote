@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 
-import { panelWindowApi } from '@api/modules/panelWindowApi';
+import { panelWindowApi } from '@api/modules/window/panelWindowApi';
 import { drainPendingOptimisticCommits } from '@hooks/pendingOptimisticCommits';
-import { flushFocusedEditor } from '@src/renderer/editor/runtime/lifecycleEditorFlush';
+import { flushFocusedEditor } from '@src/renderer/editor/runtime/lifecycle/lifecycleEditorFlush';
 import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 import {
   getPanelChildWindow,

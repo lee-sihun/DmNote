@@ -15,7 +15,7 @@ import {
 import { isMac } from '@utils/core/platform';
 import { useLenis } from '@hooks/useLenis';
 import { usePanelHost } from '@contexts/PanelHostContext';
-import ListPopup from '@components/main/Modal/ListPopup';
+import ListPopup from '@components/main/Modal/listPopup/ListPopup';
 import IconSwap from '@components/main/common/IconSwap';
 import CloseEyeIcon from '@assets/svgs/close_eye.svg';
 import OpenEyeIcon from '@assets/svgs/open_eye.svg';

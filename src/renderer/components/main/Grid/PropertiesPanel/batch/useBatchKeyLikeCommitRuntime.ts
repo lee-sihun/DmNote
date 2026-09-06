@@ -9,18 +9,18 @@ import {
   patchCounterFillByTargets,
   patchSoundEnabledByIds,
   patchSoundVolumeByIds,
-} from '@src/renderer/editor/runtime/elementOps';
-import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
-import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
-import { getEditSessionTarget } from '@src/renderer/editor/runtime/editSessionTarget';
+} from '@src/renderer/editor/runtime/operations/elementOps';
+import { reportElementOpError } from '@src/renderer/editor/runtime/intent/elementIntent';
+import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
+import { getEditSessionTarget } from '@src/renderer/editor/runtime/intent/editSessionTarget';
 import {
   captureBatchElementBinding,
   useBatchElementBinding,
 } from '@hooks/pickers/useBatchElementBinding';
-import { BATCH_STYLE_SOUND_PAGE_KEY } from './BatchStyleTabContent';
+import { BATCH_STYLE_SOUND_PAGE_KEY } from './style/BatchStyleTabContent';
 import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
-import { captureEditorDocument } from '@src/renderer/editor/runtime/editorStateCoordinator';
+import { captureEditorDocument } from '@src/renderer/editor/runtime/coordinator/editorStateCoordinator';
 import type {
   EditorNotePaintPropertyPatchV1,
   EditorCounterFillPropertyPatchV1,

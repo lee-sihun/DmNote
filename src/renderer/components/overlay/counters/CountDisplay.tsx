@@ -6,7 +6,7 @@ import {
   COUNTER_DEFAULT_BEZIER,
   createCubicBezierEasing,
 } from '@utils/cubicBezier';
-import { getCounterTypographyStyle } from '@utils/core/counterStyles';
+import { getCounterTypographyStyle } from '@utils/counter/counterStyles';
 import { useCounterGlyphPaint } from '@hooks/shared/useCounterGlyphPaint';
 
 export interface CountDisplayProps {

@@ -8,13 +8,13 @@ const mocks = vi.hoisted(() => ({
   getPanelChildWindow: vi.fn((): unknown => null),
 }));
 
-vi.mock('@api/modules/panelWindowApi', () => ({
+vi.mock('@api/modules/window/panelWindowApi', () => ({
   panelWindowApi: {
     present: () => mocks.present(),
     dock: () => mocks.dock(),
   },
 }));
-vi.mock('@src/renderer/editor/runtime/lifecycleEditorFlush', () => ({
+vi.mock('@src/renderer/editor/runtime/lifecycle/lifecycleEditorFlush', () => ({
   flushFocusedEditor: () => mocks.flushFocusedEditor(),
 }));
 vi.mock('@utils/panelWindow/panelChildWindow', () => ({

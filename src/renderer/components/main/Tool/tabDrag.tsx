@@ -17,7 +17,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { keysApi } from '@api/modules/keysApi';
+import { keysApi } from '@api/modules/editor/keysApi';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { scrollLenisBy } from '@hooks/useLenis';
 import { createDragBendMotion } from '@utils/animation/dragBendMotion';

@@ -10,7 +10,7 @@ import type {
   TabNoteSettings,
 } from '@src/types/settings/noteSettings';
 import { useTranslation } from '@contexts/useTranslation';
-import { noteTabApi } from '@api/modules/noteTabApi';
+import { noteTabApi } from '@api/modules/editor/noteTabApi';
 
 interface TabNoteSettingModalProps {
   isOpen: boolean;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { SIDE_PANEL_FRAME_CLASS } from '../Grid/PropertiesPanel/panelChrome';
+import { SIDE_PANEL_FRAME_CLASS } from '../Grid/PropertiesPanel/navigation/panelChrome';
 import {
   CANVAS_POPUP_CHROME_CLASS,
   CANVAS_POPUP_MATERIAL_CLASS,

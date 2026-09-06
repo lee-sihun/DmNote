@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { drainEditorWrites } from '@src/renderer/editor/runtime/editorWriteBarrier';
+import { drainEditorWrites } from '@src/renderer/editor/runtime/lifecycle/editorWriteBarrier';
 import { EDITOR_OPS_VERSION } from '@src/types/editor';
 import {
   beginMixedGestureTransaction,
@@ -62,11 +62,14 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
-  editorCoordinator: { commitGesture: mocks.commitGesture },
-}));
+vi.mock(
+  '@src/renderer/editor/runtime/coordinator/editorStateCoordinator',
+  () => ({
+    editorCoordinator: { commitGesture: mocks.commitGesture },
+  }),
+);
 
-vi.mock('@api/modules/gestureApi', () => ({
+vi.mock('@api/modules/editor/gestureApi', () => ({
   gestureApi: { commit: mocks.commitApi },
 }));
 

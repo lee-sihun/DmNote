@@ -1,8 +1,8 @@
 import type { GradientSpec } from '@src/types/color';
 import React, { useState } from 'react';
 import { useGradientPreviewSession } from '@stores/grid/useGradientEditStore';
-import GraphPanel from '@components/shared/GraphPanel';
-import { resolveImageSource } from '@utils/core/imageSource';
+import GraphPanel from '@components/shared/graph/GraphPanel';
+import { resolveImageSource } from '@utils/media/imageSource';
 import {
   useGridElementInteraction,
   type GridElementInteractionProps,

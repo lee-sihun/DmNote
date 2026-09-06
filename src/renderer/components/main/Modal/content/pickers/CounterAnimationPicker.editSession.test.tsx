@@ -24,7 +24,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('./CommonListPickerPage', () => ({ default: () => null }));
-vi.mock('@components/main/Modal/ListPopup', () => ({
+vi.mock('@components/main/Modal/listPopup/ListPopup', () => ({
   default: ({ onSelect }: { onSelect: (id: string) => void }) => {
     mocks.menuSelect = onSelect;
     return null;

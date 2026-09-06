@@ -15,7 +15,7 @@ import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import { releaseDragSession } from '@hooks/Grid/dragSession';
+import { releaseDragSession } from '@hooks/Grid/drag/dragSession';
 import type {
   PluginDefinitionInternal,
   PluginDisplayElementInternal,
@@ -46,9 +46,9 @@ vi.mock('@hooks/Grid', async (importOriginal) => {
   };
 });
 
-vi.mock('@hooks/Grid/useSelectionDrag', async (importOriginal) => {
+vi.mock('@hooks/Grid/drag/useSelectionDrag', async (importOriginal) => {
   const actual = await importOriginal<
-    typeof import('@hooks/Grid/useSelectionDrag')
+    typeof import('@hooks/Grid/drag/useSelectionDrag')
   >();
   return {
     ...actual,
@@ -102,7 +102,7 @@ vi.mock('@plugins/runtime/displayElement/pluginElementActions', () => ({
   patchUseInlineStylesViaAuthority: vi.fn(() => Promise.resolve(true)),
   updatePluginElement: vi.fn(),
 }));
-vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
+vi.mock('@src/renderer/editor/runtime/operations/elementOps', () => ({
   renameLayerGroupById: vi.fn(),
   commitElementGeometryById: vi.fn(),
   commitBatchGeometryByIds: vi.fn(),
@@ -144,20 +144,20 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchUseInlineStylesById: vi.fn(),
   patchUseInlineStylesByTargets: vi.fn(),
 }));
-vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
+vi.mock('@src/renderer/editor/runtime/intent/elementIntent', () => ({
   reportElementOpSkipped: vi.fn(),
   reportElementOpError: vi.fn(),
 }));
-vi.mock('@src/renderer/editor/runtime/mixedBatchGeometry', () => ({
+vi.mock('@src/renderer/editor/runtime/geometry/mixedBatchGeometry', () => ({
   commitMixedBatchGeometry: vi.fn(),
 }));
-vi.mock('@api/modules/itemsApi', () => ({
+vi.mock('@api/modules/editor/itemsApi', () => ({
   graphItemsApi: { updatePositions: vi.fn(() => Promise.resolve()) },
   knobItemsApi: { updatePositions: vi.fn(() => Promise.resolve()) },
   layerGroupsApi: { update: vi.fn(() => Promise.resolve()) },
   statItemsApi: { updatePositions: vi.fn(() => Promise.resolve()) },
 }));
-vi.mock('@src/renderer/editor/runtime/editGestureController', () => ({
+vi.mock('@src/renderer/editor/runtime/gesture/editGestureController', () => ({
   editGestureController: {
     activeGestureId: vi.fn(() => null),
     preview: vi.fn(),
@@ -196,19 +196,23 @@ vi.mock('./PropertiesPanel/index', () => {
     }),
   };
 });
-vi.mock('./PropertiesPanel/PanelNavContext', () => ({
+vi.mock('./PropertiesPanel/navigation/PanelNavContext', () => ({
   PanelNavProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
-vi.mock('./PropertiesPanel/PanelHeaderActions', () => ({
+vi.mock('./PropertiesPanel/navigation/PanelHeaderActions', () => ({
   default: () => null,
 }));
-vi.mock('./PropertiesPanel/PanelToggleButton', () => ({
+vi.mock('./PropertiesPanel/navigation/PanelToggleButton', () => ({
   default: () => null,
 }));
-vi.mock('@components/main/common/Checkbox', () => ({ default: () => null }));
-vi.mock('@components/main/common/Dropdown', () => ({ default: () => null }));
+vi.mock('@components/main/common/checkbox/Checkbox', () => ({
+  default: () => null,
+}));
+vi.mock('@components/main/common/dropdown/Dropdown', () => ({
+  default: () => null,
+}));
 
-import { PluginElementsRenderer } from '@components/shared/PluginElementsRenderer';
+import { PluginElementsRenderer } from '@components/shared/plugin/PluginElementsRenderer';
 import PropertiesPanel from './PropertiesPanel';
 
 const SIMPLE_DEF_ID = 'simple-plugin:badge';

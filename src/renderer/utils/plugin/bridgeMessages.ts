@@ -1,5 +1,5 @@
 import type { WindowTarget } from '@src/types/plugin/api';
-import { bridgeApi } from '@api/modules/bridgeApi';
+import { bridgeApi } from '@api/modules/plugin/bridgeApi';
 
 const isMissingTargetWindow = (
   error: unknown,

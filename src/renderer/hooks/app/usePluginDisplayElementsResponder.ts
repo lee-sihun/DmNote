@@ -11,7 +11,7 @@ import {
   clearPluginMenuRuntimeState,
   normalizeStateKeys,
   setPluginMenuRuntimeState,
-} from '@utils/plugin/pluginMenuRuntimeState';
+} from '@utils/plugin/menu/pluginMenuRuntimeState';
 
 // 다중 OBS 클라이언트 동시 재연결 시 요청 버스트를 응답 1회로 코얼레싱
 const RESPOND_DEBOUNCE_MS = 100;

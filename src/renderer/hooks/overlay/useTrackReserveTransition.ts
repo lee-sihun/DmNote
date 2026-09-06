@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { overlayApi } from '@api/modules/overlayApi';
+import { overlayApi } from '@api/modules/window/overlayApi';
 
 // 창 페이드아웃 후 레이아웃을 갈아끼우고, 리사이즈가 자리 잡은 뒤 페이드인
 const FADE_OUT_MS = 80;

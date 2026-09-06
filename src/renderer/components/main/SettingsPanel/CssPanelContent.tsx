@@ -22,16 +22,16 @@ import {
 } from '@components/main/SettingsPanel/panelChrome';
 import { SettingToggleRow } from '@components/main/common/SettingRow';
 import { SETTINGS_LABEL_CLASS, SETTINGS_ROW_CLASS } from '@utils/cardRecipes';
-import ListPopup from '@components/main/Modal/ListPopup';
+import ListPopup from '@components/main/Modal/listPopup/ListPopup';
 import { usePickerItemMenu } from '@hooks/usePickerItemMenu';
-import { pathBaseName } from '@utils/core/pathDisplay';
+import { pathBaseName } from '@utils/media/pathDisplay';
 import { cssHistoryStatusLabel } from '@utils/cssHistoryStatus';
 import type {
   CssHistoryErrorCode,
   CssLoadResult,
   CustomCssHistoryItem,
 } from '@src/types/plugin/api';
-import { cssApi } from '@api/modules/cssApi';
+import { cssApi } from '@api/modules/resources/cssApi';
 
 const CSS_HISTORY_ERROR_CODES: ReadonlySet<string> = new Set([
   'PATH_NOT_AUTHORIZED',

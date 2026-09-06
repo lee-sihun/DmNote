@@ -11,7 +11,7 @@ import {
   type ImageMode,
   type ImageTransformLeaf,
 } from '@src/types/key/imageLayer';
-import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
+import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
 import PopupExit from '@components/main/Modal/PopupExit';
 import ImagePicker from '@components/main/Modal/content/pickers/ImagePicker';
 

@@ -1,17 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
-import PickerSurface from '@components/main/Grid/PropertiesPanel/PickerSurface';
-import Checkbox from '@components/main/common/Checkbox';
-import Dropdown from '@components/main/common/Dropdown';
-import { NumberInput } from '@components/main/common/NumberInput';
+import PickerSurface from '@components/main/Grid/PropertiesPanel/controls/PickerSurface';
+import Checkbox from '@components/main/common/checkbox/Checkbox';
+import Dropdown from '@components/main/common/dropdown/Dropdown';
+import { NumberInput } from '@components/main/common/numberInput/NumberInput';
 import TabSwitch from '@components/main/common/TabSwitch';
-import { PropertySection } from '@components/main/Grid/PropertiesPanel/PropertyInputs';
-import { resolveImageSource } from '@utils/core/imageSource';
-import { canDecodeImage } from '@utils/core/assetProbe';
+import { PropertySection } from '@components/main/Grid/PropertiesPanel/controls/PropertyInputs';
+import { resolveImageSource } from '@utils/media/imageSource';
+import { canDecodeImage } from '@utils/media/assetProbe';
 import { useEditSessionCompletionGuard } from '@src/renderer/contexts/EditSessionScope';
 
 import type { CompletionBinding } from '@src/renderer/contexts/EditSessionScope';
-import { imageApi } from '@api/modules/resourceApi';
+import { imageApi } from '@api/modules/resources/resourceApi';
 import {
   DEFAULT_IMAGE_MODE,
   IDENTITY_IMAGE_TRANSFORM,

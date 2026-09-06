@@ -134,19 +134,21 @@ export function normalizeCounterSettings(raw: unknown): KeyCounterSettings {
     fillIdleGradient,
     fillActiveGradient,
   } = parsed.data;
+  const normalizeBezierValue = (
+    value: number | undefined,
+    fallbackValue: number,
+    min: number,
+    max: number,
+  ): number =>
+    typeof value === 'number' && Number.isFinite(value)
+      ? Math.min(Math.max(value, min), max)
+      : fallbackValue;
+  const bezier = animation?.bezier;
   const normalizedBezier: CounterAnimationBezier = [
-    Number.isFinite(animation?.bezier?.[0])
-      ? Math.min(Math.max(animation!.bezier[0], 0), 1)
-      : fallback.animation.bezier[0],
-    Number.isFinite(animation?.bezier?.[1])
-      ? Math.min(Math.max(animation!.bezier[1], -2), 2)
-      : fallback.animation.bezier[1],
-    Number.isFinite(animation?.bezier?.[2])
-      ? Math.min(Math.max(animation!.bezier[2], 0), 1)
-      : fallback.animation.bezier[2],
-    Number.isFinite(animation?.bezier?.[3])
-      ? Math.min(Math.max(animation!.bezier[3], -2), 2)
-      : fallback.animation.bezier[3],
+    normalizeBezierValue(bezier?.[0], fallback.animation.bezier[0], 0, 1),
+    normalizeBezierValue(bezier?.[1], fallback.animation.bezier[1], -2, 2),
+    normalizeBezierValue(bezier?.[2], fallback.animation.bezier[2], 0, 1),
+    normalizeBezierValue(bezier?.[3], fallback.animation.bezier[3], -2, 2),
   ];
 
   return {

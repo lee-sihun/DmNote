@@ -2,10 +2,10 @@ import {
   currentPluginHealthRevision,
   waitForPluginInjection,
 } from '@stores/plugin/usePluginHealthStore';
-import { extractPluginId } from '@utils/plugin/pluginUtils';
+import { extractPluginId } from '@utils/plugin/components/pluginUtils';
 import { classifyPluginAddResult } from '@utils/plugin/pluginAddResult';
-import { jsApi } from '@api/modules/jsApi';
-import { pluginApi } from '@api/modules/pluginApi';
+import { jsApi } from '@api/modules/plugin/jsApi';
+import { pluginApi } from '@api/modules/plugin/pluginApi';
 import type { I18nContextValue } from '@contexts/I18nContextDef';
 import type {
   JsLoadResult,

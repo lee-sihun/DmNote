@@ -3,7 +3,7 @@ import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import type { DuplicateState } from '@hooks/Grid/useGridCanvasActions';
+import type { DuplicateState } from '@hooks/Grid/contextMenu/useGridCanvasActions';
 import DuplicateElementGhost from './DuplicateElementGhost';
 
 const duplicate = (

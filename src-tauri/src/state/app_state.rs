@@ -106,11 +106,11 @@ pub use window_geometry::{LogicalPoint, LogicalRect, PanelDragContext};
 
 use super::{
     history::HistoryAdmissionLease,
-    panel_drag::PanelDragController,
     plugin::{PluginAuthorityLease, PluginRuntimeAuthority},
     store::{
         AdmittedEditorTransaction, AdmittedGestureCommit, AppStore, PluginInstancesResetScope,
     },
+    window::panel_drag::PanelDragController,
 };
 #[cfg(debug_assertions)]
 use crate::audio::KeySoundDispatchTrace;
@@ -136,7 +136,7 @@ use crate::{
         overlay_hit::{OverlayHitRect, OverlayHitService},
         settings::SettingsService,
     },
-    state::local_asset_path::path_identity_key,
+    state::assets::local_asset_path::path_identity_key,
 };
 
 const OVERLAY_LABEL: &str = "overlay";

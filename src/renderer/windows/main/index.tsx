@@ -12,7 +12,7 @@ const benchmarkName = new URLSearchParams(window.location.search).get(
 const bootstrapBenchmark = async (): Promise<boolean> => {
   if (benchmarkName === 'shadow-toggle') {
     const { mountShadowToggleBenchmark } = await import(
-      '../../benchmarks/shadowToggleBenchmark'
+      '../../benchmarks/controls/shadowToggleBenchmark'
     );
     mountShadowToggleBenchmark();
     return true;

@@ -116,7 +116,7 @@ vi.mock('@stores/useSettingsStore', () => ({
     shortcuts: {},
   }),
 }));
-vi.mock('@components/main/Modal/FloatingPopup', () => ({
+vi.mock('@components/main/Modal/floatingPopup/FloatingPopup', () => ({
   default: () => null,
 }));
 vi.mock('@hooks/ui/usePopupPresence', () => ({
@@ -132,10 +132,10 @@ vi.mock('@hooks/ui/useRetainedValue', () => ({
 vi.mock('@components/main/Modal/PopupExit', () => ({
   default: ({ children }: { children: React.ReactNode }) => children,
 }));
-vi.mock('@components/main/Modal/content/pickers/Palette', () => ({
+vi.mock('@components/main/Modal/content/pickers/color/Palette', () => ({
   default: () => null,
 }));
-vi.mock('@components/main/Modal/content/pickers/ColorPicker', () => ({
+vi.mock('@components/main/Modal/content/pickers/color/ColorPicker', () => ({
   default: (props: ColorPickerProps) => {
     mocks.colorPickerProps.push(props);
     return null;
@@ -178,9 +178,12 @@ vi.mock('@stores/grid/useGridSelectionStore', () => ({
     getState: () => ({ clearSelection: vi.fn() }),
   },
 }));
-vi.mock('@src/renderer/editor/runtime/historyEditorFlushLock', () => ({
-  isHistoryEditorFlushLocked: () => false,
-}));
+vi.mock(
+  '@src/renderer/editor/runtime/lifecycle/historyEditorFlushLock',
+  () => ({
+    isHistoryEditorFlushLocked: () => false,
+  }),
+);
 vi.mock('@hooks/useOptimisticBooleanCommit', () => ({
   useOptimisticBooleanCommit: ({
     canonicalValue,
@@ -188,13 +191,13 @@ vi.mock('@hooks/useOptimisticBooleanCommit', () => ({
     canonicalValue: boolean;
   }) => ({ value: canonicalValue, toggle: vi.fn() }),
 }));
-vi.mock('@api/modules/keysApi', () => ({
+vi.mock('@api/modules/editor/keysApi', () => ({
   keysApi: { resetCountersMode: vi.fn() },
 }));
-vi.mock('@api/modules/settingsApi', () => ({
+vi.mock('@api/modules/app/settingsApi', () => ({
   settingsApi: { update: vi.fn() },
 }));
-vi.mock('@api/modules/appApi', () => ({
+vi.mock('@api/modules/app/appApi', () => ({
   appApi: { openExternal: vi.fn() },
 }));
 vi.mock('@stores/useUIStore', () => ({

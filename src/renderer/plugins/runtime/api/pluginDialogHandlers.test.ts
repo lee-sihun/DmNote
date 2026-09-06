@@ -3,13 +3,13 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   clearComponentHandlers,
   registerComponentHandler,
-} from '@utils/plugin/pluginUtils';
+} from '@utils/plugin/components/pluginUtils';
 import {
   createButton,
   createCheckbox,
   createDropdown,
   createInput,
-} from '@utils/plugin/pluginComponents';
+} from '@utils/plugin/components/pluginComponents';
 import { createPluginDialogHandlerScope } from './pluginDialogHandlers';
 
 describe('plugin dialog handler scope', () => {

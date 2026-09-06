@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import Modal from '../../Modal';
 import { useModalPresence } from '@hooks/ui/usePopupPresence';
-import Checkbox from '@components/main/common/Checkbox';
-import { PropertySection } from '@components/main/Grid/PropertiesPanel/PropertyInputs';
+import Checkbox from '@components/main/common/checkbox/Checkbox';
+import { PropertySection } from '@components/main/Grid/PropertiesPanel/controls/PropertyInputs';
 import {
   FILL_DISABLED_CLASS,
   FILL_QUIET_CLASS,
@@ -17,11 +17,11 @@ import { useTranslation } from '@contexts/useTranslation';
 import { useLenis } from '@hooks/useLenis';
 import { useOptimisticAsyncBooleanCommit } from '@hooks/useOptimisticAsyncBooleanCommit';
 import { useKeyStore } from '@stores/data/useKeyStore';
-import { pathBaseName } from '@utils/core/pathDisplay';
+import { pathBaseName } from '@utils/media/pathDisplay';
 import { cssHistoryStatusLabel } from '@utils/cssHistoryStatus';
 import type { CustomCssHistoryItem } from '@src/types/plugin/api';
 import type { TabCss } from '@src/types/plugin/css';
-import { cssApi } from '@api/modules/cssApi';
+import { cssApi } from '@api/modules/resources/cssApi';
 
 interface TabCssModalProps {
   isOpen: boolean;

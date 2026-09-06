@@ -23,26 +23,30 @@ const apiMocks = vi.hoisted(() => ({
   canDecodeImage: vi.fn(),
 }));
 
-vi.mock('@api/modules/resourceApi', () => ({
+vi.mock('@api/modules/resources/resourceApi', () => ({
   imageApi: {
     load: (...args: unknown[]) => apiMocks.imageLoad(...args),
   },
 }));
 
-vi.mock('@utils/core/assetProbe', () => ({
+vi.mock('@utils/media/assetProbe', () => ({
   canDecodeImage: (...args: unknown[]) => apiMocks.canDecodeImage(...args),
 }));
 
 vi.mock('@contexts/useTranslation', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
-vi.mock('@components/main/Grid/PropertiesPanel/PickerSurface', () => ({
+vi.mock('@components/main/Grid/PropertiesPanel/controls/PickerSurface', () => ({
   default: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
 }));
-vi.mock('@components/main/common/Checkbox', () => ({ default: () => null }));
-vi.mock('@components/main/common/Dropdown', () => ({ default: () => null }));
+vi.mock('@components/main/common/checkbox/Checkbox', () => ({
+  default: () => null,
+}));
+vi.mock('@components/main/common/dropdown/Dropdown', () => ({
+  default: () => null,
+}));
 vi.mock('@components/main/common/TabSwitch', () => ({ default: () => null }));
 
 // 네이티브 파일 대화상자가 떠 있는 동안 편집 대상이 갈릴 수 있다.

@@ -9,8 +9,8 @@ import {
   combineReceipts,
   ElementIntentAbort,
   type ElementIntentReceipt,
-} from '@src/renderer/editor/runtime/elementIntent';
-import { runMixedGestureElementIntent } from '@src/renderer/editor/runtime/mixedElementIntent';
+} from '@src/renderer/editor/runtime/intent/elementIntent';
+import { runMixedGestureElementIntent } from '@src/renderer/editor/runtime/intent/mixedElementIntent';
 import {
   beginMixedGestureTransaction,
   cancelUncommittedMixedGestureTransaction,

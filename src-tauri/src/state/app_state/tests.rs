@@ -50,8 +50,8 @@ use crate::{
         StoredOverlayBounds, StoredOverlayNativePosition, TabCss, EDITOR_OPS_VERSION,
     },
     state::{
+        assets::local_asset_path::path_identity_key,
         history::{HistoryAdmissionGate, HistoryDirection, HistoryScope},
-        local_asset_path::path_identity_key,
         store::{
             AppStore, AuxEditorResetTransactionOptions, AuxEditorTransactionOptions,
             PluginInstancesResetScope,

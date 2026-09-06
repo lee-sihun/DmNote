@@ -9,11 +9,11 @@ import {
   DEFAULT_ELEMENT_FONT,
   DEFAULT_COUNTER_FONT_SIZE,
   DEFAULT_COUNTER_FONT_WEIGHT,
-} from '@utils/core/elementDefaults';
+} from '@utils/element/elementDefaults';
 import {
   computeCounterAnimationPreviewKeyStyles,
   type CounterAnimationKeyVisual,
-} from '@utils/core/counterAnimationPreview';
+} from '@utils/counter/counterAnimationPreview';
 
 interface CounterAnimationPreviewStageProps {
   counterSettings?: KeyCounterSettings;

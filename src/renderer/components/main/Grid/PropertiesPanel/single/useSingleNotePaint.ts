@@ -14,13 +14,13 @@ import {
   coerceStrictStops,
   toNoteHexColor,
   toNoteStopColor,
-} from '../notePaintColorUtils';
+} from '../selection/notePaintColorUtils';
 import {
   useGradientColorState,
   type GradientCommitMeta,
 } from '@hooks/pickers/useGradientColorState';
 import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
-import { createNoteLiteralHandlers } from '../noteLiteralHandlers';
+import { createNoteLiteralHandlers } from '../selection/noteLiteralHandlers';
 import {
   bodyInheritedGlowSpec,
   foldGradientOpacity,

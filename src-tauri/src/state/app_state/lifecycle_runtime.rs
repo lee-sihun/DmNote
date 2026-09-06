@@ -65,7 +65,7 @@ pub(super) fn execute_frontend_lifecycle(
             state.shutdown();
             state.authorize_process_exit();
             #[cfg(target_os = "macos")]
-            match super::super::macos_termination::restart_after_canceling_pending_termination(
+            match super::super::window::macos_termination::restart_after_canceling_pending_termination(
                 &app_handle,
             ) {
                 Ok(true) => return,
@@ -136,7 +136,7 @@ fn shutdown_application(app_handle: AppHandle) {
         state.set_shutdown_watchdog_stage("main event loop exit dispatch");
     }
     #[cfg(target_os = "macos")]
-    match super::super::macos_termination::complete_pending_termination(&app_handle) {
+    match super::super::window::macos_termination::complete_pending_termination(&app_handle) {
         Ok(true) => return,
         Ok(false) => {}
         Err(error) => {

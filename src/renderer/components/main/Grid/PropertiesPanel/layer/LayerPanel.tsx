@@ -2,7 +2,10 @@ import React from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
-import { PANEL_ROOT_CLASS, PANEL_HEADER_CLASS } from '../panelChrome';
+import {
+  PANEL_ROOT_CLASS,
+  PANEL_HEADER_CLASS,
+} from '../navigation/panelChrome';
 import { LAYER_PANEL_TABS, type LayerPanelTabType } from '../types';
 import LayerTabContent from './LayerTabContent';
 import GridTabContent from '../GridTabContent';

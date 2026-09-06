@@ -6,29 +6,29 @@ import { I18nContext } from '@contexts/I18nContextDef';
 import { useGradientEditStore } from '@stores/grid/useGradientEditStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useGridViewStore } from '@stores/grid/useGridViewStore';
-import { ColorInputBenchmarkSurface } from './colorInputBenchmark';
-import { ColorTrackBenchmarkSurface } from './colorTrackBenchmark';
-import { DropdownBenchmarkSurface } from './dropdownBenchmark';
-import { FloatingPopupBenchmarkSurface } from './floatingPopupBenchmark';
+import { ColorInputBenchmarkSurface } from './controls/colorInputBenchmark';
+import { ColorTrackBenchmarkSurface } from './controls/colorTrackBenchmark';
+import { DropdownBenchmarkSurface } from './controls/dropdownBenchmark';
+import { FloatingPopupBenchmarkSurface } from './controls/floatingPopupBenchmark';
 import {
   GRADIENT_BENCHMARK_SPEC,
   GradientAxisBenchmarkSurface,
-} from './gradientAxisBenchmark';
-import { GridContinuousInputBenchmarkSurface } from './gridContinuousInputBenchmark';
-import { GridKeyboardBenchmarkSurface } from './gridKeyboardBenchmark';
-import { GridMarqueeBenchmarkSurface } from './gridMarqueeBenchmark';
-import { GridMinimapBenchmarkSurface } from './gridMinimapBenchmark';
-import { GridResizeBenchmarkSurface } from './gridResizeBenchmark';
-import { ModalBenchmarkSurface } from './modalBenchmark';
-import { NumberInputBenchmarkSurface } from './numberInputBenchmark';
+} from './grid/gradientAxisBenchmark';
+import { GridContinuousInputBenchmarkSurface } from './grid/gridContinuousInputBenchmark';
+import { GridKeyboardBenchmarkSurface } from './grid/gridKeyboardBenchmark';
+import { GridMarqueeBenchmarkSurface } from './grid/gridMarqueeBenchmark';
+import { GridMinimapBenchmarkSurface } from './grid/gridMinimapBenchmark';
+import { GridResizeBenchmarkSurface } from './grid/gridResizeBenchmark';
+import { ModalBenchmarkSurface } from './controls/modalBenchmark';
+import { NumberInputBenchmarkSurface } from './controls/numberInputBenchmark';
 import { PanelToggleBenchmarkSurface } from './panelToggleBenchmark';
 import {
   afterPaintOpportunity,
   summarizeDistribution,
   type Distribution,
-} from './shadowToggleBenchmark';
-import { TabSwitchBenchmarkSurface } from './tabSwitchBenchmark';
-import { TextInputBenchmarkSurface } from './textInputBenchmark';
+} from './controls/shadowToggleBenchmark';
+import { TabSwitchBenchmarkSurface } from './controls/tabSwitchBenchmark';
+import { TextInputBenchmarkSurface } from './controls/textInputBenchmark';
 
 type ScenarioId =
   | 'BASE-03'

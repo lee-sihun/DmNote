@@ -7,7 +7,7 @@ import {
 } from 'react';
 import type React from 'react';
 import { flushSync } from 'react-dom';
-import { beginDragCursor, endDragCursor } from '@utils/core/dragCursor';
+import { beginDragCursor, endDragCursor } from '@utils/dom/dragCursor';
 
 export interface ScrubDragOptions {
   enabled: boolean;

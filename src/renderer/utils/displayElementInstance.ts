@@ -1,7 +1,7 @@
 import type React from 'react';
 import type { PluginDisplayElement } from '@src/types/plugin/api';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { html, styleMap, css } from '@utils/core/templateEngine';
+import { html, styleMap, css } from '@utils/plugin/components/templateEngine';
 import type {
   DisplayElementTemplate,
   DisplayElementTemplateHelpers,

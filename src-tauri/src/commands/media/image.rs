@@ -14,7 +14,7 @@ use tauri::{Manager, WebviewWindow};
 use crate::{
     commands::dialog::parented_file_dialog,
     errors::{CmdResult, CommandError},
-    state::image_asset::import_image_file,
+    state::assets::image_asset::import_image_file,
 };
 
 #[derive(Serialize)]

@@ -6,7 +6,7 @@ import type {
   RefObject,
   SetStateAction,
 } from 'react';
-import { beginDragCursor, endDragCursor } from '@utils/core/dragCursor';
+import { beginDragCursor, endDragCursor } from '@utils/dom/dragCursor';
 import {
   getCursor,
   lockCustomCursor,

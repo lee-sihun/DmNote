@@ -2,25 +2,25 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import type { KeyPosition } from '@src/types/key/keys';
 import { useFontStore } from '@stores/useFontStore';
-import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
-import { resolveSupportedFontWeight } from '@utils/core/fontWeights';
+import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
+import { resolveSupportedFontWeight } from '@utils/typography/fontWeights';
 import {
   DEFAULT_ELEMENT_BASE_FONT_WEIGHT,
   DEFAULT_ELEMENT_FONT_BOLD,
-} from '@utils/core/elementDefaults';
-import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
-import FontPickerOpenButton from '@components/main/Modal/content/pickers/FontPickerOpenButton';
-import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
+} from '@utils/element/elementDefaults';
+import FontPicker from '@components/main/Modal/content/pickers/font/FontPicker';
+import FontPickerOpenButton from '@components/main/Modal/content/pickers/font/FontPickerOpenButton';
+import { ColorSwatchButton } from '@components/main/Modal/content/pickers/color/ColorSwatch';
 import {
   FontStyleToggle,
   NumberInput,
   PropertyRow,
   PropertySection,
   TextInput,
-} from '../PropertyInputs';
-import FontWeightDropdown from '../FontWeightDropdown';
-import { createFontStyleToggleHandlers } from '../fontStyleToggleHandlers';
-import { usePanelNav } from '../PanelNavContext';
+} from '../controls/PropertyInputs';
+import FontWeightDropdown from '../controls/FontWeightDropdown';
+import { createFontStyleToggleHandlers } from '../selection/fontStyleToggleHandlers';
+import { usePanelNav } from '../navigation/PanelNavContext';
 
 const FONT_PAGE_KEY = 'single-style:font';
 

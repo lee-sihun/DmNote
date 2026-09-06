@@ -81,7 +81,7 @@ const implementationCommit = execFileSync(
     '-1',
     '--format=%H',
     '--',
-    'src/renderer/components/main/common/Dropdown.tsx',
+    'src/renderer/components/main/common/dropdown/Dropdown.tsx',
   ],
   { cwd: root, encoding: 'utf8' },
 ).trim();
@@ -97,7 +97,7 @@ if (visualImprovement === null || visualImprovement <= 0) {
 
 const correctnessResult = spawnSync(
   npxCommand,
-  ['vitest', 'run', 'src/renderer/components/main/common/Dropdown.test.tsx'],
+  ['vitest', 'run', 'src/renderer/components/main/common/dropdown/Dropdown.test.tsx'],
   { cwd: root, stdio: 'inherit' },
 );
 if (correctnessResult.status !== 0) {

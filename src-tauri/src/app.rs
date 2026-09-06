@@ -125,7 +125,7 @@ pub fn run() {
 
     // macOS ProMotion 디스플레이 대응: 웹뷰 60fps 캡 해제
     #[cfg(target_os = "macos")]
-    let builder = builder.plugin(state::macos_frame_rate::init());
+    let builder = builder.plugin(state::window::macos_frame_rate::init());
 
     let app = builder
         .setup(move |app| {
@@ -207,7 +207,7 @@ pub fn run() {
 
             #[cfg(target_os = "macos")]
             {
-                state::macos_termination::install(app.handle())
+                state::window::macos_termination::install(app.handle())
                     .map_err(|error| -> Box<dyn std::error::Error> { error.into() })?;
                 launch_macos_dock_helper();
                 // 이전 자동 업데이트가 남긴 .app.old/.app.new 정리 (시작 지연 없이 백그라운드)

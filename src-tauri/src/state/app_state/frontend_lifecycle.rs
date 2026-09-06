@@ -283,7 +283,7 @@ impl AppState {
             EditorFlushCompletion::Lifecycle(_) => {
                 #[cfg(target_os = "macos")]
                 if let Err(error) =
-                    crate::state::macos_termination::cancel_pending_termination(app_handle)
+                    crate::state::window::macos_termination::cancel_pending_termination(app_handle)
                 {
                     log::warn!("failed to cancel pending macOS termination: {error}");
                 }

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { currentPluginGroupMembers } from '@src/renderer/editor/runtime/pluginGroupMembers';
+import { currentPluginGroupMembers } from '@src/renderer/editor/runtime/intent/pluginGroupMembers';
 
 import { initPluginGroupRefsMirror } from './pluginGroupRefsMirror';
 
@@ -9,7 +9,7 @@ const { groupRefsGetMock, onChangedMock } = vi.hoisted(() => ({
   onChangedMock: vi.fn(),
 }));
 
-vi.mock('@api/modules/pluginInstancesApi', () => ({
+vi.mock('@api/modules/plugin/pluginInstancesApi', () => ({
   pluginInstancesApi: {
     groupRefsGet: groupRefsGetMock,
     onChanged: onChangedMock,

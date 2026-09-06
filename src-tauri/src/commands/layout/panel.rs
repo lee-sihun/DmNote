@@ -5,8 +5,8 @@ use crate::{
     commands::run_blocking,
     errors::CmdResult,
     state::{
-        panel_drag::start_windows_drag, AppState, PanelDragGeometry, PanelDragHitTestResult,
-        PanelDragOrigin, PanelDragStartMode,
+        window::panel_drag::start_windows_drag, AppState, PanelDragGeometry,
+        PanelDragHitTestResult, PanelDragOrigin, PanelDragStartMode,
     },
 };
 
@@ -219,8 +219,9 @@ pub fn panel_window_apply_native_chrome(
     // macOS 레이어 마스크는 CSS와 같은 12px라 반경을 웹에 남긴다 - 실패해도 그대로 정답
     #[cfg(target_os = "macos")]
     {
-        let applied =
-            crate::state::macos_window_corners::apply_surface_chrome(&app, &panel, fill, line);
+        let applied = crate::state::window::macos_window_corners::apply_surface_chrome(
+            &app, &panel, fill, line,
+        );
         Ok(PanelWindowChrome {
             web_radius: WEB_CORNER_RADIUS,
             web_ring: !applied,
@@ -231,7 +232,7 @@ pub fn panel_window_apply_native_chrome(
     {
         let _ = app;
         let applied =
-            crate::state::windows_window_corners::apply_surface_chrome(&panel, fill, line);
+            crate::state::window::windows_window_corners::apply_surface_chrome(&panel, fill, line);
         Ok(PanelWindowChrome {
             web_radius: 0.0,
             web_ring: !applied,

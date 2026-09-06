@@ -12,13 +12,13 @@ vi.mock('@assets/svgs/folder.svg', () => ({ default: () => null }));
 vi.mock('@assets/svgs/setting.svg', () => ({ default: () => null }));
 vi.mock('@assets/svgs/chevron-down.svg', () => ({ default: () => null }));
 vi.mock('@assets/svgs/turn_arrow.svg', () => ({ default: () => null }));
-vi.mock('../Modal/FloatingTooltip', () => ({
+vi.mock('../Modal/tooltip/FloatingTooltip', () => ({
   default: ({ children }: { children: React.ReactNode }) => children,
 }));
-vi.mock('../Modal/TooltipGroup', () => ({
+vi.mock('../Modal/tooltip/TooltipGroup', () => ({
   TooltipGroup: ({ children }: { children: React.ReactNode }) => children,
 }));
-vi.mock('../Modal/ListPopup', () => ({
+vi.mock('../Modal/listPopup/ListPopup', () => ({
   default: ({ open }: { open: boolean }) => (
     <div data-testid="preset-popup" data-open={String(open)} />
   ),
@@ -31,16 +31,16 @@ vi.mock('./icons/IconMotion', () => ({
 vi.mock('@hooks/useIconMotion', () => ({
   useIconMotion: () => ({ motionProps: {} }),
 }));
-vi.mock('@api/modules/obsApi', () => ({
+vi.mock('@api/modules/window/obsApi', () => ({
   obsApi: {
     status: () => Promise.resolve({ running: false }),
     onStatus: () => () => {},
   },
 }));
-vi.mock('@api/modules/overlayApi', () => ({
+vi.mock('@api/modules/window/overlayApi', () => ({
   overlayApi: { setVisible: () => Promise.resolve() },
 }));
-vi.mock('@api/modules/presetsApi', () => ({
+vi.mock('@api/modules/resources/presetsApi', () => ({
   presetsApi: {},
 }));
 

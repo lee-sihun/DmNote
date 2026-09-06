@@ -3,7 +3,7 @@ import { useTranslation } from '@contexts/useTranslation';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useLenis } from '@hooks/useLenis';
 import TabNameModal from '../editors/TabNameModal';
-import { keysApi } from '@api/modules/keysApi';
+import { keysApi } from '@api/modules/editor/keysApi';
 import { buildOrderedTabs, builtinTabLabelKey } from '@utils/tabOrder';
 import { useTabDrag } from '../../../Tool/tabDragContext';
 import { useTabActions } from '../../../Tool/tabActionsContext';

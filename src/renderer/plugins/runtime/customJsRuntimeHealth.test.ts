@@ -44,7 +44,7 @@ vi.mock('@api/internalApi', () => ({
   },
 }));
 
-vi.mock('@api/modules/pluginAuthorityApi', () => ({
+vi.mock('@api/modules/plugin/pluginAuthorityApi', () => ({
   pluginAuthorityApi: { reset: authorityResetMock },
 }));
 

@@ -5,10 +5,10 @@ const patches = vi.hoisted(() => ({
   reportElementOpSkipped: vi.fn(),
 }));
 
-vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
+vi.mock('@src/renderer/editor/runtime/operations/elementOps', () => ({
   commitElementGeometryById: patches.commitElementGeometryById,
 }));
-vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
+vi.mock('@src/renderer/editor/runtime/intent/elementIntent', () => ({
   reportElementOpError: vi.fn(),
   reportElementOpSkipped: patches.reportElementOpSkipped,
 }));

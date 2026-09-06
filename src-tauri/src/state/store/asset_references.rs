@@ -8,7 +8,7 @@ use serde_json::Value;
 use crate::models::{AppStoreData, FontType, KeyPosition};
 
 use super::super::{
-    local_asset_path::{
+    assets::local_asset_path::{
         file_url_to_path, path_identity_key, paths_have_same_identity, FileUrlPath,
     },
     migration::is_foreign_portable_asset_reference,

@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, type RefObject } from 'react';
-import { measureLabelGlyphBox } from '@utils/core/counterGlyphMetrics';
+import { measureLabelGlyphBox } from '@utils/counter/counterGlyphMetrics';
 import { GLYPH_BOX_CHANGE_EVENT } from './useCounterGlyphPaint';
-import type { CounterGlyphBox } from '@utils/core/counterGlyphMetrics';
+import type { CounterGlyphBox } from '@utils/counter/counterGlyphMetrics';
 
 const POSITION_VAR = '--dmn-key-text-position-default';
 const SIZE_VAR = '--dmn-key-text-size-default';

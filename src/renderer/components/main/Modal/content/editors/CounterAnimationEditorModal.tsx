@@ -5,19 +5,19 @@ import type {
 } from '@src/types/key/keys';
 import type { CounterAnimationPreset } from '@src/types/key/counterAnimation';
 import FullSurfaceModalLayout from '@components/main/Modal/FullSurfaceModalLayout';
-import Dropdown from '@components/main/common/Dropdown';
+import Dropdown from '@components/main/common/dropdown/Dropdown';
 import {
   TextInput,
   NumberInput,
-} from '@components/main/Grid/PropertiesPanel/PropertyInputs';
+} from '@components/main/Grid/PropertiesPanel/controls/PropertyInputs';
 import {
   COUNTER_BEZIER_PRESETS,
   clampCounterBezier,
   findBezierPresetId,
 } from '@utils/cubicBezier';
-import type { CounterAnimationKeyVisual } from '@utils/core/counterAnimationPreview';
+import type { CounterAnimationKeyVisual } from '@utils/counter/counterAnimationPreview';
 import { type ContinuousInputStrategy } from '@utils/animation/rafLatestScheduler';
-import { counterAnimationApi } from '@api/modules/resourceApi';
+import { counterAnimationApi } from '@api/modules/resources/resourceApi';
 import {
   clampCounterDuration as clampDuration,
   formatCounterBezierInput as formatBezierInput,
