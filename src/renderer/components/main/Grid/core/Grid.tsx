@@ -20,7 +20,10 @@ import {
   reportElementOpError,
   reportElementOpSkipped,
 } from '@src/renderer/editor/runtime/intent/elementIntent';
-import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
+import {
+  resolveElementById,
+  type NativeElementType,
+} from '@src/renderer/editor/model/elementIdMap';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import TabCssModal from '../../Modal/content/editors/TabCssModal';
 import TabNoteSettingModal from '../../Modal/content/editors/TabNoteSettingModal';
@@ -29,6 +32,7 @@ import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { PluginElementsRenderer } from '@components/shared/plugin/PluginElementsRenderer';
@@ -44,6 +48,7 @@ import GridBackground from './GridBackground';
 import SmartGuidesOverlay from '../overlays/SmartGuidesOverlay';
 import MarqueeSelectionOverlay from '../overlays/MarqueeSelectionOverlay';
 import { useGradientEditStore } from '@stores/grid/useGradientEditStore';
+import { useSpritePoseHandleStore } from '@stores/grid/useSpritePoseHandleStore';
 import { getGridViewportLayerStyles } from '@utils/grid/gridViewportStyles';
 import KeyCounterPreviewLayer from '../layers/KeyCounterPreviewLayer';
 import StatCounterLayer from '../layers/StatCounterLayer';
@@ -94,7 +99,7 @@ import { useSelectedElementDragLifecycle } from '@hooks/Grid/drag/useSelectedEle
 
 type ToolbarAddRequest = {
   id: number;
-  type: 'key' | 'stat' | 'graph' | 'knob';
+  type: NativeElementType;
 } | null;
 
 interface GridProps {
@@ -188,6 +193,7 @@ const Grid = ({
     getStatMenuItems,
     getGraphMenuItems,
     getKnobMenuItems,
+    getSpriteMenuItems,
     getGridMenuItems,
     pluginKeyMenuItems,
     pluginGridMenuItems,
@@ -203,6 +209,10 @@ const Grid = ({
   // 선택 상태 관리
   // 온캔버스 그라데이션 편집 중 여부 — 리사이즈 핸들을 잠시 숨김
   const hasGradientEditSession = useGradientEditStore(
+    (state) => state.session !== null,
+  );
+  // 스프라이트 자세 편집 중 여부 - 자세 프레임이 리사이즈 핸들을 대신한다
+  const hasSpritePoseSession = useSpritePoseHandleStore(
     (state) => state.session !== null,
   );
   const selectedElements = useGridSelectionStore(
@@ -233,6 +243,7 @@ const Grid = ({
   const canonicalStatPositions = useStatItemStore((state) => state.positions);
   const canonicalGraphPositions = useGraphItemStore((state) => state.positions);
   const canonicalKnobPositions = useKnobItemStore((state) => state.positions);
+  const canonicalSpritePositions = useSpriteStore((state) => state.positions);
   useSyncExternalStore(
     subscribePreviewOverlay,
     getPreviewOverlayVersion,
@@ -249,6 +260,10 @@ const Grid = ({
   const knobPositions = composePreviewPositions(
     'knobPosition',
     canonicalKnobPositions,
+  );
+  const spritePositions = composePreviewPositions(
+    'spritePosition',
+    canonicalSpritePositions,
   );
 
   // 선택 관련 로직 훅 사용
@@ -268,9 +283,12 @@ const Grid = ({
   const {
     beginSelectedElementsDrag: beginSelectedPluginInstancesDrag,
     commitSelectedElementsDrag,
+    moveSelectedElementsDrag,
   } = useSelectedElementDragLifecycle({
     freezeSelectionForGesture,
     syncSelectedElementsToOverlay,
+    moveSelectedElements: (deltaX, deltaY) =>
+      moveSelectedElements(deltaX, deltaY, undefined, false),
   });
 
   // 마퀴 선택 훅 사용
@@ -280,6 +298,7 @@ const Grid = ({
       statPositions,
       graphPositions,
       knobPositions,
+      spritePositions,
       selectedKeyType,
       pluginElements,
       clientToGridCoords,
@@ -379,6 +398,8 @@ const Grid = ({
             useGraphItemStore.getState().positions[selectedKeyType] || [],
           knobPositions:
             useKnobItemStore.getState().positions[selectedKeyType] || [],
+          spritePositions:
+            useSpriteStore.getState().positions[selectedKeyType] || [],
           pluginElements: usePluginDisplayElementStore.getState().elements,
           modeGroups:
             useLayerGroupStore.getState().layerGroups[selectedKeyType] || [],
@@ -423,6 +444,13 @@ const Grid = ({
 
   const beginDuplicateKnob = (sourceIndex: number) => {
     const result = canvasActions.beginDuplicateKnob(sourceIndex);
+    if (!result) return;
+    setDuplicateState(result);
+    setDuplicateCursor(null);
+  };
+
+  const beginDuplicateSprite = (sourceIndex: number) => {
+    const result = canvasActions.beginDuplicateSprite(sourceIndex);
     if (!result) return;
     setDuplicateState(result);
     setDuplicateCursor(null);
@@ -493,7 +521,7 @@ const Grid = ({
         mode: selectedKeyType,
         targets: orderStableZTargetsForBatch(
           selectedElements.map((element) => ({
-            type: element.type as 'key' | 'stat' | 'graph' | 'knob' | 'plugin',
+            type: element.type as NativeElementType | 'plugin',
             id: element.id,
           })),
         ),
@@ -518,7 +546,7 @@ const Grid = ({
         mode: selectedKeyType,
         targets: orderStableZTargetsForBatch(
           selectedElements.map((element) => ({
-            type: element.type as 'key' | 'stat' | 'graph' | 'knob' | 'plugin',
+            type: element.type as NativeElementType | 'plugin',
             id: element.id,
           })),
         ),
@@ -557,6 +585,8 @@ const Grid = ({
     const defaultSize =
       toolbarAddRequest.type === 'graph'
         ? { width: 120, height: 60 }
+        : toolbarAddRequest.type === 'sprite'
+        ? { width: 200, height: 200 }
         : { width: 60, height: 60 };
     const targetPos = getViewportCenterSnappedPosition(
       defaultSize.width,
@@ -596,10 +626,16 @@ const Grid = ({
   );
   const previousSelectedKeyTypeRef = useRef<string>(selectedKeyType);
 
-  // 탭 변경 시 선택 해제
+  // 탭 변경 시 선택 해제. 대기 중인 스프라이트 복제는 함께 취소한다 - 원본 탭
+  // 요소를 다른 탭에 놓으면 자세 트리거가 원본 탭 키를 가리켜 죽는다. 다른
+  // 종류는 탭을 넘어 배치할 수 있으므로 그대로 둔다.
+  // 탭 바는 그리드 밖이라 배치 취소용 onMouseDownCapture도 타지 않는다
   useEffect(() => {
     if (previousSelectedKeyTypeRef.current !== selectedKeyType) {
       clearSelection();
+      setDuplicateState((prev) =>
+        prev?.elementType === 'sprite' ? null : prev,
+      );
       previousSelectedKeyTypeRef.current = selectedKeyType;
     }
   }, [selectedKeyType, clearSelection]);
@@ -625,10 +661,7 @@ const Grid = ({
   }, []);
 
   // 요소 클릭 시 그룹 멤버 자동 선택
-  const selectElementWithGroup = (
-    type: 'key' | 'stat' | 'graph' | 'knob',
-    index: number,
-  ) => {
+  const selectElementWithGroup = (type: NativeElementType, index: number) => {
     if (isContextOpen) {
       setIsContextOpen(false);
       setContextPosition(null);
@@ -638,10 +671,11 @@ const Grid = ({
       stat: useStatItemStore.getState().positions[selectedKeyType] || [],
       graph: useGraphItemStore.getState().positions[selectedKeyType] || [],
       knob: useKnobItemStore.getState().positions[selectedKeyType] || [],
+      sprite: useSpriteStore.getState().positions[selectedKeyType] || [],
     } as const;
 
     const clicked = collections[type][index];
-    // stat·graph·knob은 렌더 클로저가 아니라 live 스토어를 읽는다. 렌더와
+    // stat·graph·knob·sprite는 렌더 클로저가 아니라 live 스토어를 읽는다. 렌더와
     // 클릭 사이에 배열이 줄면 대상이 없을 수 있어 fail-closed로 닫는다
     if (!clicked) {
       reportElementOpSkipped('group selection (target missing)');
@@ -656,6 +690,7 @@ const Grid = ({
         statPositions: collections.stat,
         graphPositions: collections.graph,
         knobPositions: collections.knob,
+        spritePositions: collections.sprite,
         pluginElements: usePluginDisplayElementStore.getState().elements,
         modeGroups:
           useLayerGroupStore.getState().layerGroups[selectedKeyType] || [],
@@ -666,7 +701,7 @@ const Grid = ({
   };
 
   const toggleNativeElementSelection = (
-    type: 'key' | 'stat' | 'graph' | 'knob',
+    type: NativeElementType,
     index: number,
   ) => {
     const elementId =
@@ -676,16 +711,15 @@ const Grid = ({
         ? useStatItemStore.getState().positions[selectedKeyType][index].id
         : type === 'graph'
         ? useGraphItemStore.getState().positions[selectedKeyType][index].id
+        : type === 'sprite'
+        ? useSpriteStore.getState().positions[selectedKeyType][index].id
         : useKnobItemStore.getState().positions[selectedKeyType][index].id;
     toggleSelection({ type, id: elementId, index });
   };
 
   // 더블클릭 편집 진입 — 대상이 다중 선택의 멤버면 선택을 보존해 배치 편집으로,
   // 아니면 해당 요소(+그룹)만 선택해 단일 편집으로 property 페이지를 연다
-  const openElementEditor = (
-    type: 'key' | 'stat' | 'graph' | 'knob',
-    index: number,
-  ) => {
+  const openElementEditor = (type: NativeElementType, index: number) => {
     const { selectedElements: currentSelection } =
       useGridSelectionStore.getState();
     const positionsForType =
@@ -695,6 +729,8 @@ const Grid = ({
         ? statPositions[selectedKeyType]
         : type === 'graph'
         ? graphPositions[selectedKeyType]
+        : type === 'sprite'
+        ? spritePositions[selectedKeyType]
         : knobPositions[selectedKeyType];
     const targetId = positionsForType?.[index]?.id;
     const isMultiMember =
@@ -709,7 +745,7 @@ const Grid = ({
 
   // 요소 컨텍스트 메뉴 열기
   const openElementContextMenu = (
-    type: 'key' | 'stat' | 'graph' | 'knob',
+    type: NativeElementType,
     index: number,
     clientX: number,
     clientY: number,
@@ -726,6 +762,8 @@ const Grid = ({
         ? useStatItemStore.getState().positions[selectedKeyType]?.[index]
         : type === 'graph'
         ? useGraphItemStore.getState().positions[selectedKeyType]?.[index]
+        : type === 'sprite'
+        ? useSpriteStore.getState().positions[selectedKeyType]?.[index]
         : useKnobItemStore.getState().positions[selectedKeyType]?.[index];
     // 조회가 옵셔널인데 여기서 무방비로 풀면, 렌더와 우클릭 사이에 배열이 줄었을 때
     // TypeError가 나고 에러 바운더리가 없어 앱이 통째로 언마운트된다.
@@ -860,6 +898,7 @@ const Grid = ({
             statPositions={statPositions?.[selectedKeyType] || []}
             graphPositions={graphPositions?.[selectedKeyType] || []}
             knobPositions={knobPositions?.[selectedKeyType] || []}
+            spritePositions={spritePositions?.[selectedKeyType] || []}
             pluginElements={pluginElements}
             selectedElements={selectedElements}
             activeTool={activeTool}
@@ -874,9 +913,7 @@ const Grid = ({
             onClearSelection={clearSelection}
             onSetSelectedElements={setSelectedElements}
             onSetLastSelectedKeyBounds={setLastSelectedKeyBounds}
-            onMoveSelection={(deltaX, deltaY) =>
-              moveSelectedElements(deltaX, deltaY, undefined, false)
-            }
+            onMoveSelection={moveSelectedElementsDrag}
             onMultiDragStart={beginSelectedPluginInstancesDrag}
             onMultiDragEnd={commitSelectedElementsDrag}
             onOpenElementEditor={openElementEditor}
@@ -897,6 +934,7 @@ const Grid = ({
           <DuplicateElementGhost
             duplicate={duplicateState}
             cursor={duplicateCursor}
+            zoom={zoom}
           />
           <PluginElementsRenderer
             windowType="main"
@@ -924,9 +962,7 @@ const Grid = ({
               );
               return true;
             }}
-            onMultiDrag={(deltaX, deltaY) =>
-              moveSelectedElements(deltaX, deltaY, undefined, false)
-            }
+            onMultiDrag={moveSelectedElementsDrag}
             onMultiDragStart={beginSelectedPluginInstancesDrag}
             onMultiDragEnd={commitSelectedElementsDrag}
           />
@@ -942,12 +978,14 @@ const Grid = ({
         statPositions={statPositions}
         graphPositions={graphPositions}
         knobPositions={knobPositions}
+        spritePositions={spritePositions}
         mode={selectedKeyType}
         pluginElements={pluginElements}
         zoom={zoom}
         panX={panX}
         panY={panY}
         hasGradientEditSession={hasGradientEditSession}
+        hasSpritePoseSession={hasSpritePoseSession}
         previewBounds={previewBounds}
         previewGroupBounds={previewGroupBounds}
         previewElementBounds={previewElementBounds}
@@ -978,6 +1016,8 @@ const Grid = ({
               ? getGraphMenuItems(contextIndex)
               : contextType === 'knob'
               ? getKnobMenuItems(contextIndex)
+              : contextType === 'sprite'
+              ? getSpriteMenuItems(contextIndex)
               : getKeyMenuItems(contextIndex, contextElementId)
           }
           onSelect={async (id: string) => {
@@ -1013,7 +1053,7 @@ const Grid = ({
             // 메뉴가 열린 동안의 재정렬·삭제를 액션 시점에 재해석.
             // 모드 밖으로 이동한 대상은 소실로 취급한다
             const resolveContextTarget = (
-              targetType: 'key' | 'stat' | 'graph' | 'knob',
+              targetType: NativeElementType,
             ): number | null => {
               if (!contextElementId) return null;
               const locator = resolveElementById(targetType, contextElementId);
@@ -1025,7 +1065,8 @@ const Grid = ({
             if (
               contextType === 'stat' ||
               contextType === 'graph' ||
-              contextType === 'knob'
+              contextType === 'knob' ||
+              contextType === 'sprite'
             ) {
               const targetType = contextType;
               const targetIndex = resolveContextTarget(targetType);
@@ -1039,6 +1080,8 @@ const Grid = ({
                   if (targetType === 'stat') beginDuplicateStat(resolvedIndex);
                   else if (targetType === 'graph')
                     beginDuplicateGraph(resolvedIndex);
+                  else if (targetType === 'sprite')
+                    beginDuplicateSprite(resolvedIndex);
                   else beginDuplicateKnob(resolvedIndex);
                 },
               });
@@ -1234,6 +1277,7 @@ const Grid = ({
           statPositions={statPositions?.[selectedKeyType] || []}
           graphPositions={graphPositions?.[selectedKeyType] || []}
           knobPositions={knobPositions?.[selectedKeyType] || []}
+          spritePositions={spritePositions?.[selectedKeyType] || []}
           zoom={zoom}
           panX={panX}
           panY={panY}

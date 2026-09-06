@@ -6,12 +6,14 @@ import type {
   CanonicalGraphItemPosition,
   CanonicalKeyPosition,
   CanonicalKnobItemPosition,
+  CanonicalReactiveSpritePosition,
   CanonicalStatItemPosition,
 } from '@src/types/editor';
 import type { KeySlot } from '@src/types/key/keys';
 import type { LayerGroupDef } from '@src/types/layerGroups';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import { cloneSlot } from '@utils/keySlot';
+import { buildSpriteKeyCanonicalMap } from '@utils/sprite/spriteKeyBinding';
 
 interface SelectionClipboardSource {
   selectedElements: readonly SelectedElement[];
@@ -20,6 +22,7 @@ interface SelectionClipboardSource {
   statPositions: readonly CanonicalStatItemPosition[];
   graphPositions: readonly CanonicalGraphItemPosition[];
   knobPositions: readonly CanonicalKnobItemPosition[];
+  spritePositions: readonly CanonicalReactiveSpritePosition[];
   pluginElements: readonly PluginDisplayElementInternal[];
   selectedGroupIds: readonly string[];
   layerGroups: readonly LayerGroupDef[];
@@ -38,12 +41,18 @@ export const createSelectionClipboardSnapshot = ({
   statPositions,
   graphPositions,
   knobPositions,
+  spritePositions,
   pluginElements,
   selectedGroupIds,
   layerGroups,
   collapsedGroupIds,
 }: SelectionClipboardSource): SelectionClipboardSnapshot => {
   const items: ClipboardItem[] = [];
+  // 트리거 id -> canonical 키. 재생 매핑과 같은 결합을 쓴다
+  const sourceKeyCanonicals = buildSpriteKeyCanonicalMap(
+    keyMappings,
+    keyPositions,
+  );
 
   for (const element of selectedElements) {
     if (element.type === 'key') {
@@ -74,6 +83,25 @@ export const createSelectionClipboardSnapshot = ({
         (candidate) => candidate.id === element.id,
       );
       if (position) items.push({ type: 'knob', position: { ...position } });
+    } else if (element.type === 'sprite') {
+      const position = spritePositions.find(
+        (candidate) => candidate.id === element.id,
+      );
+      if (position) {
+        items.push({
+          type: 'sprite',
+          position: { ...position },
+          // 다른 탭에 붙일 때 같은 키로 다시 결합하려면 지금의 결합을 얼려야 한다
+          triggerCanonicals: Object.fromEntries(
+            position.poses.flatMap((pose) =>
+              pose.triggers.flatMap((trigger) => {
+                const canonical = sourceKeyCanonicals.get(trigger);
+                return canonical === undefined ? [] : [[trigger, canonical]];
+              }),
+            ),
+          ),
+        });
+      }
     } else {
       const pluginElement = pluginElements.find(
         (candidate) => candidate.fullId === element.id,

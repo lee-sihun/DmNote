@@ -17,16 +17,22 @@ use crate::{
     },
     defaults::{default_keys, default_positions},
     models::{
-        default_missing_note_gradient_multipliers, normalize_key_slot,
+        default_missing_note_gradient_multipliers, default_sprite_press_duration_ms,
+        default_sprite_transition_ms, is_renderable_image_ref, normalize_key_slot,
         scrub_removed_text_outline_fields, AppStoreData, CounterAnimationPreset, CustomCss,
         CustomCssHistoryEntry, CustomFont, CustomJs, CustomTab, FontType, FontWeightRange,
         GradientSpec, GraphPosition, GraphPositions, GraphStatType, GraphType, GridSettings,
         ImageMode, ImageTransform, JsPlugin, KeyCounters, KeyMappings, KeyPosition, KeyPositions,
         KeySlot, KnobPosition, KnobPositions, LayerGroupDef, LayerGroups, NoteSettings,
-        ShortcutsState, SoundLibraryEntry, StatPosition, StatPositions, StatType,
-        StoredOverlayBounds, TabCss, TabNoteSettings, IMAGE_TRANSFORM_OFFSET_MAX,
+        ReactiveSpritePosition, ShortcutsState, SoundLibraryEntry, SpriteAnchor, SpritePositions,
+        SpriteTransform, StatPosition, StatPositions, StatType, StoredOverlayBounds, TabCss,
+        TabNoteSettings, ELEMENT_ROTATION_MAX, ELEMENT_ROTATION_MIN, IMAGE_TRANSFORM_OFFSET_MAX,
         IMAGE_TRANSFORM_OFFSET_MIN, IMAGE_TRANSFORM_ROTATION_MAX, IMAGE_TRANSFORM_ROTATION_MIN,
         IMAGE_TRANSFORM_SCALE_MAX, IMAGE_TRANSFORM_SCALE_MIN, POSITION_COLLECTION_FIELDS,
+        SPRITE_IMAGE_DIMENSION_MAX, SPRITE_IMAGE_DIMENSION_MIN, SPRITE_PRESS_DURATION_MS_MAX,
+        SPRITE_PRESS_DURATION_MS_MIN, SPRITE_TRANSFORM_OFFSET_MAX, SPRITE_TRANSFORM_OFFSET_MIN,
+        SPRITE_TRANSFORM_ROTATION_MAX, SPRITE_TRANSFORM_ROTATION_MIN, SPRITE_TRANSFORM_SCALE_MAX,
+        SPRITE_TRANSFORM_SCALE_MIN, SPRITE_TRANSITION_MS_MAX,
     },
 };
 
@@ -45,15 +51,16 @@ use assets::{
     normalize_image_extension,
 };
 pub(crate) use assets::{
-    is_foreign_portable_asset_reference, migrate_key_images_to_app_data,
-    migrate_local_fonts_to_app_data, rehome_foreign_asset_references,
+    fill_missing_sprite_image_metrics, is_foreign_portable_asset_reference,
+    migrate_key_images_to_app_data, migrate_local_fonts_to_app_data,
+    rehome_foreign_asset_references,
 };
 use assets::{parse_portable_asset_reference, AssetCategory};
 #[cfg(test)]
 use normalization::rgba_to_hex;
 pub(crate) use normalization::{
     canonicalize_gradient_pairs, canonicalize_image_modes, clear_dangling_group_ids,
-    normalize_state,
+    migrate_legacy_sprite_wire, normalize_sprite_triggers, normalize_state,
 };
 #[allow(unused_imports)]
 pub(crate) use normalization::{
@@ -63,13 +70,15 @@ use normalization::{
     current_unix_millis, default_store_note_gradient_multipliers,
     has_convertible_note_border_color, has_explicit_invalid_element_id,
     has_legacy_font_weight_state, has_valid_selected_key_type, key_position_lengths_mismatch,
-    migrate_legacy_knob_sensitivity, migrate_sound_library_enabled, normalize_blank_font_colors,
-    remove_legacy_panel_detach_setting, repair_editor_revision, repair_image_transforms,
-    repair_semantic_identities,
+    migrate_legacy_knob_sensitivity, migrate_legacy_sprite_positions_value,
+    migrate_sound_library_enabled, normalize_blank_font_colors, remove_legacy_panel_detach_setting,
+    repair_editor_revision, repair_native_position_ranges, repair_semantic_identities,
+    repair_sprite_numeric_ranges,
 };
 #[cfg(test)]
 use recovery::{
-    recover_key_mapping_entries, recover_local_font_enabled, recover_sound_library_entries,
+    recover_collection_field, recover_key_mapping_entries, recover_local_font_enabled,
+    recover_sound_library_entries,
 };
 use recovery::{repair_custom_tab_key_layout_pairs, repair_legacy_state};
 
@@ -93,6 +102,7 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
             Ok(mut value) => {
                 let seed_active_css_history = value.get("customCssHistory").is_none();
                 let explicit_invalid_element_id = has_explicit_invalid_element_id(&value);
+                let sprite_wire_migrated = migrate_legacy_sprite_wire(&mut value);
                 let has_tab_order = value.get("tabOrder").is_some();
                 let has_bar_count = value.get("barCount").is_some();
                 let sound_library_migrated = migrate_sound_library_enabled(&mut value);
@@ -103,6 +113,7 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
                 match serde_json::from_value::<AppStoreData>(value.clone()) {
                     Ok(mut data) => {
                         let mut needs_persist = text_outline_scrubbed
+                            || sprite_wire_migrated
                             || sound_library_migrated
                             || gradient_multipliers_defaulted
                             || data.font_settings.custom_fonts.iter().any(|font| {
@@ -121,8 +132,10 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
                         if migrate_legacy_knob_sensitivity(&mut data) {
                             needs_persist = true;
                         }
-                        let image_transform_repaired = repair_image_transforms(&mut data);
-                        needs_persist |= image_transform_repaired;
+                        let position_range_repaired = repair_native_position_ranges(&mut data);
+                        needs_persist |= position_range_repaired;
+                        let sprite_numeric_repaired = repair_sprite_numeric_ranges(&mut data);
+                        needs_persist |= sprite_numeric_repaired;
                         needs_persist |= has_legacy_font_weight_state(&data);
                         let editor_revision_repaired = repair_editor_revision(&mut data);
                         needs_persist |= editor_revision_repaired;
@@ -142,6 +155,7 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
                         needs_persist |= layout_repaired;
                         needs_persist |= normalize_blank_font_colors(&mut data);
                         needs_persist |= canonicalize_image_modes(&mut data);
+                        needs_persist |= normalize_sprite_triggers(&mut data);
                         let (gradient_changed, gradient_pair_repaired) =
                             canonicalize_gradient_pairs(&mut data);
                         needs_persist |= gradient_changed;
@@ -162,7 +176,8 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
                                 || (has_bar_count && bar_count_changed)
                                 || editor_revision_repaired
                                 || gradient_pair_repaired
-                                || image_transform_repaired,
+                                || position_range_repaired
+                                || sprite_numeric_repaired,
                             seed_active_css_history,
                             explicit_invalid_element_id,
                         )

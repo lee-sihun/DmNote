@@ -1,6 +1,5 @@
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import {
-  applyPropertyIntentsEagerly,
   reportElementOpError,
   reportElementOpSkipped,
   type ElementIntentReceipt,
@@ -10,10 +9,17 @@ import type { EditorOpV1 } from '@src/types/editor';
 import { runMixedElementOpsIntent } from '@src/renderer/editor/runtime/intent/mixedElementIntent';
 import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import {
+  applyBoundsIntentsEagerly,
   commitElementBoundsById,
   commitSingleElementBoundsById,
+  elementBoundsOp,
 } from '@src/renderer/editor/runtime/operations/elementOps';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
+import {
+  isHistoryEditorFlushLocked,
+  subscribeHistoryEditorFlushStart,
+} from '@src/renderer/editor/runtime/lifecycle/historyEditorFlushLock';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useSmartGuidesStore } from '@stores/grid/useSmartGuidesStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
@@ -112,7 +118,7 @@ export function useGridResize({
     });
   };
 
-  const endPluginResizeSessions = () => {
+  const endPluginResizeSessions = useCallback(() => {
     const tokens = pluginResizeTokensRef.current;
     pluginResizeTokensRef.current = new Map();
     tokens.forEach((token, pluginId) => {
@@ -122,7 +128,43 @@ export function useGridResize({
     const gestureId = resizeGestureIdRef.current;
     if (gestureId) cancelUncommittedMixedGestureTransaction(gestureId);
     resizeGestureIdRef.current = null;
-  };
+  }, []);
+
+  // history 적용·flush 시작이 끼어들면 진행 중 리사이즈를 커밋 없이 버린다 -
+  // 되돌아간 문서 위에 마지막 프리뷰를 다시 쓰지 않게
+  const cancelResize = useCallback(() => {
+    resizeStartRef.current = false;
+    frozenResizeTargetsRef.current = [];
+    finalBoundsRef.current = null;
+    finalGroupBoundsRef.current = null;
+    setPreviewBounds(null);
+    setPreviewGroupBounds(null);
+    setPreviewElementBounds(null);
+    useGridSelectionStore.getState().setResizing(false);
+    useSmartGuidesStore.getState().clearGuides();
+    endPluginResizeSessions();
+  }, [endPluginResizeSessions]);
+
+  useEffect(
+    () =>
+      useCommittedApplyStore.subscribe((state, previous) => {
+        if (
+          state.historyTick === previous.historyTick ||
+          !resizeStartRef.current
+        )
+          return;
+        cancelResize();
+      }),
+    [cancelResize],
+  );
+
+  useEffect(
+    () =>
+      subscribeHistoryEditorFlushStart(() => {
+        if (resizeStartRef.current) cancelResize();
+      }),
+    [cancelResize],
+  );
 
   useEffect(
     () => () => {
@@ -134,11 +176,11 @@ export function useGridResize({
       endPluginResizeSessions();
       if (gestureId) cancelUncommittedMixedGestureTransaction(gestureId);
     },
-    [],
+    [endPluginResizeSessions],
   );
 
   const handleResizeStart = (_handle?: ResizeHandle) => {
-    if (resizeStartRef.current) return;
+    if (resizeStartRef.current || isHistoryEditorFlushLocked()) return;
     resizeStartRef.current = true;
     const gestureId = crypto.randomUUID();
     resizeGestureIdRef.current = gestureId;
@@ -201,7 +243,7 @@ export function useGridResize({
   };
   // 통합 리사이즈 핸들러 (키 및 플러그인 요소 지원) - 프리뷰 모드
   const handleResize = (newBounds: ResizePreviewBounds) => {
-    if (selectedElements.length !== 1) return;
+    if (!resizeStartRef.current || selectedElements.length !== 1) return;
 
     const frozenTarget = frozenResizeTargetsRef.current[0];
     if (
@@ -220,6 +262,11 @@ export function useGridResize({
 
   // 리사이즈 종료 처리 - 실제 요소에 최종 bounds 적용
   const handleResizeComplete = () => {
+    if (!resizeStartRef.current) return;
+    if (isHistoryEditorFlushLocked()) {
+      cancelResize();
+      return;
+    }
     resizeStartRef.current = false;
 
     // 스마트 가이드 클리어
@@ -248,7 +295,7 @@ export function useGridResize({
     }
     if (finalBounds && frozenTargets.length === 1) {
       const element = frozenTargets[0] as {
-        type: 'key' | 'stat' | 'graph' | 'knob' | 'plugin';
+        type: 'key' | 'stat' | 'graph' | 'knob' | 'sprite' | 'plugin';
         id: string;
         index?: number;
       };
@@ -295,6 +342,7 @@ export function useGridResize({
 
   // 그룹 리사이즈 핸들러 - 프리뷰 모드
   const handleGroupResize = (result: GroupResizeResult) => {
+    if (!resizeStartRef.current) return;
     setPreviewGroupBounds(result.groupBounds);
     setPreviewElementBounds(result.elementBounds);
     finalGroupBoundsRef.current = {
@@ -305,6 +353,11 @@ export function useGridResize({
 
   // 그룹 리사이즈 완료 처리 - 실제 요소들에 최종 bounds 적용
   const handleGroupResizeComplete = () => {
+    if (!resizeStartRef.current) return;
+    if (isHistoryEditorFlushLocked()) {
+      cancelResize();
+      return;
+    }
     resizeStartRef.current = false;
     let groupHandledNatively = false;
     let groupPluginInvolved = false;
@@ -335,14 +388,19 @@ export function useGridResize({
       // 구성. native-only는 전용 의도 커밋이 eager와 wire를 함께 소유하고,
       // plugin 혼합은 eager receipt와 슬롯 generator가 각 경계를 소유한다
       const stableBoundsIntents = new Map<
-        'key' | 'stat' | 'graph' | 'knob',
+        'key' | 'stat' | 'graph' | 'knob' | 'sprite',
         Map<string, Record<string, number>>
       >();
       const isStableEntry = (element: { type: string; id: string }): boolean =>
         element.type !== 'plugin' && isNativeElementId(element.id);
       for (const { element, bounds } of finalData.elementBounds) {
         if (!isStableEntry(element)) continue;
-        const type = element.type as 'key' | 'stat' | 'graph' | 'knob';
+        const type = element.type as
+          | 'key'
+          | 'stat'
+          | 'graph'
+          | 'knob'
+          | 'sprite';
         const byId = stableBoundsIntents.get(type) ?? new Map();
         byId.set(element.id, {
           dx: bounds.x,
@@ -379,7 +437,8 @@ export function useGridResize({
         groupSettlement = {
           kind: 'intents',
           stableIntents: stableBoundsIntents,
-          receipt: applyPropertyIntentsEagerly(stableBoundsIntents),
+          // 스프라이트는 projection이 콘텐츠 스케일까지 eager·receipt에 싣는다
+          receipt: applyBoundsIntentsEagerly(stableBoundsIntents),
         };
       }
 
@@ -432,17 +491,14 @@ export function useGridResize({
         const ops: EditorOpV1[] = [];
         for (const [elementType, byId] of settlement.stableIntents) {
           for (const [id, bounds] of byId) {
-            ops.push({
-              kind: 'setBounds',
-              elementType,
-              id,
-              bounds: {
+            ops.push(
+              elementBoundsOp(elementType, id, {
                 dx: bounds.dx as number,
                 dy: bounds.dy as number,
                 width: bounds.width as number,
                 height: bounds.height as number,
-              },
-            });
+              }),
+            );
           }
         }
         void runMixedElementOpsIntent({

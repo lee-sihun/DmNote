@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type {
   CanonicalKeyPosition,
+  CanonicalReactiveSpritePosition,
   CanonicalStatItemPosition,
 } from '@src/types/editor';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
@@ -34,6 +35,7 @@ describe('createSelectionClipboardSnapshot', () => {
       statPositions: [stat],
       graphPositions: [],
       knobPositions: [],
+      spritePositions: [],
       pluginElements: [plugin],
       selectedGroupIds: [],
       layerGroups: [],
@@ -60,6 +62,7 @@ describe('createSelectionClipboardSnapshot', () => {
       statPositions: [],
       graphPositions: [],
       knobPositions: [],
+      spritePositions: [],
       pluginElements: [],
       selectedGroupIds: ['collapsed', 'missing', 'open'],
       layerGroups: [
@@ -73,5 +76,41 @@ describe('createSelectionClipboardSnapshot', () => {
       { id: 'collapsed', name: 'Collapsed', collapsed: true },
       { id: 'open', name: 'Open', collapsed: undefined },
     ]);
+  });
+
+  it('스프라이트는 트리거가 물린 키의 canonical을 함께 얼린다', () => {
+    const key = { id: 'key', dx: 1, dy: 2 } as CanonicalKeyPosition;
+    const sprite = {
+      id: 'sprite',
+      dx: 3,
+      dy: 4,
+      poses: [{ poseId: 'pose', triggers: ['key', 'outside'] }],
+    } as unknown as CanonicalReactiveSpritePosition;
+
+    const snapshot = createSelectionClipboardSnapshot({
+      selectedElements: [{ type: 'sprite', id: sprite.id, index: 0 }],
+      keyMappings: ['KeyA'],
+      keyPositions: [key],
+      statPositions: [],
+      graphPositions: [],
+      knobPositions: [],
+      spritePositions: [sprite],
+      pluginElements: [],
+      selectedGroupIds: [],
+      layerGroups: [],
+      collapsedGroupIds: new Set(),
+    });
+
+    expect(snapshot.items).toEqual([
+      {
+        type: 'sprite',
+        position: sprite,
+        // 배치 밖 키('outside')는 canonical을 모르므로 얼리지 않는다
+        triggerCanonicals: { key: 'KeyA' },
+      },
+    ]);
+    expect(
+      snapshot.items[0].type === 'sprite' && snapshot.items[0].position,
+    ).not.toBe(sprite);
   });
 });

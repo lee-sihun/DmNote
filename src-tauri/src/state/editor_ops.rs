@@ -12,17 +12,18 @@ use crate::{
         EditorOpResultStatusV1, EditorOpResultV1, EditorOpV1, EditorPaintDescriptorV1,
         EditorPaintGradientV1, EditorShadowLeafPatchV1, EditorTargetGroupV1, EditorZUpdateV1,
         ElementShadowSpec, GradientSpec, ImageMode, ImageTransform, ImageTransformLeafPatchV1,
-        KeyPosition, LayerGroupDef, NoteColor, NoteGradientShadow, IMAGE_TRANSFORM_OFFSET_MAX,
-        IMAGE_TRANSFORM_OFFSET_MIN, IMAGE_TRANSFORM_ROTATION_MAX, IMAGE_TRANSFORM_ROTATION_MIN,
-        IMAGE_TRANSFORM_SCALE_MAX, IMAGE_TRANSFORM_SCALE_MIN, SHADOW_BLUR_MAX, SHADOW_BLUR_MIN,
-        SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
+        KeyPosition, LayerGroupDef, NoteColor, NoteGradientShadow, ReactiveSpritePosition,
+        SpriteTransform, IMAGE_TRANSFORM_OFFSET_MAX, IMAGE_TRANSFORM_OFFSET_MIN,
+        IMAGE_TRANSFORM_ROTATION_MAX, IMAGE_TRANSFORM_ROTATION_MIN, IMAGE_TRANSFORM_SCALE_MAX,
+        IMAGE_TRANSFORM_SCALE_MIN, SHADOW_BLUR_MAX, SHADOW_BLUR_MIN, SHADOW_OFFSET_MAX,
+        SHADOW_OFFSET_MIN, SPRITE_TRANSFORM_OFFSET_MAX, SPRITE_TRANSFORM_OFFSET_MIN,
     },
 };
 
 use super::editor::{
     validate_document_transition, validate_editor_op_bounds, validate_editor_op_target_type,
 };
-use super::native_element_id::DUPLICATE_ELEMENT_ID;
+use super::native_element_id::{validate_document_element_ids, DUPLICATE_ELEMENT_ID};
 use super::plugin::{plugin_group_refs_from_store, PluginGroupRefs};
 
 mod property_patch;

@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   actions: undefined as unknown,
   handleMouseDown: vi.fn(),
   handleGroupMouseDown: vi.fn(),
+  renameLayer: vi.fn(() => Promise.resolve(true)),
+  renameGroup: vi.fn(() => Promise.resolve(true)),
 }));
 
 vi.mock('@components/main/common/IconSwap', () => ({
@@ -29,9 +31,14 @@ vi.mock('@hooks/useLenis', () => ({
   }),
 }));
 
-vi.mock('./useLayerActions', () => ({
-  useLayerActions: () => mocks.actions,
-}));
+// 입력 계약 테스트는 액션을 통째로 대체하고, 취소·저장 흐름 테스트는 실제 훅을 쓴다
+vi.mock('./useLayerActions', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./useLayerActions')>();
+  return {
+    useLayerActions: (params: Parameters<typeof actual.useLayerActions>[0]) =>
+      mocks.actions ?? actual.useLayerActions(params),
+  };
+});
 
 vi.mock('./useLayerDnD', () => ({
   useLayerDnD: () => ({
@@ -50,10 +57,38 @@ vi.mock('./useLayerDnD', () => ({
   }),
 }));
 
+vi.mock('@src/renderer/editor/runtime/operations/elementOps', () => ({
+  patchElementHiddenById: vi.fn(),
+  patchElementLayerNameById: mocks.renameLayer,
+  renameLayerGroupById: mocks.renameGroup,
+}));
+
+vi.mock('@components/main/Modal/listPopup/ListPopup', () => ({
+  default: ({
+    open,
+    items,
+    onSelect,
+  }: {
+    open: boolean;
+    items: { id: string; label: string }[];
+    onSelect: (id: string) => void;
+  }) =>
+    open ? (
+      <div data-testid="layer-menu">
+        {items.map((item) => (
+          <button key={item.id} onClick={() => onSelect(item.id)}>
+            {item.label}
+          </button>
+        ))}
+      </div>
+    ) : null,
+}));
+
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
@@ -191,6 +226,7 @@ describe('LayerTab rename input contract', () => {
     useStatItemStore.setState({ positions: {} });
     useGraphItemStore.setState({ positions: {} });
     useKnobItemStore.setState({ positions: {} });
+    useSpriteStore.setState({ positions: {} });
     useLayerGroupStore.setState({
       layerGroups: { '4key': [{ id: GROUP_ID, name: 'Group A' }] },
       collapsedGroups: new Set(),
@@ -205,6 +241,7 @@ describe('LayerTab rename input contract', () => {
   afterEach(async () => {
     if (root) await act(async () => root.unmount());
     host?.remove();
+    mocks.actions = undefined;
     vi.clearAllMocks();
     vi.unstubAllGlobals();
   });
@@ -335,4 +372,146 @@ describe('LayerTab rename input contract', () => {
       document.body.removeEventListener('dblclick', propagated);
     },
   );
+});
+
+describe('레이어 이름 입력의 취소와 저장 경계', () => {
+  let host: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(async () => {
+    mocks.actions = undefined;
+    mocks.renameLayer.mockClear();
+    mocks.renameGroup.mockClear();
+    const positions = {
+      '4key': [
+        {
+          id: ITEM_ID,
+          dx: 0,
+          dy: 0,
+          width: 60,
+          height: 60,
+          groupId: GROUP_ID,
+          layerName: 'Key A',
+        },
+      ],
+    };
+    useKeyStore.setState({
+      selectedKeyType: '4key',
+      keyMappings: { '4key': ['A'] },
+      positions: positions as never,
+      canonicalPositions: positions as never,
+    });
+    useStatItemStore.setState({ positions: {} });
+    useGraphItemStore.setState({ positions: {} });
+    useKnobItemStore.setState({ positions: {} });
+    useSpriteStore.setState({ positions: {} });
+    useLayerGroupStore.setState({
+      layerGroups: { '4key': [{ id: GROUP_ID, name: 'Group A' }] },
+      collapsedGroups: new Set(),
+    });
+    usePluginDisplayElementStore.setState({
+      elements: [
+        {
+          id: 'item',
+          fullId: 'plugin:item',
+          pluginId: 'plugin',
+          definitionId: 'Plugin A',
+          html: '',
+          position: { x: 0, y: 0 },
+        },
+      ],
+    });
+    useGridSelectionStore.setState({
+      selectedElements: [],
+      selectedGroupIds: [],
+    });
+    host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+    await act(async () => root.render(<LayerTabContent />));
+  });
+
+  afterEach(async () => {
+    await act(async () => root.unmount());
+    host.remove();
+  });
+
+  const openMenu = async (name: string) => {
+    const row = [...host.querySelectorAll('.dmn-row-grabbable')].find(
+      (element) => element.textContent === name,
+    );
+    expect(row).toBeDefined();
+    await act(async () => {
+      row!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+    });
+    return document.querySelector('[data-testid="layer-menu"]')!;
+  };
+
+  const startRename = async (type: 'layer' | 'group') => {
+    const menu = await openMenu(type === 'layer' ? 'Key A' : 'Group A');
+    const label =
+      type === 'layer' ? 'contextMenu.rename' : 'contextMenu.renameGroup';
+    const button = [...menu.querySelectorAll('button')].find(
+      (element) => element.textContent === label,
+    );
+    expect(button).toBeDefined();
+    await act(async () => button!.click());
+    const input = host.querySelector('input')!;
+    expect(input).not.toBeNull();
+    await act(async () => input.focus());
+    return input;
+  };
+
+  const typeName = async (input: HTMLInputElement, value: string) => {
+    await act(async () => {
+      setNativeValue(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  };
+
+  const pressKey = async (input: HTMLInputElement, key: string) => {
+    await act(async () => {
+      input.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+    });
+  };
+
+  it.each(['layer', 'group'] as const)(
+    '%s 이름을 Escape로 취소한 뒤 새 이름을 Enter로 저장한다',
+    async (type) => {
+      const cancelled = await startRename(type);
+      await typeName(cancelled, 'Cancelled');
+      const blur = vi.fn();
+      cancelled.addEventListener('blur', blur);
+      await pressKey(cancelled, 'Escape');
+
+      expect(host.querySelector('input')).toBeNull();
+      expect(blur).not.toHaveBeenCalled();
+      expect(mocks.renameLayer).not.toHaveBeenCalled();
+      expect(mocks.renameGroup).not.toHaveBeenCalled();
+
+      const input = await startRename(type);
+      await typeName(input, 'Saved');
+      await pressKey(input, 'Enter');
+
+      if (type === 'layer') {
+        expect(mocks.renameLayer).toHaveBeenCalledExactlyOnceWith(
+          'key',
+          ITEM_ID,
+          'Saved',
+        );
+      } else {
+        expect(mocks.renameGroup).toHaveBeenCalledExactlyOnceWith(
+          '4key',
+          GROUP_ID,
+          'Saved',
+        );
+      }
+    },
+  );
+
+  it('인스턴스 이름 저장을 지원하지 않는 플러그인에는 이름 변경을 제공하지 않는다', async () => {
+    const menu = await openMenu('Plugin A');
+    expect(menu.textContent).not.toContain('contextMenu.rename');
+    expect(menu.textContent).toContain('propertiesPanel.delete');
+  });
 });

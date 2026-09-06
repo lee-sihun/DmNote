@@ -23,9 +23,11 @@ use crate::{
         GesturePluginInstancesChange, GraphPosition, GraphStatType, GraphType, JsPlugin,
         KeyCounters, KeyPosition, KeySlot, KnobPosition, LayerGroupDef, NoteColor, OverlayBounds,
         PanelBounds, PendingProcessedWavReplacement, PluginInstancesCommitRequest,
-        PluginInstancesReconcileRequest, PluginPoint, SavedPluginInstance, SettingsPatchInput,
-        SlotMatch, SoundLibraryEntry, SoundSource, StatPosition, StatType, TabCss, TabNoteSettings,
-        EDITOR_COMMIT_SCHEMA_VERSION_V2, EDITOR_OPS_VERSION, EDITOR_SCHEMA_VERSION,
+        PluginInstancesReconcileRequest, PluginPoint, ReactiveSpritePosition, SavedPluginInstance,
+        SettingsPatchInput, SlotMatch, SoundLibraryEntry, SoundSource, SpriteActivation,
+        SpriteAnchor, SpriteImageMetrics, SpritePose, SpriteReferenceNaturalSize, SpriteTransform,
+        StatPosition, StatType, TabCss, TabNoteSettings, EDITOR_COMMIT_SCHEMA_VERSION_V2,
+        EDITOR_OPS_VERSION, EDITOR_SCHEMA_VERSION,
     },
     services::{css_watcher::commit_css_reload, settings::apply_patch_to_store},
     state::{
@@ -52,6 +54,72 @@ use std::{
 
 fn test_directory(label: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!("dmnote-{label}-{}", uuid::Uuid::new_v4()))
+}
+
+fn png_header(width: u32, height: u32) -> Vec<u8> {
+    let mut bytes = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec();
+    bytes.extend_from_slice(&width.to_be_bytes());
+    bytes.extend_from_slice(&height.to_be_bytes());
+    bytes
+}
+
+#[test]
+fn store_initialization_fills_missing_sprite_metrics_after_paths_resolve() {
+    let directory = test_directory("sprite-metrics-load");
+    let images = directory.join("images");
+    let base = images.join("base.png");
+    let pose = images.join("pose.png");
+    std::fs::create_dir_all(&images).unwrap();
+    std::fs::write(&base, png_header(640, 360)).unwrap();
+    std::fs::write(&pose, png_header(320, 240)).unwrap();
+    let mut data = AppStoreData::default();
+    data.sprite_positions.insert(
+        "4key".to_string(),
+        vec![
+            ReactiveSpritePosition {
+                base_image: Some(base.to_string_lossy().into_owned()),
+                poses: vec![SpritePose {
+                    image_override: Some(pose.to_string_lossy().into_owned()),
+                    ..SpritePose::default()
+                }],
+                ..ReactiveSpritePosition::default()
+            },
+            ReactiveSpritePosition {
+                base_image: Some(images.join("missing.png").to_string_lossy().into_owned()),
+                ..ReactiveSpritePosition::default()
+            },
+        ],
+    );
+    std::fs::write(
+        directory.join("store.json"),
+        serde_json::to_vec(&data).unwrap(),
+    )
+    .unwrap();
+
+    let store = AppStore::initialize_for_test(&directory).unwrap();
+    let snapshot = store.snapshot();
+    let sprite = &snapshot.sprite_positions["4key"][0];
+    assert_eq!(
+        sprite
+            .reference_natural_size
+            .as_ref()
+            .map(|size| (size.width, size.height)),
+        Some((640, 360))
+    );
+    assert_eq!(
+        sprite.poses[0]
+            .image_override_metrics
+            .as_ref()
+            .map(|size| (size.width, size.height)),
+        Some((320, 240))
+    );
+    assert_eq!(
+        snapshot.sprite_positions["4key"][1].reference_natural_size,
+        None
+    );
+
+    store.flush_and_shutdown().unwrap();
+    std::fs::remove_dir_all(directory).unwrap();
 }
 
 fn regular_file_count(directory: &Path) -> usize {
@@ -281,6 +349,13 @@ fn set_bounds_op(
 ) -> EditorOpV1 {
     EditorOpV1::SetBounds {
         element_type,
+        id: id.into(),
+        bounds,
+    }
+}
+
+fn resize_sprite_op(id: impl Into<String>, bounds: EditorBoundsV1) -> EditorOpV1 {
+    EditorOpV1::ResizeSprite {
         id: id.into(),
         bounds,
     }
@@ -595,6 +670,7 @@ fn editor_reset_mode_filters_loaded_and_unloaded_plugin_instances_once() {
                 EditorField::StatPositions,
                 EditorField::GraphPositions,
                 EditorField::KnobPositions,
+                EditorField::SpritePositions,
                 EditorField::LayerGroups,
             ],
             PluginInstancesResetScope::Mode("4key".to_string()),
@@ -5278,6 +5354,412 @@ fn editor_commit_history_skips_no_op_and_deduplicates_mutation() {
 }
 
 #[test]
+fn element_rotation_survives_legacy_updates_gesture_history_and_restart() {
+    fn native_positions_mut(document: &mut EditorDocumentV1) -> [&mut KeyPosition; 4] {
+        [
+            &mut document.key_positions.get_mut("4key").unwrap()[0],
+            &mut document.stat_positions.get_mut("4key").unwrap()[0].position,
+            &mut document.graph_positions.get_mut("4key").unwrap()[0].position,
+            &mut document.knob_positions.get_mut("4key").unwrap()[0].position,
+        ]
+    }
+
+    let directory = tempfile::tempdir().unwrap();
+    let store = initialize_neutral_editor_store(directory.path());
+    let new_position = |rotation| KeyPosition {
+        id: uuid::Uuid::new_v4().to_string(),
+        rotation,
+        ..KeyPosition::default()
+    };
+    let mut key_positions = store.editor_get().document.key_positions;
+    key_positions.get_mut("4key").unwrap()[0].rotation = 45.0;
+    store
+        .commit_editor_document(editor_request(
+            store.editor_get().revision,
+            uuid::Uuid::new_v4().to_string(),
+            EditorPatchV1 {
+                schema_version: EDITOR_COMMIT_SCHEMA_VERSION_V2,
+                key_positions: Some(key_positions),
+                stat_positions: Some(HashMap::from([(
+                    "4key".to_string(),
+                    vec![StatPosition {
+                        stat_type: StatType::Kps,
+                        position: new_position(-30.0),
+                    }],
+                )])),
+                graph_positions: Some(HashMap::from([(
+                    "4key".to_string(),
+                    vec![GraphPosition {
+                        stat_type: GraphStatType::Kps,
+                        graph_type: GraphType::Line,
+                        graph_speed: 100,
+                        graph_color: "#123456".to_string(),
+                        show_avg_line: true,
+                        position: new_position(180.0),
+                    }],
+                )])),
+                knob_positions: Some(HashMap::from([(
+                    "4key".to_string(),
+                    vec![KnobPosition {
+                        axis_id: "axis".to_string(),
+                        sensitivity: 1.0,
+                        reverse: false,
+                        position: new_position(-180.0),
+                    }],
+                )])),
+                ..EditorPatchV1::default()
+            },
+        ))
+        .unwrap();
+    let initial = store.editor_get().document;
+    let targets = [
+        (
+            EditorElementTypeV1::Key,
+            initial.key_positions["4key"][0].id.clone(),
+        ),
+        (
+            EditorElementTypeV1::Stat,
+            initial.stat_positions["4key"][0].position.id.clone(),
+        ),
+        (
+            EditorElementTypeV1::Graph,
+            initial.graph_positions["4key"][0].position.id.clone(),
+        ),
+        (
+            EditorElementTypeV1::Knob,
+            initial.knob_positions["4key"][0].position.id.clone(),
+        ),
+    ];
+    let group_targets = targets
+        .iter()
+        .map(|(element_type, id)| EditorElementGroupTargetV1 {
+            element_type: *element_type,
+            id: id.clone(),
+        })
+        .collect::<Vec<_>>();
+    let group_id = "rotation-group";
+    let mut grouped = initial.clone();
+    for position in native_positions_mut(&mut grouped) {
+        position.group_id = Some(group_id.to_string());
+    }
+    grouped.layer_groups.insert(
+        "4key".to_string(),
+        vec![LayerGroupDef {
+            id: group_id.to_string(),
+            name: "Rotation Group".to_string(),
+        }],
+    );
+    let change = store
+        .commit_editor_document(editor_ops_request(
+            store.editor_get().revision,
+            uuid::Uuid::new_v4().to_string(),
+            vec![EditorOpV1::SetElementGroups {
+                mode: "4key".to_string(),
+                targets: group_targets.clone(),
+                target_group: Some(EditorTargetGroupV1::Create {
+                    id: group_id.to_string(),
+                    name: "Rotation Group".to_string(),
+                }),
+            }],
+        ))
+        .unwrap();
+    assert_eq!(change.document, grouped);
+
+    let gesture_id = uuid::Uuid::new_v4().to_string();
+    let mut rotated = grouped.clone();
+    for rotation in [-45.5, 90.0] {
+        let mut request = editor_ops_request(
+            store.editor_get().revision,
+            uuid::Uuid::new_v4().to_string(),
+            targets
+                .iter()
+                .map(|(element_type, id)| {
+                    patch_property_op(
+                        *element_type,
+                        id,
+                        EditorElementPropertyPatchV1::Rotation(rotation),
+                    )
+                })
+                .collect(),
+        );
+        request.gesture_id = Some(gesture_id.clone());
+        let change = store.commit_editor_document(request).unwrap();
+        rotated.key_positions.get_mut("4key").unwrap()[0].rotation = rotation;
+        rotated.stat_positions.get_mut("4key").unwrap()[0]
+            .position
+            .rotation = rotation;
+        rotated.graph_positions.get_mut("4key").unwrap()[0]
+            .position
+            .rotation = rotation;
+        rotated.knob_positions.get_mut("4key").unwrap()[0]
+            .position
+            .rotation = rotation;
+        assert_eq!(change.document, rotated);
+        let patch = serde_json::to_value(&change.event.unwrap().patch).unwrap();
+        for field in crate::models::POSITION_COLLECTION_FIELDS {
+            assert_eq!(patch[field]["4key"][0]["rotation"], rotation);
+        }
+    }
+
+    let mut moved = rotated.clone();
+    moved.key_positions.get_mut("4key").unwrap()[0].dx += 25.0;
+    moved.stat_positions.get_mut("4key").unwrap()[0].position.dy += 25.0;
+    moved.graph_positions.get_mut("4key").unwrap()[0]
+        .position
+        .width += 25.0;
+    moved.knob_positions.get_mut("4key").unwrap()[0]
+        .position
+        .height += 25.0;
+    let change = store
+        .commit_editor_document(editor_request(
+            store.editor_get().revision,
+            uuid::Uuid::new_v4().to_string(),
+            EditorPatchV1 {
+                key_positions: Some(moved.key_positions.clone()),
+                stat_positions: Some(moved.stat_positions.clone()),
+                graph_positions: Some(moved.graph_positions.clone()),
+                knob_positions: Some(moved.knob_positions.clone()),
+                ..EditorPatchV1::default()
+            },
+        ))
+        .unwrap();
+    assert_eq!(change.document, moved);
+
+    let mut resized = moved.clone();
+    let resized_bounds = native_positions_mut(&mut resized)
+        .into_iter()
+        .map(|position| {
+            position.dx *= 1.5;
+            position.dy *= 2.0;
+            position.width *= 1.5;
+            position.height *= 2.0;
+            bounds(position)
+        })
+        .collect::<Vec<_>>();
+    let resize_gesture_id = uuid::Uuid::new_v4().to_string();
+    let mut request = editor_ops_request(
+        store.editor_get().revision,
+        uuid::Uuid::new_v4().to_string(),
+        targets
+            .iter()
+            .zip(resized_bounds)
+            .map(|((element_type, id), bounds)| set_bounds_op(*element_type, id, bounds))
+            .collect(),
+    );
+    request.gesture_id = Some(resize_gesture_id.clone());
+    let change = store.commit_editor_document(request).unwrap();
+    assert_eq!(change.document, resized);
+    assert_eq!(change.event.unwrap().gesture_id, Some(resize_gesture_id));
+
+    let mut ungrouped = resized.clone();
+    for position in native_positions_mut(&mut ungrouped) {
+        position.group_id = None;
+    }
+    ungrouped.layer_groups.get_mut("4key").unwrap().clear();
+    let change = store
+        .commit_editor_document(editor_ops_request(
+            store.editor_get().revision,
+            uuid::Uuid::new_v4().to_string(),
+            vec![EditorOpV1::SetElementGroups {
+                mode: "4key".to_string(),
+                targets: group_targets,
+                target_group: None,
+            }],
+        ))
+        .unwrap();
+    assert_eq!(change.document, ungrouped);
+
+    for (direction, expected) in [
+        (HistoryDirection::Undo, &resized),
+        (HistoryDirection::Undo, &moved),
+        (HistoryDirection::Undo, &rotated),
+        (HistoryDirection::Undo, &grouped),
+        (HistoryDirection::Undo, &initial),
+        (HistoryDirection::Redo, &grouped),
+        (HistoryDirection::Redo, &rotated),
+        (HistoryDirection::Redo, &moved),
+        (HistoryDirection::Redo, &resized),
+        (HistoryDirection::Redo, &ungrouped),
+    ] {
+        let operation_id = uuid::Uuid::new_v4().to_string();
+        let gate = store.history_gate();
+        let barrier = gate.close(&operation_id).unwrap();
+        store
+            .apply_history_operation(
+                direction,
+                &operation_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        assert_eq!(&store.editor_get().document, expected);
+    }
+
+    store.flush_and_shutdown().unwrap();
+    let disk: AppStoreData =
+        serde_json::from_slice(&std::fs::read(directory.path().join("store.json")).unwrap())
+            .unwrap();
+    assert_eq!(EditorDocumentV1::from_store(&disk), ungrouped);
+    drop(store);
+    let reopened = AppStore::initialize_for_test(directory.path()).unwrap();
+    assert_eq!(reopened.editor_get().document, ungrouped);
+    reopened.flush_and_shutdown().unwrap();
+}
+
+#[test]
+fn sprite_layout_rotation_commits_atomically_with_keys_and_preserves_pose_history() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = initialize_neutral_editor_store(directory.path());
+    let mut keys = store.editor_get().document.key_positions;
+    let key = &mut keys.get_mut("4key").unwrap()[0];
+    key.rotation = 170.0;
+    let sprite = ReactiveSpritePosition {
+        id: uuid::Uuid::new_v4().to_string(),
+        dx: 100.0,
+        dy: -50.0,
+        rotation: 175.0,
+        idle_transform: SpriteTransform {
+            rotation: 170.0,
+            x: 25.0,
+            ..SpriteTransform::default()
+        },
+        poses: vec![SpritePose {
+            pose_id: uuid::Uuid::new_v4().to_string(),
+            triggers: vec![key.id.clone()],
+            pivot: Some(SpriteAnchor { x: 0.2, y: 0.8 }),
+            transform: SpriteTransform {
+                rotation: -170.0,
+                y: -35.0,
+                ..SpriteTransform::default()
+            },
+            ..SpritePose::default()
+        }],
+        ..ReactiveSpritePosition::default()
+    };
+    store
+        .commit_editor_document(editor_request(
+            store.editor_get().revision,
+            uuid::Uuid::new_v4().to_string(),
+            EditorPatchV1 {
+                schema_version: EDITOR_COMMIT_SCHEMA_VERSION_V2,
+                key_positions: Some(keys),
+                sprite_positions: Some(HashMap::from([("4key".to_string(), vec![sprite.clone()])])),
+                ..EditorPatchV1::default()
+            },
+        ))
+        .unwrap();
+    let initial = store.editor_get().document;
+    let gesture_id = uuid::Uuid::new_v4().to_string();
+    let mut rotated = initial.clone();
+    for (delta, key_rotation, sprite_rotation) in [(10.0, 180.0, -175.0), (20.0, -170.0, -165.0)] {
+        rotated = initial.clone();
+        let key = &mut rotated.key_positions.get_mut("4key").unwrap()[0];
+        key.dx += delta;
+        key.dy -= delta;
+        key.rotation = key_rotation;
+        let sprite = &mut rotated.sprite_positions.get_mut("4key").unwrap()[0];
+        sprite.dx -= delta;
+        sprite.dy += delta;
+        sprite.rotation = sprite_rotation;
+        let mut request = editor_request(
+            store.editor_get().revision,
+            uuid::Uuid::new_v4().to_string(),
+            EditorPatchV1 {
+                schema_version: EDITOR_COMMIT_SCHEMA_VERSION_V2,
+                key_positions: Some(rotated.key_positions.clone()),
+                sprite_positions: Some(rotated.sprite_positions.clone()),
+                ..EditorPatchV1::default()
+            },
+        );
+        request.gesture_id = Some(gesture_id.clone());
+        let change = store.commit_editor_document(request).unwrap();
+        assert_eq!(change.document, rotated);
+        assert_eq!(
+            change.result.changed_fields,
+            vec![EditorField::KeyPositions, EditorField::SpritePositions]
+        );
+        let event = change.event.unwrap();
+        assert_eq!(event.gesture_id, Some(gesture_id.clone()));
+        assert_eq!(
+            event.patch.sprite_positions.unwrap()["4key"][0].rotation,
+            sprite_rotation
+        );
+    }
+    assert_eq!(
+        rotated.sprite_positions["4key"][0].idle_transform,
+        sprite.idle_transform
+    );
+    assert_eq!(rotated.sprite_positions["4key"][0].poses, sprite.poses);
+
+    let revision = store.editor_get().revision;
+    let mut invalid = rotated.clone();
+    invalid.key_positions.get_mut("4key").unwrap()[0].dx += 25.0;
+    invalid.sprite_positions.get_mut("4key").unwrap()[0].rotation = 181.0;
+    assert!(store
+        .commit_editor_document(editor_request(
+            revision,
+            uuid::Uuid::new_v4().to_string(),
+            EditorPatchV1 {
+                schema_version: EDITOR_COMMIT_SCHEMA_VERSION_V2,
+                key_positions: Some(invalid.key_positions),
+                sprite_positions: Some(invalid.sprite_positions),
+                ..EditorPatchV1::default()
+            },
+        ))
+        .is_err());
+    assert_eq!(store.editor_get().revision, revision);
+    assert_eq!(store.editor_get().document, rotated);
+
+    let mut legacy_updated = rotated.clone();
+    legacy_updated.sprite_positions.get_mut("4key").unwrap()[0].class_name =
+        Some("legacy-style".to_string());
+    let mut legacy = serde_json::to_value(EditorPatchV1 {
+        sprite_positions: Some(legacy_updated.sprite_positions.clone()),
+        ..EditorPatchV1::default()
+    })
+    .unwrap();
+    legacy["spritePositions"]["4key"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("rotation");
+    let change = store
+        .commit_editor_document(editor_request(
+            revision,
+            uuid::Uuid::new_v4().to_string(),
+            serde_json::from_value(legacy).unwrap(),
+        ))
+        .unwrap();
+    assert_eq!(change.document, legacy_updated);
+
+    for (direction, expected) in [
+        (HistoryDirection::Undo, &rotated),
+        (HistoryDirection::Undo, &initial),
+        (HistoryDirection::Redo, &rotated),
+        (HistoryDirection::Redo, &legacy_updated),
+    ] {
+        let operation_id = uuid::Uuid::new_v4().to_string();
+        let gate = store.history_gate();
+        let barrier = gate.close(&operation_id).unwrap();
+        store
+            .apply_history_operation(
+                direction,
+                &operation_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        assert_eq!(&store.editor_get().document, expected);
+    }
+    store.flush_and_shutdown().unwrap();
+    drop(store);
+    let reopened = AppStore::initialize_for_test(directory.path()).unwrap();
+    assert_eq!(reopened.editor_get().document, legacy_updated);
+    reopened.flush_and_shutdown().unwrap();
+}
+
+#[test]
 fn editor_ops_follow_stable_id_and_restore_the_latest_snapshot_on_undo() {
     let dir = test_directory("editor-ops-stable-id-history-test");
     std::fs::create_dir_all(&dir).unwrap();
@@ -6113,6 +6595,324 @@ fn graph_and_knob_literal_batch_replays_and_round_trips_one_history_entry() {
     assert_eq!(redone.knob_positions["4key"][2].axis_id, "  HIDA:raw  ");
     assert!(!redone.knob_positions["4key"][2].reverse);
     assert_eq!(redone.knob_positions["4key"][2].sensitivity, 1.0);
+
+    store.flush_and_shutdown().unwrap();
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn reactive_sprite_editor_commit_patch_round_trips_without_field_loss() {
+    let dir = test_directory("reactive-sprite-editor-commit-round-trip-test");
+    let store = AppStore::initialize_in_dir(&dir).unwrap();
+    let sprite = ReactiveSpritePosition {
+        id: uuid::Uuid::new_v4().to_string(),
+        base_image: Some("https://example.com/base.png".to_string()),
+        poses: vec![SpritePose {
+            pose_id: uuid::Uuid::new_v4().to_string(),
+            triggers: vec![
+                "00000000-0000-4000-8000-000000000001".to_string(),
+                "00000000-0000-4000-8000-000000000002".to_string(),
+            ],
+            image_override: Some("https://example.com/pose.png".to_string()),
+            ..SpritePose::default()
+        }],
+        ..ReactiveSpritePosition::default()
+    };
+    let sprite_positions =
+        crate::models::SpritePositions::from([("4key".to_string(), vec![sprite.clone()])]);
+
+    let committed = store
+        .commit_editor_document(editor_request(
+            0,
+            uuid::Uuid::new_v4().to_string(),
+            EditorPatchV1 {
+                schema_version: EDITOR_COMMIT_SCHEMA_VERSION_V2,
+                sprite_positions: Some(sprite_positions.clone()),
+                ..EditorPatchV1::default()
+            },
+        ))
+        .unwrap();
+
+    assert_eq!(
+        committed.result.changed_fields,
+        [EditorField::SpritePositions]
+    );
+    assert_eq!(committed.document.sprite_positions, sprite_positions);
+    assert_eq!(
+        store.editor_get().document.sprite_positions["4key"],
+        [sprite]
+    );
+
+    let mut duplicate_trigger_sets = committed.document.sprite_positions.clone();
+    let mut duplicate_pose = duplicate_trigger_sets["4key"][0].poses[0].clone();
+    duplicate_pose.pose_id = uuid::Uuid::new_v4().to_string();
+    duplicate_pose.triggers.reverse();
+    duplicate_trigger_sets.get_mut("4key").unwrap()[0]
+        .poses
+        .push(duplicate_pose);
+    let error = store
+        .commit_editor_document(editor_request(
+            committed.result.revision,
+            uuid::Uuid::new_v4().to_string(),
+            EditorPatchV1 {
+                schema_version: EDITOR_COMMIT_SCHEMA_VERSION_V2,
+                sprite_positions: Some(duplicate_trigger_sets),
+                ..EditorPatchV1::default()
+            },
+        ))
+        .unwrap_err();
+    assert_eq!(
+        error.details.unwrap().validation_code.as_deref(),
+        Some("DUPLICATE_SPRITE_POSE_TRIGGERS")
+    );
+
+    store.flush_and_shutdown().unwrap();
+    drop(store);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn legacy_sprite_changes_preserve_omitted_canonical_fields_and_undo_full_snapshot() {
+    let dir = test_directory("legacy-sprite-presence-history-test");
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut data = initialize_default_state();
+    let sprite = ReactiveSpritePosition {
+        id: uuid::Uuid::new_v4().to_string(),
+        base_image: Some("/images/base.png".to_string()),
+        reference_natural_size: Some(SpriteReferenceNaturalSize {
+            source: Some("/images/base.png".to_string()),
+            width: 800,
+            height: 600,
+        }),
+        activation: SpriteActivation::OnPress,
+        press_duration_ms: 900,
+        poses: vec![SpritePose {
+            pose_id: uuid::Uuid::new_v4().to_string(),
+            triggers: vec![uuid::Uuid::new_v4().to_string()],
+            image_override: Some("/images/pose.png".to_string()),
+            image_override_metrics: Some(SpriteImageMetrics {
+                source: "/images/pose.png".to_string(),
+                width: 320,
+                height: 240,
+            }),
+            ..SpritePose::default()
+        }],
+        ..ReactiveSpritePosition::default()
+    };
+    data.sprite_positions
+        .insert("4key".to_string(), vec![sprite]);
+    let store = AppStore::new(dir.join("store.json"), data, false).unwrap();
+    store.persist_current().unwrap();
+    let initial = store.editor_get().document.sprite_positions;
+
+    let legacy_request = |transition_easing: &str| {
+        let mut sprites = initial.clone();
+        sprites.get_mut("4key").unwrap()[0].transition_easing = transition_easing.to_string();
+        let mut changes = serde_json::to_value(EditorPatchV1 {
+            schema_version: EDITOR_COMMIT_SCHEMA_VERSION_V2,
+            sprite_positions: Some(sprites),
+            ..EditorPatchV1::default()
+        })
+        .unwrap();
+        let sprite = changes
+            .pointer_mut("/spritePositions/4key/0")
+            .and_then(Value::as_object_mut)
+            .unwrap();
+        for field in [
+            "baseImage",
+            "referenceNaturalSize",
+            "activation",
+            "pressDurationMs",
+        ] {
+            sprite.remove(field);
+        }
+        let pose = sprite["poses"][0].as_object_mut().unwrap();
+        pose.remove("imageOverride");
+        pose.remove("imageOverrideMetrics");
+        crate::state::editor::decode_editor_commit_request(json!({
+            "baseRevision": 0,
+            "mutationId": uuid::Uuid::new_v4().to_string(),
+            "changes": changes
+        }))
+        .unwrap()
+    };
+
+    let no_op = store
+        .commit_editor_document(legacy_request(&initial["4key"][0].transition_easing))
+        .unwrap();
+    assert!(no_op.result.changed_fields.is_empty());
+    assert_eq!(no_op.result.revision, 0);
+    assert_eq!(store.history_status().history_revision, 0);
+
+    let committed = store
+        .commit_editor_document(legacy_request("linear"))
+        .unwrap();
+    assert_eq!(
+        committed.result.changed_fields,
+        [EditorField::SpritePositions]
+    );
+    let saved = &store.editor_get().document.sprite_positions["4key"][0];
+    let expected = &initial["4key"][0];
+    assert_eq!(saved.base_image, expected.base_image);
+    assert_eq!(
+        saved.reference_natural_size,
+        expected.reference_natural_size
+    );
+    assert_eq!(saved.activation, expected.activation);
+    assert_eq!(saved.press_duration_ms, expected.press_duration_ms);
+    assert_eq!(
+        saved.poses[0].image_override,
+        expected.poses[0].image_override
+    );
+    assert_eq!(
+        saved.poses[0].image_override_metrics,
+        expected.poses[0].image_override_metrics
+    );
+    assert_eq!(saved.transition_easing, "linear");
+
+    let operation_id = uuid::Uuid::new_v4().to_string();
+    let gate = store.history_gate();
+    let barrier = gate.close(&operation_id).unwrap();
+    store
+        .apply_history_operation(
+            HistoryDirection::Undo,
+            &operation_id,
+            &store.snapshot().key_counters,
+            || {},
+        )
+        .unwrap();
+    drop(barrier);
+    assert_eq!(store.editor_get().document.sprite_positions, initial);
+
+    store.flush_and_shutdown().unwrap();
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn user_sprite_pose_rotation_v1_patch_commits_with_missing_image_files() {
+    let dir = test_directory("user-sprite-pose-rotation-v1-test");
+    std::fs::create_dir_all(&dir).unwrap();
+    let first_trigger = "0bf18ec9-7af0-4f03-a009-aebc99e70167";
+    let second_trigger = "9c2d07a6-e6d5-4ecc-84be-ca67d2d483d0";
+    let mut data = initialize_default_state();
+    let key_positions = data.key_positions.get_mut("4key").unwrap();
+    key_positions[0].id = first_trigger.to_string();
+    key_positions[1].id = second_trigger.to_string();
+    data.sprite_positions.insert(
+        "4key".to_string(),
+        vec![ReactiveSpritePosition {
+            id: "495749a9-0a13-4204-9d47-28fd91109c7f".to_string(),
+            dx: 600.5,
+            dy: 59.0,
+            width: 90.0,
+            height: 75.0,
+            base_image: Some("/missing/images/base.png".to_string()),
+            reference_natural_size: Some(SpriteReferenceNaturalSize {
+                source: Some("/missing/images/base.png".to_string()),
+                width: 240,
+                height: 210,
+            }),
+            pivot: crate::models::SpriteAnchor { x: 1.0, y: 0.0 },
+            poses: vec![
+                SpritePose {
+                    pose_id: "5120c78c-76c0-4447-b866-35d9769e9ae8".to_string(),
+                    triggers: vec![first_trigger.to_string()],
+                    transform: SpriteTransform {
+                        x: 1.41,
+                        y: 0.24,
+                        rotation: -33.6,
+                        scale: 1.0,
+                    },
+                    image_override: Some("/missing/images/pose.png".to_string()),
+                    image_override_metrics: Some(SpriteImageMetrics {
+                        source: "/missing/images/pose.png".to_string(),
+                        width: 240,
+                        height: 210,
+                    }),
+                    ..SpritePose::default()
+                },
+                SpritePose {
+                    pose_id: "2cc7ec94-6f85-4a07-9ae9-0d28eae8289a".to_string(),
+                    triggers: vec![second_trigger.to_string()],
+                    transform: SpriteTransform {
+                        x: 4.9,
+                        ..SpriteTransform::default()
+                    },
+                    image_override: Some("/missing/images/pose.png".to_string()),
+                    image_override_metrics: Some(SpriteImageMetrics {
+                        source: "/missing/images/pose.png".to_string(),
+                        width: 240,
+                        height: 210,
+                    }),
+                    ..SpritePose::default()
+                },
+            ],
+            transition_ms: 90,
+            ..ReactiveSpritePosition::default()
+        }],
+    );
+    let store = AppStore::new(dir.join("store.json"), data, false).unwrap();
+    let mut sprite_positions = store.editor_get().document.sprite_positions;
+    sprite_positions.get_mut("4key").unwrap()[0].poses[0]
+        .transform
+        .rotation = 20.0;
+    let request = crate::state::editor::decode_editor_commit_request(json!({
+        "baseRevision": 0,
+        "mutationId": uuid::Uuid::new_v4().to_string(),
+        "changes": {
+            "schemaVersion": 1,
+            "spritePositions": sprite_positions,
+        }
+    }))
+    .unwrap();
+
+    let committed = store.commit_editor_document(request).unwrap();
+    assert_eq!(
+        committed.document.sprite_positions["4key"][0].poses[0]
+            .transform
+            .rotation,
+        20.0
+    );
+
+    store.flush_and_shutdown().unwrap();
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn sprite_commit_normalizes_metrics_without_an_override() {
+    let dir = test_directory("sprite-pivot-normalization-commit-test");
+    std::fs::create_dir_all(&dir).unwrap();
+    let store = AppStore::initialize_in_dir(&dir).unwrap();
+    let sprite = ReactiveSpritePosition {
+        id: uuid::Uuid::new_v4().to_string(),
+        poses: vec![SpritePose {
+            pose_id: uuid::Uuid::new_v4().to_string(),
+            triggers: vec![uuid::Uuid::new_v4().to_string()],
+            image_override: None,
+            image_override_metrics: Some(SpriteImageMetrics {
+                source: "/images/removed.png".to_string(),
+                width: 320,
+                height: 240,
+            }),
+            ..SpritePose::default()
+        }],
+        ..ReactiveSpritePosition::default()
+    };
+
+    store
+        .commit_editor_document(editor_request(
+            0,
+            uuid::Uuid::new_v4().to_string(),
+            EditorPatchV1 {
+                schema_version: EDITOR_COMMIT_SCHEMA_VERSION_V2,
+                sprite_positions: Some(HashMap::from([("4key".to_string(), vec![sprite])])),
+                ..EditorPatchV1::default()
+            },
+        ))
+        .unwrap();
+
+    let pose = &store.editor_get().document.sprite_positions["4key"][0].poses[0];
+    assert_eq!(pose.image_override_metrics, None);
 
     store.flush_and_shutdown().unwrap();
     let _ = std::fs::remove_dir_all(dir);
@@ -12223,6 +13023,131 @@ fn editor_ops_apply_all_element_types_in_request_order() {
 }
 
 #[test]
+fn resize_sprite_and_set_bounds_batch_undoes_as_one_history_entry() {
+    let dir = test_directory("resize-sprite-mixed-batch-history-test");
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut data = initialize_default_state();
+    data.sprite_positions.insert(
+        "4key".to_string(),
+        vec![ReactiveSpritePosition {
+            id: uuid::Uuid::new_v4().to_string(),
+            dx: 10.0,
+            dy: 20.0,
+            width: 200.0,
+            height: 100.0,
+            idle_transform: SpriteTransform {
+                x: 12.0,
+                y: -6.0,
+                ..SpriteTransform::default()
+            },
+            poses: vec![SpritePose {
+                pose_id: uuid::Uuid::new_v4().to_string(),
+                transform: SpriteTransform {
+                    x: -30.0,
+                    y: 44.0,
+                    ..SpriteTransform::default()
+                },
+                ..SpritePose::default()
+            }],
+            ..ReactiveSpritePosition::default()
+        }],
+    );
+    crate::state::native_element_id::backfill_store_element_ids(&mut data);
+    let store = AppStore::new(dir.join("store.json"), data, false).unwrap();
+    store.persist_current().unwrap();
+    let initial = store.editor_get();
+    let key = initial.document.key_positions["4key"][0].clone();
+    let sprite = initial.document.sprite_positions["4key"][0].clone();
+    let key_bounds = EditorBoundsV1 {
+        dx: key.dx + 50.0,
+        dy: key.dy + 25.0,
+        width: key.width,
+        height: key.height,
+    };
+    let sprite_bounds = EditorBoundsV1 {
+        dx: 5.0,
+        dy: 8.0,
+        width: 400.0,
+        height: 50.0,
+    };
+
+    let change = store
+        .commit_editor_document(editor_ops_request(
+            initial.revision,
+            uuid::Uuid::new_v4().to_string(),
+            vec![
+                resize_sprite_op(&sprite.id, sprite_bounds),
+                set_bounds_op(EditorElementTypeV1::Key, &key.id, key_bounds),
+            ],
+        ))
+        .unwrap();
+
+    assert_eq!(change.result.revision, initial.revision + 1);
+    assert_eq!(
+        change.result.changed_fields,
+        [EditorField::KeyPositions, EditorField::SpritePositions]
+    );
+    assert_eq!(
+        change
+            .result
+            .op_results
+            .as_ref()
+            .unwrap()
+            .iter()
+            .map(|result| (result.status, result.bounds))
+            .collect::<Vec<_>>(),
+        vec![
+            (EditorOpResultStatusV1::Applied, Some(sprite_bounds)),
+            (EditorOpResultStatusV1::Applied, Some(key_bounds)),
+        ]
+    );
+    assert_eq!(store.history_status().history_revision, 1);
+    let committed = store.editor_get().document;
+    assert_eq!(bounds(&committed.key_positions["4key"][0]), key_bounds);
+    assert_eq!(
+        (
+            committed.sprite_positions["4key"][0].dx,
+            committed.sprite_positions["4key"][0].dy,
+            committed.sprite_positions["4key"][0].width,
+            committed.sprite_positions["4key"][0].height,
+        ),
+        (
+            sprite_bounds.dx,
+            sprite_bounds.dy,
+            sprite_bounds.width,
+            sprite_bounds.height,
+        )
+    );
+    assert_eq!(
+        (
+            committed.sprite_positions["4key"][0].idle_transform.x,
+            committed.sprite_positions["4key"][0].idle_transform.y,
+            committed.sprite_positions["4key"][0].poses[0].transform.x,
+            committed.sprite_positions["4key"][0].poses[0].transform.y,
+        ),
+        (24.0, -3.0, -60.0, 22.0)
+    );
+
+    let operation_id = uuid::Uuid::new_v4().to_string();
+    let gate = store.history_gate();
+    let barrier = gate.close(&operation_id).unwrap();
+    let counters = store.snapshot().key_counters;
+    let undo = store
+        .apply_history_operation(HistoryDirection::Undo, &operation_id, &counters, || {})
+        .unwrap();
+    drop(barrier);
+
+    let restored = store.editor_get().document;
+    assert_eq!(restored.key_positions["4key"][0], key);
+    assert_eq!(restored.sprite_positions["4key"][0], sprite);
+    assert!(!undo.status.can_undo);
+    assert!(undo.status.can_redo);
+
+    store.flush_and_shutdown().unwrap();
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
 fn editor_ops_reject_type_mismatch_and_invalid_missing_bounds_atomically() {
     let dir = test_directory("editor-ops-atomic-validation-test");
     std::fs::create_dir_all(&dir).unwrap();
@@ -16598,6 +17523,62 @@ fn asset_references_include_every_position_kind() {
 }
 
 #[test]
+fn reactive_sprite_images_survive_explicit_orphan_sweep() {
+    let dir = test_directory("reactive-sprite-image-sweep-test");
+    let images = dir.join("images");
+    std::fs::create_dir_all(&images).unwrap();
+    let base_image = images.join("sprite-base.png");
+    let first_pose_image = images.join("sprite-pose-first.png");
+    let second_pose_image = images.join("sprite-pose-second.png");
+    let orphan_image = images.join("orphan.png");
+    for path in [
+        &base_image,
+        &first_pose_image,
+        &second_pose_image,
+        &orphan_image,
+    ] {
+        std::fs::write(path, b"image").unwrap();
+    }
+
+    let store = AppStore::initialize_in_dir(&dir).unwrap();
+    legacy_editor_commit(&store, &[EditorField::SpritePositions], |data| {
+        data.sprite_positions.insert(
+            "4key".to_string(),
+            vec![ReactiveSpritePosition {
+                id: uuid::Uuid::new_v4().to_string(),
+                base_image: Some(base_image.to_string_lossy().into_owned()),
+                poses: vec![
+                    SpritePose {
+                        pose_id: uuid::Uuid::new_v4().to_string(),
+                        triggers: vec![uuid::Uuid::new_v4().to_string()],
+                        image_override: Some(first_pose_image.to_string_lossy().into_owned()),
+                        ..SpritePose::default()
+                    },
+                    SpritePose {
+                        pose_id: uuid::Uuid::new_v4().to_string(),
+                        triggers: vec![uuid::Uuid::new_v4().to_string()],
+                        image_override: Some(second_pose_image.to_string_lossy().into_owned()),
+                        ..SpritePose::default()
+                    },
+                ],
+                ..ReactiveSpritePosition::default()
+            }],
+        );
+    })
+    .unwrap();
+
+    store.cleanup_orphan_assets_now().unwrap();
+
+    assert!(base_image.exists());
+    assert!(first_pose_image.exists());
+    assert!(second_pose_image.exists());
+    assert!(!orphan_image.exists());
+    store.flush_and_shutdown().unwrap();
+    drop(store);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
 fn plugin_managed_assets_remain_until_plugin_data_releases_them() {
     let dir = test_directory("plugin-managed-assets-sweep-test");
     let image_path = dir.join("images").join("plugin-owned.png");
@@ -17701,12 +18682,16 @@ fn repaired_asset_references_survive_the_next_normal_session_sweep() {
     let stat_sound = dir.join("sounds").join("stat.wav");
     let graph_sound = dir.join("sounds").join("graph.wav");
     let knob_sound = dir.join("sounds").join("knob.wav");
+    let sprite_base_image = dir.join("images").join("sprite-base.png");
+    let sprite_pose_image = dir.join("images").join("sprite-pose.png");
     for path in [
         &font_path,
         &library_sound,
         &stat_sound,
         &graph_sound,
         &knob_sound,
+        &sprite_base_image,
+        &sprite_pose_image,
     ] {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, b"asset-fixture").unwrap();
@@ -17760,6 +18745,18 @@ fn repaired_asset_references_survive_the_next_normal_session_sweep() {
         })
         .unwrap(),
     );
+    let sprite = serde_json::to_value(ReactiveSpritePosition {
+        id: uuid::Uuid::new_v4().to_string(),
+        base_image: Some(sprite_base_image.to_string_lossy().into_owned()),
+        poses: vec![SpritePose {
+            pose_id: uuid::Uuid::new_v4().to_string(),
+            triggers: vec![uuid::Uuid::new_v4().to_string()],
+            image_override: Some(sprite_pose_image.to_string_lossy().into_owned()),
+            ..SpritePose::default()
+        }],
+        ..ReactiveSpritePosition::default()
+    })
+    .unwrap();
 
     let mut fixture = serde_json::to_value(AppStoreData::default()).unwrap();
     let fields = fixture.as_object_mut().unwrap();
@@ -17774,6 +18771,10 @@ fn repaired_asset_references_survive_the_next_normal_session_sweep() {
         json!({ "asset-mode": [graph] }),
     );
     fields.insert("knobPositions".to_string(), json!({ "asset-mode": [knob] }));
+    fields.insert(
+        "spritePositions".to_string(),
+        json!({ "asset-mode": [sprite, { "width": "invalid" }] }),
+    );
     std::fs::write(
         dir.join("store.json"),
         serde_json::to_vec_pretty(&fixture).unwrap(),
@@ -17790,6 +18791,7 @@ fn repaired_asset_references_survive_the_next_normal_session_sweep() {
     assert_eq!(snapshot.stat_positions["asset-mode"].len(), 1);
     assert_eq!(snapshot.graph_positions["asset-mode"].len(), 1);
     assert_eq!(snapshot.knob_positions["asset-mode"].len(), 1);
+    assert_eq!(snapshot.sprite_positions["asset-mode"].len(), 1);
     recovered.cleanup_orphan_assets_now().unwrap();
     recovered.flush_and_shutdown().unwrap();
     drop(recovered);
@@ -17803,6 +18805,8 @@ fn repaired_asset_references_survive_the_next_normal_session_sweep() {
         &stat_sound,
         &graph_sound,
         &knob_sound,
+        &sprite_base_image,
+        &sprite_pose_image,
     ] {
         assert!(path.exists(), "recovered asset was quarantined: {path:?}");
     }

@@ -35,6 +35,7 @@ describe('collectElementsInKeyRange', () => {
         statPositions: [{ id: 'stat:one', dx: 20, dy: 70 }],
         graphPositions: [{ id: 'graph:one', dx: 60, dy: 20 }],
         knobPositions: [{ id: 'knob:one', dx: 160, dy: 70 }],
+        spritePositions: [{ id: 'sprite:one', dx: 40, dy: 40 }],
       },
     );
 
@@ -45,6 +46,7 @@ describe('collectElementsInKeyRange', () => {
       'stat:stat:one',
       'graph:graph:one',
       'knob:knob:one',
+      'sprite:sprite:one',
     ]);
   });
 
@@ -70,6 +72,9 @@ describe('collectElementsInKeyRange', () => {
         statPositions: [{ id: 'stat:hidden', dx: 10, dy: 10, hidden: true }],
         graphPositions: [null, undefined],
         knobPositions: [{ id: 'knob:outside', dx: 500, dy: 500 }],
+        spritePositions: [
+          { id: 'sprite:hidden', dx: 10, dy: 10, hidden: true },
+        ],
       },
     );
 
@@ -87,6 +92,7 @@ describe('collectElementsInKeyRange', () => {
         statPositions: [],
         graphPositions: [],
         knobPositions: [],
+        spritePositions: [],
       },
     );
 

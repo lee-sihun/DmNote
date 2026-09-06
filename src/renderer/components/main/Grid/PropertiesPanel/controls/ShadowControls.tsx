@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { ACTION_BUTTON_CHROME_CLASS } from '@utils/cardRecipes';
 import type {
   ElementShadowSpec,
   ElementShadowValuePatch,
@@ -97,7 +98,7 @@ const ShadowControls = ({
           <button
             ref={configButtonRef}
             type="button"
-            className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
+            className={`${ACTION_BUTTON_CHROME_CLASS} ${
               pickerOpen ? 'shadow-focus-ring' : ''
             } text-fg text-body`}
             onClick={() => setPickerOpen((open) => !open)}

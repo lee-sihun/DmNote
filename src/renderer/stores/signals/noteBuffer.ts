@@ -148,6 +148,8 @@ export type TrackLayoutInput = {
   trackKey: string;
   trackIndex: number;
   position: { dx: number; dy: number };
+  // 진행 방향 단위벡터(캔버스 좌표, y 아래 양수). 없으면 위로 자란다
+  direction?: { x: number; y: number };
   width: number;
   height: number;
   noteColor?: string | { type: string; top?: string; bottom?: string };
@@ -172,6 +174,9 @@ export type TrackLayoutInput = {
 };
 
 type ResolvedTrackStyle = {
+  // 노트별 진행 방향 - allocate 시점 스냅샷
+  dirX: number;
+  dirY: number;
   opacityTop: number;
   opacityBottom: number;
   glowSize: number;
@@ -324,6 +329,8 @@ const resolveTrackLayout = (
     glowGradientAngleRad = bodyGradientAngleRad;
   }
 
+  const direction = layout.direction ?? { x: 0, y: -1 };
+
   return {
     ...layout,
     resolved: {
@@ -344,6 +351,8 @@ const resolveTrackLayout = (
       borderWidth,
       borderColor: borderColorSRGB,
       borderOpacity: clampPercentToUnit(borderOpacityPercent),
+      dirX: direction.x,
+      dirY: direction.y,
       borderGradientRow,
       borderGradientAngleRad,
       bodyGradientRow,
@@ -377,6 +386,8 @@ export class NoteBuffer {
   readonly noteBodyPaint: Float32Array;
   // 신형 글로우: x 행(-1 = direct), y 각도, z 배율, w LUT 알파 사용 여부
   readonly noteGlowPaint: Float32Array;
+  // 노트별 진행 방향 벡터 d (캔버스 좌표) - allocate 시점 스냅샷
+  readonly noteDir: Float32Array;
   // premultiplied sRGB RGBA, 행 단위 append-only (활성 노트가 옛 행을 참조)
   readonly gradientLUT: Uint8Array;
 
@@ -411,6 +422,7 @@ export class NoteBuffer {
     this.noteBorderGradientInfo = new Float32Array(MAX_NOTES * 2).fill(-1);
     this.noteBodyPaint = new Float32Array(MAX_NOTES * 3).fill(-1);
     this.noteGlowPaint = new Float32Array(MAX_NOTES * 4).fill(-1);
+    this.noteDir = new Float32Array(MAX_NOTES * 2);
     this.gradientLUT = new Uint8Array(
       GRADIENT_LUT_ROWS * GRADIENT_LUT_WIDTH * 4,
     );
@@ -614,6 +626,8 @@ export class NoteBuffer {
       glowGradientAngleRad,
       glowMultiplier,
       glowUseLUTAlpha,
+      dirX,
+      dirY,
     } = layout.resolved;
     const trackIndex = layout.trackIndex;
 
@@ -697,6 +711,11 @@ export class NoteBuffer {
         insertIndex * 4,
         this.activeCount * 4,
       );
+      this.noteDir.copyWithin(
+        (insertIndex + 1) * 2,
+        insertIndex * 2,
+        this.activeCount * 2,
+      );
 
       for (let i = this.activeCount; i > insertIndex; i -= 1) {
         this.noteIdByIndex[i] = this.noteIdByIndex[i - 1];
@@ -764,6 +783,9 @@ export class NoteBuffer {
     this.noteGlowPaint[glowPaintOffset + 1] = glowGradientAngleRad;
     this.noteGlowPaint[glowPaintOffset + 2] = glowMultiplier;
     this.noteGlowPaint[glowPaintOffset + 3] = glowUseLUTAlpha;
+    const dirOffset = insertIndex * 2;
+    this.noteDir[dirOffset] = dirX;
+    this.noteDir[dirOffset + 1] = dirY;
 
     this.noteIdByIndex[insertIndex] = noteId;
     this.trackKeyByIndex[insertIndex] = trackKey;
@@ -827,6 +849,7 @@ export class NoteBuffer {
       );
       this.noteBodyPaint.copyWithin(index * 3, nextIndex * 3, (last + 1) * 3);
       this.noteGlowPaint.copyWithin(index * 4, nextIndex * 4, (last + 1) * 4);
+      this.noteDir.copyWithin(index * 2, nextIndex * 2, (last + 1) * 2);
 
       for (let i = index; i < last; i += 1) {
         const movedId = this.noteIdByIndex[i + 1];
@@ -871,6 +894,7 @@ export class NoteBuffer {
     );
     this.noteBodyPaint.fill(-1, last * 3, last * 3 + 3);
     this.noteGlowPaint.fill(-1, last * 4, last * 4 + 4);
+    this.noteDir.fill(0, last * 2, last * 2 + 2);
 
     this.version += 1;
     return index;
@@ -935,6 +959,7 @@ export class NoteBuffer {
     this.noteBorderGradientInfo.fill(-1, writeIndex * 2, previousCount * 2);
     this.noteBodyPaint.fill(-1, writeIndex * 3, previousCount * 3);
     this.noteGlowPaint.fill(-1, writeIndex * 4, previousCount * 4);
+    this.noteDir.fill(0, writeIndex * 2, previousCount * 2);
 
     this.activeCount = writeIndex;
     this.version += 1;
@@ -962,6 +987,7 @@ export class NoteBuffer {
     this.noteBorderGradientInfo.fill(-1);
     this.noteBodyPaint.fill(-1);
     this.noteGlowPaint.fill(-1);
+    this.noteDir.fill(0);
   }
 
   private copySlot(from: number, to: number) {
@@ -1037,6 +1063,11 @@ export class NoteBuffer {
     this.noteGlowPaint[toGlowPaint + 1] = this.noteGlowPaint[fromGlowPaint + 1];
     this.noteGlowPaint[toGlowPaint + 2] = this.noteGlowPaint[fromGlowPaint + 2];
     this.noteGlowPaint[toGlowPaint + 3] = this.noteGlowPaint[fromGlowPaint + 3];
+
+    const fromDir = from * 2;
+    const toDir = to * 2;
+    this.noteDir[toDir] = this.noteDir[fromDir];
+    this.noteDir[toDir + 1] = this.noteDir[fromDir + 1];
   }
 }
 

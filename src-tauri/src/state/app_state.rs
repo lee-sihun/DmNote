@@ -86,14 +86,15 @@ use window_geometry::convert_physical_bounds_to_logical;
 #[cfg(all(target_os = "windows", not(test)))]
 use window_geometry::OverlayRestoreSource;
 use window_geometry::{
-    applied_overlay_frame_from_placement, complete_overlay_scale_resolution,
-    flush_deferred_overlay_bounds, logical_position_to_native, main_window_content_origin,
-    main_window_logical_rect, main_window_native_rect, native_placement_from_window,
-    overlay_restore_window_scale, panel_bounds_sample_from_window, panel_client_to_outer_position,
-    persist_overlay_placement, persist_overlay_placement_from_window, resolve_overlay_placement,
-    resolve_panel_window_layout, AppliedOverlayFrame, MonitorData, NativePlacement, NativeRect,
-    OverlayPersistenceAuthority, OverlayPlacementTrust, OverlayPosition, PanelBoundsChange,
-    PanelBoundsPersistenceController, PanelWindowLayout, ResolvedOverlayPlacement,
+    adjust_overlay_resize_position, applied_overlay_frame_from_placement,
+    complete_overlay_scale_resolution, content_offset_change, flush_deferred_overlay_bounds,
+    logical_position_to_native, main_window_content_origin, main_window_logical_rect,
+    main_window_native_rect, native_placement_from_window, overlay_restore_window_scale,
+    panel_bounds_sample_from_window, panel_client_to_outer_position, persist_overlay_placement,
+    persist_overlay_placement_from_window, resolve_overlay_placement, resolve_panel_window_layout,
+    AppliedOverlayFrame, MonitorData, NativePlacement, NativeRect, OverlayPersistenceAuthority,
+    OverlayPlacementTrust, OverlayPosition, PanelBoundsChange, PanelBoundsPersistenceController,
+    PanelWindowLayout, ResolvedOverlayPlacement,
 };
 #[cfg(test)]
 use window_geometry::{
@@ -141,6 +142,11 @@ use crate::{
 
 const OVERLAY_LABEL: &str = "overlay";
 pub(crate) const PANEL_LABEL: &str = "panel";
+// Windows 창 클래스. OBS 윈도우 캡처는 기본 우선순위에서 같은 클래스의 창을 대체 후보로
+// 잡으므로 창마다 다른 이름을 준다(메인은 tauri.conf.json). OBS 씬에 저장되는 값이라
+// 출시 후 바꾸지 않는다
+const OVERLAY_WINDOW_CLASS: &str = "DmNoteOverlayWindow";
+const PANEL_WINDOW_CLASS: &str = "DmNotePanelWindow";
 const FRONTEND_LIFECYCLE_WINDOW_LABELS: [&str; 2] = ["main", OVERLAY_LABEL];
 // 메인이 window.open을 부르기 직전 arm하고, 이 시간 안에 온 요청만 패널 창으로 인정
 const PANEL_OPEN_ARM_TIMEOUT: Duration = Duration::from_secs(2);
@@ -1081,6 +1087,7 @@ impl AppState {
             stat_positions: state.stat_positions.clone(),
             graph_positions: state.graph_positions.clone(),
             knob_positions: state.knob_positions.clone(),
+            sprite_positions: state.sprite_positions.clone(),
             custom_tabs: state.custom_tabs.clone(),
             tab_order: state.tab_order.clone(),
             bar_count: state.bar_count,

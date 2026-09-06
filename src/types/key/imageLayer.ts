@@ -1,9 +1,10 @@
 import { z } from 'zod';
+import { ELEMENT_ROTATION_RANGE } from './rotation';
 
 // 키 이미지 레이어 - 모드와 상태별 변환. 저장 구조는 Rust ImageMode/ImageTransform과 동일
 export const IMAGE_TRANSFORM_CONSTRAINTS = {
   offset: { min: -500, max: 500 },
-  rotation: { min: -180, max: 180 },
+  rotation: ELEMENT_ROTATION_RANGE,
   scale: { min: 0.1, max: 10 },
 } as const;
 

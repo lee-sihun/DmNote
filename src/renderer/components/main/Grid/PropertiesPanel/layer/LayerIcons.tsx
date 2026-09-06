@@ -127,3 +127,31 @@ export const KnobIcon: React.FC = () => (
     />
   </svg>
 );
+
+// 스프라이트: 이미지 프레임 + 다음 프레임 잔상 (움직이는 그림)
+export const SpriteIcon: React.FC = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+    <rect
+      x="1.8"
+      y="1.8"
+      width="8.6"
+      height="8.6"
+      rx="1.6"
+      stroke="currentColor"
+      strokeWidth="1.2"
+    />
+    <path
+      d="M3.8 8.2L5.6 6.3L7 7.5L8.4 5.9"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M12.2 4.8V9.8C12.2 11.1255 11.1255 12.2 9.8 12.2H4.8"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+    />
+  </svg>
+);

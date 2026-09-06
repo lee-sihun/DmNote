@@ -6,8 +6,10 @@ import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { calculateBounds, type ElementBounds } from '@utils/grid/smartGuides';
+import { DEFAULT_SPRITE_SIZE } from '@src/types/key/sprites';
 
 /**
  * 특정 요소를 제외한 모든 요소의 bounds를 반환
@@ -23,6 +25,7 @@ const getOtherElementsSnapshot = (
   const statPositions = useStatItemStore.getState().positions;
   const graphPositions = useGraphItemStore.getState().positions;
   const knobPositions = useKnobItemStore.getState().positions;
+  const spritePositions = useSpriteStore.getState().positions;
   const pluginElements = usePluginDisplayElementStore.getState().elements;
 
   const bounds: ElementBounds[] = [];
@@ -81,6 +84,24 @@ const getOtherElementsSnapshot = (
     if (!excludeSet.has(id)) {
       bounds.push(
         calculateBounds(pos.dx, pos.dy, pos.width || 60, pos.height || 60, id),
+      );
+    }
+  });
+
+  // 스프라이트 요소 bounds
+  const sprites = spritePositions[selectedKeyType] || [];
+  sprites.forEach((pos) => {
+    if (!pos || pos.hidden) return;
+    const id = pos.id;
+    if (!excludeSet.has(id)) {
+      bounds.push(
+        calculateBounds(
+          pos.dx,
+          pos.dy,
+          pos.width || DEFAULT_SPRITE_SIZE,
+          pos.height || DEFAULT_SPRITE_SIZE,
+          id,
+        ),
       );
     }
   });

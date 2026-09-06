@@ -12,8 +12,8 @@ pub(super) fn collect_collection_ids_outside_target<T: NativeElement>(
             continue;
         }
         for element in elements {
-            if is_valid_element_id(&element.position().id) {
-                ids.insert(element.position().id.clone());
+            if is_valid_element_id(element.id()) {
+                ids.insert(element.id().to_string());
             }
         }
     }
@@ -29,7 +29,7 @@ fn validate_supplied_collection_ids<T: NativeElement>(
             continue;
         };
         for (index, element) in elements.iter().enumerate() {
-            let id = &element.position().id;
+            let id = element.id();
             if id.is_empty() {
                 if require_id {
                     return Err(EditorCommitError::validation(
@@ -45,11 +45,56 @@ fn validate_supplied_collection_ids<T: NativeElement>(
                     format!("native element {mode}[{index}] has an invalid ID"),
                 ));
             }
-            if !seen.insert(id.clone()) {
+            if !seen.insert(id.to_string()) {
                 return Err(EditorCommitError::validation(
                     DUPLICATE_ELEMENT_ID,
                     format!("native element ID {id} appears more than once in the commit"),
                 ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_sprite_pose_ids(
+    collection: &HashMap<String, Vec<ReactiveSpritePosition>>,
+    require_id: bool,
+    seen: &mut HashSet<String>,
+) -> Result<(), EditorCommitError> {
+    for mode in sorted_modes(collection) {
+        let Some(sprites) = collection.get(&mode) else {
+            continue;
+        };
+        for (sprite_index, sprite) in sprites.iter().enumerate() {
+            for (pose_index, pose) in sprite.poses.iter().enumerate() {
+                if pose.pose_id.is_empty() {
+                    if require_id {
+                        return Err(EditorCommitError::validation(
+                            MISSING_ELEMENT_ID,
+                            format!(
+                                "sprite pose {mode}[{sprite_index}].poses[{pose_index}] is missing an ID"
+                            ),
+                        ));
+                    }
+                    continue;
+                }
+                if !is_valid_element_id(&pose.pose_id) {
+                    return Err(EditorCommitError::validation(
+                        INVALID_ELEMENT_ID,
+                        format!(
+                            "sprite pose {mode}[{sprite_index}].poses[{pose_index}] has an invalid ID"
+                        ),
+                    ));
+                }
+                if !seen.insert(pose.pose_id.clone()) {
+                    return Err(EditorCommitError::validation(
+                        DUPLICATE_ELEMENT_ID,
+                        format!(
+                            "native element ID {} appears more than once in the commit",
+                            pose.pose_id
+                        ),
+                    ));
+                }
             }
         }
     }
@@ -73,6 +118,10 @@ fn validate_supplied_patch_ids(
     if let Some(collection) = patch.knob_positions.as_ref() {
         validate_supplied_collection_ids(collection, require_id, &mut seen)?;
     }
+    if let Some(collection) = patch.sprite_positions.as_ref() {
+        validate_supplied_collection_ids(collection, require_id, &mut seen)?;
+        validate_sprite_pose_ids(collection, require_id, &mut seen)?;
+    }
     Ok(seen)
 }
 
@@ -89,9 +138,9 @@ fn sanitize_v1_supplied_collection_ids<T: NativeElement>(
             continue;
         };
         for (index, element) in elements.iter().enumerate() {
-            let id = &element.position().id;
+            let id = element.id();
             if !id.is_empty() {
-                owned.insert(id.clone(), (mode.clone(), index));
+                owned.insert(id.to_string(), (mode.clone(), index));
             }
         }
     }
@@ -102,7 +151,7 @@ fn sanitize_v1_supplied_collection_ids<T: NativeElement>(
             continue;
         };
         for (index, element) in elements.iter().enumerate() {
-            let id = &element.position().id;
+            let id = element.id();
             if id.is_empty() {
                 continue;
             }
@@ -113,7 +162,7 @@ fn sanitize_v1_supplied_collection_ids<T: NativeElement>(
                 ));
             }
             occurrences
-                .entry(id.clone())
+                .entry(id.to_string())
                 .or_default()
                 .push((mode.clone(), index));
         }
@@ -144,7 +193,7 @@ fn sanitize_v1_supplied_collection_ids<T: NativeElement>(
             .get_mut(&mode)
             .and_then(|elements| elements.get_mut(index))
         {
-            element.position_mut().id.clear();
+            element.id_mut().clear();
         }
     }
     Ok(())
@@ -166,14 +215,106 @@ fn sanitize_v1_supplied_patch_ids(
     if let Some(collection) = patch.knob_positions.as_mut() {
         sanitize_v1_supplied_collection_ids(collection, &store.knob_positions)?;
     }
+    if let Some(collection) = patch.sprite_positions.as_mut() {
+        sanitize_v1_supplied_collection_ids(collection, &store.sprite_positions)?;
+        let owned = store
+            .sprite_positions
+            .values()
+            .flatten()
+            .flat_map(|sprite| sprite.poses.iter().map(|pose| pose.pose_id.clone()))
+            .collect::<HashSet<_>>();
+        let mut seen = HashSet::new();
+        for mode in sorted_modes(collection) {
+            let Some(sprites) = collection.get_mut(&mode) else {
+                continue;
+            };
+            for (sprite_index, sprite) in sprites.iter_mut().enumerate() {
+                for (pose_index, pose) in sprite.poses.iter_mut().enumerate() {
+                    if pose.pose_id.is_empty() {
+                        continue;
+                    }
+                    if !is_valid_element_id(&pose.pose_id) {
+                        return Err(EditorCommitError::validation(
+                            INVALID_ELEMENT_ID,
+                            format!(
+                                "sprite pose {mode}[{sprite_index}].poses[{pose_index}] has an invalid ID"
+                            ),
+                        ));
+                    }
+                    if !owned.contains(&pose.pose_id) || !seen.insert(pose.pose_id.clone()) {
+                        pose.pose_id.clear();
+                    }
+                }
+            }
+        }
+    }
     Ok(())
+}
+
+fn adapt_v1_sprite_pose_ids(
+    current: &HashMap<String, Vec<ReactiveSpritePosition>>,
+    candidate: &mut HashMap<String, Vec<ReactiveSpritePosition>>,
+    consumed_current_ids: &mut HashSet<String>,
+    reserved: &mut HashSet<String>,
+) {
+    for mode in sorted_modes(candidate) {
+        let Some(sprites) = candidate.get_mut(&mode) else {
+            continue;
+        };
+        let current_sprites = current.get(&mode);
+        for sprite in sprites {
+            let current_sprite = current_sprites
+                .and_then(|sprites| sprites.iter().find(|current| current.id == sprite.id));
+            let normalized_current = current_sprite
+                .map(|sprite| {
+                    sprite
+                        .poses
+                        .iter()
+                        .map(sprite_pose_value_without_id)
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            for pose in &mut sprite.poses {
+                if !pose.pose_id.is_empty() {
+                    consumed_current_ids.insert(pose.pose_id.clone());
+                    continue;
+                }
+                let target = sprite_pose_value_without_id(pose);
+                let inherited = current_sprite.and_then(|sprite| {
+                    sprite
+                        .poses
+                        .iter()
+                        .zip(&normalized_current)
+                        .find(|(current_pose, normalized)| {
+                            is_valid_element_id(&current_pose.pose_id)
+                                && !consumed_current_ids.contains(&current_pose.pose_id)
+                                && **normalized == target
+                        })
+                        .map(|(current_pose, _)| current_pose.pose_id.clone())
+                });
+                if let Some(id) = inherited {
+                    consumed_current_ids.insert(id.clone());
+                    pose.pose_id = id;
+                } else {
+                    pose.pose_id = new_unique_id(reserved);
+                }
+            }
+        }
+    }
+}
+
+fn sprite_pose_value_without_id(pose: &SpritePose) -> SpritePose {
+    let mut copy = pose.clone();
+    copy.pose_id.clear();
+    copy.normalize_triggers();
+    copy
 }
 
 /// id를 비운 값 사본. 비교마다 양쪽을 clone하지 않도록, 스캔 전에 한 번씩만
 /// 만들어 재사용한다 (승계 웨이브의 순서·우선순위는 그대로 유지)
 fn value_without_id<T: NativeElement>(element: &T) -> T {
     let mut copy = element.clone();
-    copy.position_mut().id.clear();
+    copy.id_mut().clear();
     copy
 }
 
@@ -198,14 +339,14 @@ fn keep_or_rekey_supplied_ids<T: NativeElement>(
             continue;
         };
         for element in elements {
-            let id = element.position().id.clone();
+            let id = element.id().to_string();
             if id.is_empty() {
                 continue;
             }
             if canonical_ids.contains(&id) {
                 consumed_current_ids.insert(id);
             } else {
-                element.position_mut().id = new_unique_id(reserved);
+                *element.id_mut() = new_unique_id(reserved);
             }
         }
     }
@@ -227,7 +368,7 @@ fn inherit_ids_by_value_within_mode<T: NativeElement>(
         };
         let normalized_current: Vec<T> = current_elements.iter().map(value_without_id).collect();
         for element in elements {
-            if !element.position().id.is_empty() {
+            if !element.id().is_empty() {
                 continue;
             }
             let target = value_without_id(&*element);
@@ -235,14 +376,14 @@ fn inherit_ids_by_value_within_mode<T: NativeElement>(
                 .iter()
                 .zip(&normalized_current)
                 .find(|(current_element, normalized)| {
-                    let current_id = &current_element.position().id;
+                    let current_id = current_element.id();
                     !consumed_current_ids.contains(current_id) && **normalized == target
                 })
                 .map(|(current_element, _)| current_element);
             if let Some(current_element) = inherited {
-                let id = current_element.position().id.clone();
+                let id = current_element.id().to_string();
                 consumed_current_ids.insert(id.clone());
-                element.position_mut().id = id;
+                *element.id_mut() = id;
             }
         }
     }
@@ -260,7 +401,7 @@ fn inherit_ids_by_value<T: NativeElement>(
             continue;
         };
         for element in elements {
-            if !element.position().id.is_empty() {
+            if !element.id().is_empty() {
                 continue;
             }
             let target = value_without_id(&*element);
@@ -268,16 +409,16 @@ fn inherit_ids_by_value<T: NativeElement>(
                 .iter()
                 .zip(&normalized_current)
                 .find(|(current_element, normalized)| {
-                    let current_id = &current_element.position().id;
+                    let current_id = current_element.id();
                     !consumed_current_ids.contains(current_id) && **normalized == target
                 })
                 .map(|(current_element, _)| current_element);
             if let Some(current_element) = inherited {
-                let id = current_element.position().id.clone();
+                let id = current_element.id().to_string();
                 consumed_current_ids.insert(id.clone());
-                element.position_mut().id = id;
+                *element.id_mut() = id;
             } else {
-                element.position_mut().id = new_unique_id(reserved);
+                *element.id_mut() = new_unique_id(reserved);
             }
         }
     }
@@ -570,6 +711,21 @@ fn adapt_v1_patch_ids(
             &mut reserved,
         );
     }
+    if let Some(collection) = patch.sprite_positions.as_mut() {
+        adapt_v1_collection(
+            &store.sprite_positions,
+            collection,
+            &canonical_ids,
+            &mut consumed_current_ids,
+            &mut reserved,
+        );
+        adapt_v1_sprite_pose_ids(
+            &store.sprite_positions,
+            collection,
+            &mut consumed_current_ids,
+            &mut reserved,
+        );
+    }
     Ok(())
 }
 
@@ -582,7 +738,7 @@ fn validate_document_collection_ids<T: NativeElement>(
             continue;
         };
         for (index, element) in elements.iter().enumerate() {
-            let id = &element.position().id;
+            let id = element.id();
             if id.is_empty() {
                 return Err(EditorCommitError::validation(
                     MISSING_ELEMENT_ID,
@@ -595,7 +751,7 @@ fn validate_document_collection_ids<T: NativeElement>(
                     format!("native element {mode}[{index}] has an invalid ID"),
                 ));
             }
-            if !seen.insert(id.clone()) {
+            if !seen.insert(id.to_string()) {
                 return Err(EditorCommitError::validation(
                     DUPLICATE_ELEMENT_ID,
                     format!("native element ID {id} is not globally unique"),
@@ -613,7 +769,9 @@ pub(crate) fn validate_document_element_ids(
     validate_document_collection_ids(&document.key_positions, &mut seen)?;
     validate_document_collection_ids(&document.stat_positions, &mut seen)?;
     validate_document_collection_ids(&document.graph_positions, &mut seen)?;
-    validate_document_collection_ids(&document.knob_positions, &mut seen)
+    validate_document_collection_ids(&document.knob_positions, &mut seen)?;
+    validate_document_collection_ids(&document.sprite_positions, &mut seen)?;
+    validate_sprite_pose_ids(&document.sprite_positions, true, &mut seen)
 }
 
 fn patch_includes_native_elements(patch: &EditorPatchV1) -> bool {
@@ -621,6 +779,7 @@ fn patch_includes_native_elements(patch: &EditorPatchV1) -> bool {
         || patch.stat_positions.is_some()
         || patch.graph_positions.is_some()
         || patch.knob_positions.is_some()
+        || patch.sprite_positions.is_some()
 }
 
 pub(crate) fn prepare_commit_patch_element_ids(

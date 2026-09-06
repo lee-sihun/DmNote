@@ -57,6 +57,7 @@ import type {
   EditorField,
   CanonicalEditorGetResult,
   EditorGestureCommitContext,
+  EditorLegacyPatchV1,
   EditorOpResultV1,
   EditorOpV1,
   EditorPatchV1,
@@ -556,7 +557,7 @@ class EditorSaveCoordinator {
   // waitForGestureCommits로 같은 큐를 기다리므로 multiKey provenance가
   // false → true로 승격되는 병합 경로가 구조적으로 없다
   commitIsolatedPluginPatch(
-    changes: EditorPatchV1,
+    changes: EditorPatchV1 | EditorLegacyPatchV1,
     options: { multiKey: boolean },
   ): Promise<CanonicalEditorDocumentV1> {
     this.assertWritable();
@@ -566,7 +567,7 @@ class EditorSaveCoordinator {
   }
 
   private async commitIsolatedPluginPatchInner(
-    changes: EditorPatchV1,
+    changes: EditorPatchV1 | EditorLegacyPatchV1,
     options: { multiKey: boolean },
   ): Promise<CanonicalEditorDocumentV1> {
     await this.start();
@@ -577,7 +578,7 @@ class EditorSaveCoordinator {
     }
 
     const canonicalChanges = canonicalizeEditorGradients(changes);
-    assertEditorPatch(canonicalChanges);
+    assertEditorPatch(canonicalChanges, 'editor patch', 'input');
     const baseDocument = clone(this.requireLastAck());
     const target = applyIsolatedPluginPatch(baseDocument, canonicalChanges);
     const requestFields = EDITOR_FIELDS.filter(
@@ -592,7 +593,7 @@ class EditorSaveCoordinator {
       baseRevision,
       baseDocument,
       target: clone(baseDocument),
-      localFields: getChangedEditorFields(baseDocument, target),
+      localFields: getChangedEditorFields(baseDocument, target, 'input'),
       requestFields,
       gestureIds: [],
       isolated: true,

@@ -3,6 +3,7 @@ import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import {
@@ -15,7 +16,10 @@ import {
   getPreviewOverlayVersion,
   subscribePreviewOverlay,
 } from '@src/renderer/editor/runtime/gesture/previewOverlay';
-import type { EditorElementTypeV1 } from '@src/types/editor';
+import type {
+  CanonicalReactiveSpritePosition,
+  EditorElementTypeV1,
+} from '@src/types/editor';
 import type { BatchGeometryTarget } from '@src/renderer/editor/runtime/operations/elementOps';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
@@ -42,6 +46,7 @@ export const usePropertiesPanelSelection = () => {
   const canonicalKnobItemPositions = useKnobItemStore(
     (state) => state.positions,
   );
+  const canonicalSpritePositions = useSpriteStore((state) => state.positions);
   useSyncExternalStore(
     subscribePreviewOverlay,
     getPreviewOverlayVersion,
@@ -59,6 +64,10 @@ export const usePropertiesPanelSelection = () => {
   const knobItemPositions = composePreviewPositions(
     'knobPosition',
     canonicalKnobItemPositions,
+  );
+  const spriteItemPositions = composePreviewPositions(
+    'spritePosition',
+    canonicalSpritePositions,
   );
   const pluginElements = usePluginDisplayElementStore(
     selectPropertyPanelPluginElements,
@@ -79,6 +88,9 @@ export const usePropertiesPanelSelection = () => {
   const selectedKnobElements = selectedElements.filter(
     (element) => element.type === 'knob',
   );
+  const selectedSpriteElements = selectedElements.filter(
+    (element) => element.type === 'sprite',
+  );
   const selectedKeyLikeElements = selectedElements.filter(
     (element) => element.type === 'key' || element.type === 'stat',
   );
@@ -88,6 +100,16 @@ export const usePropertiesPanelSelection = () => {
       element.type === 'stat' ||
       element.type === 'graph' ||
       element.type === 'knob',
+  );
+  // 기하 대상은 스타일 대상과 별개 - sprite는 배치 스타일이 없지만
+  // 정렬·분배·간격·이동에는 참여한다
+  const selectedBatchGeometryElements = selectedElements.filter(
+    (element) =>
+      element.type === 'key' ||
+      element.type === 'stat' ||
+      element.type === 'graph' ||
+      element.type === 'knob' ||
+      element.type === 'sprite',
   );
   const selectedPluginElements = selectedElements.filter(
     (element) => element.type === 'plugin',
@@ -104,10 +126,10 @@ export const usePropertiesPanelSelection = () => {
 
   // invalid native ID 또는 모드에서 사라진 plugin이 섞이면 fail-closed
   const stableBatchGeometryTargets: BatchGeometryTarget[] | null =
-    selectedBatchStyleElements.every(
+    selectedBatchGeometryElements.every(
       (element) => element.id.length > 0 && isNativeElementId(element.id),
     )
-      ? selectedBatchStyleElements.map((element) => ({
+      ? selectedBatchGeometryElements.map((element) => ({
           type: element.type as EditorElementTypeV1,
           id: element.id,
         }))
@@ -227,6 +249,14 @@ export const usePropertiesPanelSelection = () => {
     singleKnobIndex >= 0
       ? knobItemPositions[selectedKeyType]?.[singleKnobIndex] ?? null
       : null;
+  const singleSpriteId =
+    selectedSpriteElements.length === 1 ? selectedSpriteElements[0].id : null;
+  const singleSpritePosition: CanonicalReactiveSpritePosition | null =
+    singleSpriteId
+      ? (spriteItemPositions[selectedKeyType] ?? []).find(
+          (position) => position.id === singleSpriteId,
+        ) ?? null
+      : null;
 
   const allLayerGroups = useLayerGroupStore((state) => state.layerGroups);
   const layerGroupsForMode = allLayerGroups[selectedKeyType] || [];
@@ -237,6 +267,7 @@ export const usePropertiesPanelSelection = () => {
     const statModePositions = statItemPositions[selectedKeyType] || [];
     const graphModePositions = graphItemPositions[selectedKeyType] || [];
     const knobModePositions = knobItemPositions[selectedKeyType] || [];
+    const spriteModePositions = spriteItemPositions[selectedKeyType] || [];
     const modeGroupIds = new Set(layerGroupsForMode.map((group) => group.id));
     let groupId: string | undefined;
 
@@ -258,6 +289,10 @@ export const usePropertiesPanelSelection = () => {
         currentGroupId = knobModePositions.find(
           (position) => position.id === element.id,
         )?.groupId;
+      } else if (element.type === 'sprite') {
+        currentGroupId =
+          spriteModePositions.find((position) => position.id === element.id)
+            ?.groupId ?? undefined;
       } else if (element.type === 'plugin') {
         const pluginGroupId = pluginElements.find(
           (candidate) => candidate.fullId === element.id,
@@ -284,6 +319,8 @@ export const usePropertiesPanelSelection = () => {
       graphModePositions.filter((position) => position?.groupId === groupId)
         .length +
       knobModePositions.filter((position) => position?.groupId === groupId)
+        .length +
+      spriteModePositions.filter((position) => position?.groupId === groupId)
         .length +
       pluginElements.filter(
         (element) =>
@@ -314,13 +351,17 @@ export const usePropertiesPanelSelection = () => {
     statItemPositions,
     graphItemPositions,
     knobItemPositions,
+    canonicalSpritePositions,
+    spriteItemPositions,
     pluginElements,
     selectedKeyElements,
     selectedStatElements,
     selectedGraphElements,
     selectedKnobElements,
+    selectedSpriteElements,
     selectedKeyLikeElements,
     selectedBatchStyleElements,
+    selectedBatchGeometryElements,
     selectedPluginElements,
     selectedPluginElement,
     stableBatchGeometryTargets,
@@ -343,6 +384,7 @@ export const usePropertiesPanelSelection = () => {
     singleGraphIndex,
     singleGraphPosition,
     singleKnobPosition,
+    singleSpritePosition,
     selectedGroupInfo,
   };
 };

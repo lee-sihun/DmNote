@@ -12,6 +12,20 @@ import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useKeySlotCapture } from '@hooks/useKeySlotCapture';
 import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
+import {
+  cancelPluginSettingsSessionForPlugin,
+  openPluginSettingsSession,
+} from '@plugins/runtime/pluginSettingsSession';
+import {
+  makeCanonicalSpritePosition,
+  makeSpritePose,
+} from '@utils/sprite/spriteFixtures';
+
+type MixedGetter = <T>(
+  getter: (pos: { width?: number; height?: number }) => T | undefined,
+  defaultValue: T,
+) => { isMixed: boolean; value: T };
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -298,13 +312,32 @@ vi.mock('@src/renderer/editor/runtime/gesture/editGestureController', () => ({
     settleCommit: settleCommitMock,
   },
 }));
-vi.mock('./PropertiesPanel/index', () => {
+vi.mock('./PropertiesPanel/index', async () => {
+  const { default: PanelRenameControl } = await import(
+    './PropertiesPanel/navigation/PanelRenameControl'
+  );
   const Stub = ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
   );
-  const SingleKeyStatPanel = (props: Record<string, unknown>) => {
-    singleKeyStatPropsMock(props);
-    return <ScopeProbe id="single-key-stat" />;
+  // 헤더 이름 변경 계약만 실제 컨트롤로 검증 - 패널 props와 컨트롤 props가 같은 이름을 쓴다
+  const SingleKeyStatPanel = (
+    renameProps: Omit<
+      React.ComponentProps<typeof PanelRenameControl>,
+      'title' | 'titleClassName' | 'renameButtonTitle'
+    >,
+  ) => {
+    singleKeyStatPropsMock(renameProps);
+    return (
+      <>
+        <ScopeProbe id="single-key-stat" />
+        <PanelRenameControl
+          {...renameProps}
+          title="Key"
+          titleClassName=""
+          renameButtonTitle="contextMenu.rename"
+        />
+      </>
+    );
   };
   const SingleGraphPanel = (props: Record<string, unknown>) => {
     singleGraphPropsMock(props);
@@ -342,7 +375,18 @@ vi.mock('./PropertiesPanel/index', () => {
       batchPluginPropsMock(props);
       return <div />;
     },
-    PluginSettingsPanelView: () => <ScopeProbe id="plugin-settings" />,
+    PluginSettingsPanelView: ({
+      handlePluginSettingsPanelConfirm,
+    }: {
+      handlePluginSettingsPanelConfirm: () => void;
+    }) => (
+      <>
+        <ScopeProbe id="plugin-settings" />
+        <button onClick={handlePluginSettingsPanelConfirm}>
+          save-plugin-settings
+        </button>
+      </>
+    ),
     usePanelScroll: () => ({
       batchScrollRefFor: () => vi.fn(),
       singleScrollRefFor: () => vi.fn(),
@@ -676,6 +720,61 @@ describe('PropertiesPanel canonical native contract', () => {
     window.__dmn_window_type = originalWindowType;
   });
 
+  it('헤더 이름을 Escape로 취소한 뒤 다음 이름을 저장한다', async () => {
+    const id = '61111111-1111-4111-8111-111111111111';
+    installSingle('key', id);
+    mounted = mountPanel();
+    const container = mounted.container;
+    const startRename = async () => {
+      await act(async () =>
+        container
+          .querySelector<HTMLButtonElement>(
+            'button[title="contextMenu.rename"]',
+          )!
+          .click(),
+      );
+      const input = container.querySelector('input')!;
+      await act(async () => input.focus());
+      return input;
+    };
+    const typeName = async (input: HTMLInputElement, value: string) => {
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(
+          HTMLInputElement.prototype,
+          'value',
+        )!.set!.call(input, value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    };
+
+    const cancelled = await startRename();
+    await typeName(cancelled, 'Cancelled');
+    const blur = vi.fn();
+    cancelled.addEventListener('blur', blur);
+    await act(async () =>
+      cancelled.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+      ),
+    );
+    expect(container.querySelector('input')).toBeNull();
+    expect(blur).not.toHaveBeenCalled();
+    expect(patchLayerNameMock).not.toHaveBeenCalled();
+
+    const input = await startRename();
+    await typeName(input, 'Saved');
+    await act(async () =>
+      input.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+      ),
+    );
+
+    expect(patchLayerNameMock).toHaveBeenCalledExactlyOnceWith(
+      'key',
+      id,
+      'Saved',
+    );
+  });
+
   it.each([
     ['key', '11111111-1111-4111-8111-111111111111'],
     ['stat', '22222222-2222-4222-8222-222222222222'],
@@ -950,6 +1049,124 @@ describe('PropertiesPanel canonical native contract', () => {
     expect(keyLegacyUpdateMock).not.toHaveBeenCalled();
   });
 
+  describe('혼합 선택 크기 표시 집합', () => {
+    const MIXED_KEY_ID = 'a4444444-4444-4444-8444-444444444444';
+    const MIXED_SPRITE_ID = 'a5555555-5555-4555-8555-555555555555';
+
+    // 크기 입력은 resize가 실제로 조절하는 집합을 그대로 읽어야 한다.
+    // 스타일 집합에는 스프라이트가 없어서 그걸 쓰면 키 값이 대표로 뜨고,
+    // 그 값을 확정하면 스프라이트의 모든 자세 오프셋까지 배율이 먹는다
+    it('키와 스프라이트를 함께 고르면 크기 getter가 Mixed를 낸다', () => {
+      const key = { ...createDefaultKeyPosition(), id: MIXED_KEY_ID };
+      useKeyStore.setState({
+        keyMappings: { '4key': ['A'] },
+        positions: { '4key': [key] },
+        canonicalPositions: { '4key': [key] },
+      });
+      useSpriteStore.setState({
+        positions: {
+          '4key': [
+            makeCanonicalSpritePosition({
+              id: MIXED_SPRITE_ID,
+              layerName: null,
+              groupId: null,
+              width: 200,
+              height: 200,
+            }),
+          ],
+        },
+      });
+      useGridSelectionStore.setState({
+        selectedElements: [
+          { type: 'key', id: MIXED_KEY_ID, index: 0 },
+          { type: 'sprite', id: MIXED_SPRITE_ID, index: 0 },
+        ],
+        selectedGroupIds: [],
+      });
+
+      mounted = mountPanel();
+
+      const props = batchKeyLikePropsMock.mock.lastCall?.[0] as {
+        getMixedValue: MixedGetter;
+        getMixedValueGeometry: MixedGetter;
+      };
+
+      expect(props.getMixedValueGeometry((pos) => pos.width, 60)).toEqual({
+        isMixed: true,
+        value: 60,
+      });
+      // 스타일 집합은 스프라이트를 보지 않는다 - 크기에 이걸 쓰면 안 되는 이유
+      expect(props.getMixedValue((pos) => pos.width, 60)).toEqual({
+        isMixed: false,
+        value: 60,
+      });
+    });
+
+    // 커밋은 resizeSprite로 자세까지 스케일한다. 미리보기가 원시
+    // bounds만 얹으면 드래그 중엔 활동 영역만 줄다가 놓는 순간 튄다
+    it('스프라이트 크기 미리보기는 이미지와 자세까지 커밋과 같게 투영한다', () => {
+      const key = { ...createDefaultKeyPosition(), id: MIXED_KEY_ID };
+      useKeyStore.setState({
+        keyMappings: { '4key': ['A'] },
+        positions: { '4key': [key] },
+        canonicalPositions: { '4key': [key] },
+      });
+      useSpriteStore.setState({
+        positions: {
+          '4key': [
+            makeCanonicalSpritePosition({
+              id: MIXED_SPRITE_ID,
+              layerName: null,
+              groupId: null,
+              width: 200,
+              height: 200,
+              poses: [
+                makeSpritePose({
+                  poseId: 'pose-1',
+                  transform: { x: -60, y: 0, rotation: 0, scale: 1 },
+                }),
+              ],
+            }),
+          ],
+        },
+      });
+      useGridSelectionStore.setState({
+        selectedElements: [
+          { type: 'key', id: MIXED_KEY_ID, index: 0 },
+          { type: 'sprite', id: MIXED_SPRITE_ID, index: 0 },
+        ],
+        selectedGroupIds: [],
+      });
+
+      mounted = mountPanel();
+      const geometryProps = batchPropsMock.mock.lastCall?.[0] as {
+        onStableGeometryPreview: (operation: Record<string, unknown>) => void;
+      };
+      act(() =>
+        geometryProps.onStableGeometryPreview({
+          kind: 'resize',
+          dimension: 'width',
+          value: 100,
+        }),
+      );
+
+      const spriteCall = previewMock.mock.calls.find(
+        (call) =>
+          (call[2] as { domain?: string } | undefined)?.domain ===
+          'spritePosition',
+      );
+      expect(spriteCall).toBeTruthy();
+      const patch = (
+        spriteCall?.[1] as Array<{ id: string; patch: Record<string, unknown> }>
+      )[0].patch;
+      // 200 -> 100 이므로 배율 0.5가 콘텐츠에도 그대로 걸린다
+      expect(patch.width).toBe(100);
+      expect(
+        (patch.poses as Array<{ transform: { x: number } }>)[0].transform.x,
+      ).toBe(-30);
+    });
+  });
+
   describe('혼합 선택 batch geometry pluginTargets 결합', () => {
     const FIRST_KEY_ID = 'a1111111-1111-4111-8111-111111111111';
     const SECOND_KEY_ID = 'a2222222-2222-4222-8222-222222222222';
@@ -1205,6 +1422,65 @@ describe('PropertiesPanel 편집 세션 scope 경계', () => {
     mounted = mountPanel();
 
     expect(scopedOf('plugin-settings')).toBe('false');
+  });
+
+  it('실제 플러그인 설정 세션의 저장 실패를 한 번 정산하고 안내한다', async () => {
+    const originalApi = window.api;
+    const alert = vi.fn().mockResolvedValue(undefined);
+    const onCancel = vi.fn();
+    const resolve = vi.fn();
+    const originalSettings = { enabled: false };
+    let rejectSave!: (error: Error) => void;
+    const onConfirm = vi.fn(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectSave = reject;
+        }),
+    );
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    window.api = { ui: { dialog: { alert } } } as never;
+    try {
+      openPluginSettingsSession({
+        pluginId: 'save-test',
+        definition: { settings: {} },
+        settings: { enabled: true },
+        originalSettings,
+        onChange: vi.fn(),
+        onConfirm,
+        onCancel,
+        resolve,
+      });
+      mounted = mountPanel();
+
+      await act(async () => {
+        const button = [...mounted.container.querySelectorAll('button')].find(
+          (element) => element.textContent === 'save-plugin-settings',
+        );
+        expect(button).toBeDefined();
+        button!.click();
+      });
+
+      expect(onConfirm).toHaveBeenCalledExactlyOnceWith(
+        { enabled: true },
+        originalSettings,
+      );
+      expect(usePropertiesPanelStore.getState().pluginSettingsPanel).toBeNull();
+      expect(resolve).not.toHaveBeenCalled();
+      await act(async () => rejectSave(new Error('disk write failed')));
+
+      expect(onCancel).not.toHaveBeenCalled();
+      expect(resolve).toHaveBeenCalledExactlyOnceWith(false);
+      expect(alert).toHaveBeenCalledExactlyOnceWith('common.saveFailed', {
+        confirmText: 'common.ok',
+      });
+      expect(usePropertiesPanelStore.getState().pluginSettingsPanel).toBeNull();
+    } finally {
+      cancelPluginSettingsSessionForPlugin('save-test');
+      window.api = originalApi;
+      consoleError.mockRestore();
+    }
   });
 });
 

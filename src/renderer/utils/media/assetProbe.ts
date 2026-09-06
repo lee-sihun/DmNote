@@ -16,6 +16,42 @@ function withTimeout(probe: Promise<boolean>): Promise<boolean> {
   });
 }
 
+export interface ProbedImageSize {
+  width: number;
+  height: number;
+}
+
+/**
+ * 이미지 파일을 WebView에서 디코드해 원본 픽셀 크기를 돌려준다. 디코드 실패·
+ * 시간 초과·크기 0은 null. 스프라이트 축 배치가 이 값을 경로와 함께 저장한다
+ */
+export function probeImageSize(path: string): Promise<ProbedImageSize | null> {
+  const src = resolveImageSource(path);
+  if (!src) return Promise.resolve(null);
+
+  return new Promise<ProbedImageSize | null>((resolve) => {
+    const timer = window.setTimeout(() => {
+      console.error('Asset probe timed out');
+      resolve(null);
+    }, PROBE_TIMEOUT_MS);
+    const image = new Image();
+    image.onload = () => {
+      window.clearTimeout(timer);
+      const { naturalWidth, naturalHeight } = image;
+      resolve(
+        naturalWidth > 0 && naturalHeight > 0
+          ? { width: naturalWidth, height: naturalHeight }
+          : null,
+      );
+    };
+    image.onerror = () => {
+      window.clearTimeout(timer);
+      resolve(null);
+    };
+    image.src = src;
+  });
+}
+
 /** 이미지 파일이 WebView에서 실제로 디코드되는지 확인 */
 export function canDecodeImage(path: string): Promise<boolean> {
   const src = resolveImageSource(path);

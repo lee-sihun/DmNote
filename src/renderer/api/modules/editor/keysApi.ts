@@ -1,3 +1,4 @@
+import { invokeEditorWrite } from './invokeEditorWrite';
 import { invoke } from '@tauri-apps/api/core';
 import { subscribe } from '../shared';
 import { rawKeyEventBus } from '@utils/input/rawKeyEventBus';
@@ -109,12 +110,12 @@ export const keysApi = {
       invoke<KeysModeResponse>('keys_reset_mode', { mode }),
     ),
   setCounters: (counters: KeyCounters) =>
-    invoke<KeyCounters>('keys_set_counters', { counters }),
-  resetCounters: () => invoke<KeyCounters>('keys_reset_counters'),
+    invokeEditorWrite<KeyCounters>('keys_set_counters', { counters }),
+  resetCounters: () => invokeEditorWrite<KeyCounters>('keys_reset_counters'),
   resetCountersMode: (mode: string) =>
-    invoke<KeyCounters>('keys_reset_counters_mode', { mode }),
+    invokeEditorWrite<KeyCounters>('keys_reset_counters_mode', { mode }),
   resetSingleCounter: (mode: string, key: string) =>
-    invoke<KeyCounters>('keys_reset_single_counter', { mode, key }),
+    invokeEditorWrite<KeyCounters>('keys_reset_single_counter', { mode, key }),
   onChanged: (listener: (keys: KeyMappings) => void) =>
     subscribe<KeyMappings>('keys:changed', listener),
   onPositionsChanged: (listener: (positions: KeyPositions) => void) =>
@@ -172,9 +173,9 @@ export const keysApi = {
         invoke<TabMetadataResult>('custom_tabs_rename', { id, name }),
       ),
     select: (id: string) =>
-      invoke<CustomTabDeleteResult>('custom_tabs_select', { id }),
+      invokeEditorWrite<CustomTabDeleteResult>('custom_tabs_select', { id }),
     restore: (customTabs: CustomTab[], selectedKeyType: string) =>
-      invoke<void>('custom_tabs_restore', {
+      invokeEditorWrite<void>('custom_tabs_restore', {
         customTabs,
         selectedKeyType,
       }),

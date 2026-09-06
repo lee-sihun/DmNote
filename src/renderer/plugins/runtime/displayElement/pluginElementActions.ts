@@ -154,6 +154,61 @@ export interface PluginElementGeometrySnapshot {
   measuredSize?: { width: number; height: number };
 }
 
+export const createPluginPositionDragReceipt = (
+  fullIds: ReadonlySet<string>,
+) => {
+  const entries = new Map(
+    usePluginDisplayElementStore
+      .getState()
+      .elements.filter((element) => fullIds.has(element.fullId))
+      .map((element) => [
+        element.fullId,
+        {
+          pluginId: element.pluginId,
+          before: element.position,
+          expected: element.position,
+        },
+      ]),
+  );
+  const apply = (mutate: () => void) => {
+    if (entries.size === 0) {
+      mutate();
+      return;
+    }
+    for (const element of usePluginDisplayElementStore.getState().elements) {
+      const entry = entries.get(element.fullId);
+      if (entry && element.position !== entry.expected) {
+        // 다른 쓰기가 교체한 위치는 다음 이동의 복원 기준
+        entry.before = element.position;
+      }
+    }
+    mutate();
+    for (const element of usePluginDisplayElementStore.getState().elements) {
+      const entry = entries.get(element.fullId);
+      if (entry) entry.expected = element.position;
+    }
+  };
+  const rollback = (pluginId: string) => {
+    const store = usePluginDisplayElementStore.getState();
+    let changed = false;
+    const elements = store.elements.map((element) => {
+      const entry = entries.get(element.fullId);
+      if (
+        !entry ||
+        entry.pluginId !== pluginId ||
+        element.position !== entry.expected ||
+        element.position === entry.before
+      ) {
+        return element;
+      }
+      changed = true;
+      return { ...element, position: entry.before };
+    });
+    if (changed) store.setElements(elements);
+  };
+  return { apply, rollback };
+};
+
 /** 게스처 시작 시점의 위치·크기 스냅샷 */
 export const capturePluginElementGeometry = (
   fullId: string,

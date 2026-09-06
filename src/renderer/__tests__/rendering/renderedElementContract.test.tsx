@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Key } from '@components/shared/key/Key';
 import StatItem from '@components/overlay/counters/StatItem';
 import OverlayKnobItem from '@components/overlay/counters/OverlayKnobItem';
+import OverlaySpriteItem from '@components/overlay/counters/OverlaySpriteItem';
 import OutsideCounter from '@components/overlay/counters/OutsideCounter';
 import GraphPanel from '@components/shared/graph/GraphPanel';
 import { resetAllKeySignals, setKeyActive } from '@stores/signals/keySignals';
@@ -398,6 +399,62 @@ describe('렌더 DOM 계약', () => {
         DEFAULT_ELEMENT_ACTIVE_SHADOW,
       );
       expect(el!.style.transform).toContain('rotate(90deg)');
+    });
+  });
+
+  describe('오버레이 SpriteItem', () => {
+    it('래퍼가 히트 마커를, 안쪽 표면이 data 속성을 싣는다', () => {
+      act(() => {
+        root.render(
+          <OverlaySpriteItem
+            position={{
+              activation: 'whileHeld',
+              pressDurationMs: 300,
+              rotation: 0,
+              id: 'sprite-contract',
+              dx: 4,
+              dy: 8,
+              width: 60,
+              height: 60,
+              hidden: false,
+              zIndex: null,
+              layerName: null,
+              groupId: null,
+              className: null,
+              useInlineStyles: null,
+              baseImage: 'data:image/png;base64,base',
+              pivot: { x: 0.5, y: 0.5 },
+              idleTransform: { x: 0, y: 0, rotation: 0, scale: 1 },
+              poses: [
+                {
+                  imageOverrideMetrics: null,
+                  poseId: 'pose-contract',
+                  triggers: ['el-contract'],
+                  transform: { x: 0, y: 0, rotation: 0, scale: 1 },
+                  imageOverride: null,
+                },
+              ],
+              transitionMs: 90,
+              transitionEasing: 'cubic-bezier(0.4, 0, 0.2, 1)',
+              referenceNaturalSize: null,
+            }}
+            keyCanonicalMap={new Map()}
+          />,
+        );
+      });
+      const el = host.querySelector<HTMLElement>(
+        '[data-sprite-element="true"]',
+      );
+      expect(el).not.toBeNull();
+      // 클래스는 위치 래퍼, 표식은 안쪽 표면 - 노브·카운터와 같은 배치라
+      // 사용자 CSS의 `.클래스 [data-sprite-element]`가 성립한다
+      const wrapper = host.querySelector<HTMLElement>(
+        '[data-overlay-hit="true"]',
+      );
+      expect(wrapper).not.toBeNull();
+      expect(wrapper!.contains(el)).toBe(true);
+      expect(wrapper).not.toBe(el);
+      expect(el!.getAttribute('data-sprite-state')).toBe('inactive');
     });
   });
 

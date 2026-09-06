@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => ({
   hasActiveContext: vi.fn(() => false),
   flushEditSession: vi.fn(),
   stagedReleaseListeners: new Map<string, (gestureId: string) => void>(),
+  stagedOwners: new Map<string, string>(),
   syncHistoryStatus: vi.fn(() => Promise.resolve()),
   historyEpoch: 1,
   enqueueGate: null as Promise<void> | null,
@@ -60,6 +61,17 @@ vi.mock('../displayElement/instancesCommitQueue', () => ({
   hasActivePluginInstancesEditContext: mocks.hasActiveContext,
   hasConflictingPluginInstancesGesture: mocks.hasConflicting,
   isPluginInstancesGestureStaged: mocks.isStaged,
+  getStagedPluginInstancesGestureId: (pluginId: string) =>
+    mocks.stagedOwners.get(pluginId),
+  stagePluginInstancesGesture: (pluginId: string, gestureId: string) => {
+    mocks.stagedOwners.set(pluginId, gestureId);
+  },
+  unstagePluginInstancesGesture: (pluginId: string, gestureId: string) => {
+    if (mocks.stagedOwners.get(pluginId) !== gestureId) return;
+    mocks.stagedOwners.delete(pluginId);
+    mocks.isStaged.mockReturnValue(false);
+    mocks.stagedReleaseListeners.get(pluginId)?.(gestureId);
+  },
   registerPluginInstancesEditSessionFlush: () => () => undefined,
   registerPluginInstancesStagedRelease: (
     pluginId: string,
@@ -104,6 +116,12 @@ import { useKeyStore } from '@stores/data/useKeyStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { drainEditorWrites } from '@src/renderer/editor/runtime/lifecycle/editorWriteBarrier';
+import {
+  beginMixedGestureTransaction,
+  cancelUncommittedMixedGestureTransaction,
+} from '../displayElement/gestureTransaction';
+import { createPluginPositionDragReceipt } from '../displayElement/pluginElementActions';
+import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import {
   applyCanonicalPluginInstances,
   applyCommittedPluginInstancesProjection,
@@ -217,6 +235,7 @@ describe('plugin instance reapply diff-patch', () => {
     mocks.hasActiveContext.mockReset().mockReturnValue(false);
     mocks.flushEditSession.mockClear();
     mocks.stagedReleaseListeners.clear();
+    mocks.stagedOwners.clear();
     mocks.syncHistoryStatus.mockClear();
     mocks.historyEpoch = 1;
     mocks.enqueueGate = null;
@@ -517,10 +536,16 @@ describe('plugin instance reapply diff-patch', () => {
       await drainEditorWrites();
 
       mocks.isStaged.mockReturnValue(true);
-      usePluginDisplayElementStore
-        .getState()
-        .updateElement(`${pluginId}::${ID_A}`, { position: { x: 5, y: 5 } });
+      const receipt = createPluginPositionDragReceipt(
+        new Set([`${pluginId}::${ID_A}`]),
+      );
+      receipt.apply(() => {
+        usePluginDisplayElementStore
+          .getState()
+          .updateElement(`${pluginId}::${ID_A}`, { position: { x: 5, y: 5 } });
+      });
       expect(mocks.debounceSchedule).not.toHaveBeenCalled();
+      return receipt;
     };
 
     const startDrainProbe = async () => {
@@ -583,6 +608,144 @@ describe('plugin instance reapply diff-patch', () => {
       mocks.isStaged.mockReturnValue(false);
       mocks.stagedReleaseListeners.get(pluginId)?.('gesture-any');
       expect(mocks.debounceSchedule).not.toHaveBeenCalled();
+    });
+
+    it('history로 취소한 미커밋 staged 해제는 옛 projection을 재저장하지 않는다', async () => {
+      const pluginId = 'plugin-staged-history-cancel';
+      const gestureId = 'gesture-history-cancel';
+      await stagedMutation(pluginId);
+      beginMixedGestureTransaction(gestureId, [pluginId]);
+      const probe = await startDrainProbe();
+      expect(probe.isDrained()).toBe(false);
+
+      cancelUncommittedMixedGestureTransaction(gestureId, {
+        discardPendingSave: true,
+      });
+
+      await expect(probe.draining).resolves.toBe(true);
+      expect(mocks.debounceSchedule).not.toHaveBeenCalled();
+      expect(mocks.debounceFlush).not.toHaveBeenCalled();
+      expect(mocks.debounceCancel).toHaveBeenCalled();
+    });
+
+    it('일반 미커밋 cleanup은 staged projection 저장을 유지한다', async () => {
+      const pluginId = 'plugin-staged-normal-cleanup';
+      const gestureId = 'gesture-normal-cleanup';
+      await stagedMutation(pluginId);
+      beginMixedGestureTransaction(gestureId, [pluginId]);
+
+      cancelUncommittedMixedGestureTransaction(gestureId);
+
+      await expect(drainEditorWrites()).resolves.toBe(true);
+      expect(mocks.debounceSchedule).toHaveBeenCalledWith(gestureId);
+      expect(mocks.debounceFlush).toHaveBeenCalledOnce();
+    });
+
+    it('history 취소 후 다음 plugin 편집이 옛 drag 위치를 다시 저장하지 않는다', async () => {
+      const pluginId = 'plugin-staged-followup-edit';
+      const gestureId = 'gesture-staged-followup-edit';
+      const receipt = await stagedMutation(pluginId);
+      beginMixedGestureTransaction(gestureId, [pluginId]);
+      vi.mocked(sendBridgeMessageBestEffort).mockClear();
+      cancelUncommittedMixedGestureTransaction(gestureId, {
+        discardPendingSave: true,
+        beforeDiscard: receipt.rollback,
+      });
+      await vi.waitFor(() => {
+        expect(sendBridgeMessageBestEffort).toHaveBeenCalledWith(
+          'overlay',
+          'plugin:displayElements:sync',
+          expect.objectContaining({
+            elements: [expect.objectContaining({ position: { x: 0, y: 0 } })],
+          }),
+        );
+      });
+      expect(mocks.instancesCommit).not.toHaveBeenCalled();
+      usePluginDisplayElementStore
+        .getState()
+        .updateElement(`${pluginId}::${ID_A}`, { hidden: true });
+      await mocks.saveDebounces[0].save({
+        gestureId: 'next-independent-edit',
+        captureCurrentSnapshot: true,
+      });
+
+      expect(mocks.instancesCommit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          instances: [expect.objectContaining({ position: { x: 0, y: 0 } })],
+        }),
+      );
+    });
+
+    it.each([false, true])(
+      'history 취소는 새 canonical 위치를 보존한다 (추가 이동: %s)',
+      async (moveAgain) => {
+        const pluginId = `plugin-staged-canonical-${moveAgain}`;
+        const gestureId = `gesture-staged-canonical-${moveAgain}`;
+        const receipt = await stagedMutation(pluginId);
+        beginMixedGestureTransaction(gestureId, [pluginId]);
+        await reapply(pluginId, 7, [
+          saved(ID_A, { position: { x: 100, y: 40 } }),
+        ]);
+        if (moveAgain) {
+          receipt.apply(() => {
+            usePluginDisplayElementStore
+              .getState()
+              .updateElement(`${pluginId}::${ID_A}`, {
+                position: { x: 105, y: 45 },
+              });
+          });
+        }
+
+        cancelUncommittedMixedGestureTransaction(gestureId, {
+          discardPendingSave: true,
+          beforeDiscard: receipt.rollback,
+        });
+
+        await expect(drainEditorWrites()).resolves.toBe(true);
+        expect(findElement(`${pluginId}::${ID_A}`)?.position).toEqual({
+          x: 100,
+          y: 40,
+        });
+        expect(mocks.debounceSchedule).not.toHaveBeenCalled();
+      },
+    );
+
+    it('history 취소 위치 복원은 canonical에서 삭제한 대상을 되살리지 않는다', async () => {
+      const pluginId = 'plugin-staged-deleted';
+      const gestureId = 'gesture-staged-deleted';
+      const receipt = await stagedMutation(pluginId);
+      beginMixedGestureTransaction(gestureId, [pluginId]);
+      await reapply(pluginId, 8, []);
+
+      cancelUncommittedMixedGestureTransaction(gestureId, {
+        discardPendingSave: true,
+        beforeDiscard: receipt.rollback,
+      });
+
+      await expect(drainEditorWrites()).resolves.toBe(true);
+      expect(defElements(pluginId)).toEqual([]);
+      expect(mocks.debounceSchedule).not.toHaveBeenCalled();
+    });
+
+    it('이전 history cleanup이 더 새 staged 소유자의 저장을 폐기하지 않는다', async () => {
+      const pluginId = 'plugin-staged-new-owner';
+      const oldGestureId = 'gesture-staged-old-owner';
+      const nextGestureId = 'gesture-staged-next-owner';
+      await stagedMutation(pluginId);
+      beginMixedGestureTransaction(oldGestureId, [pluginId]);
+      beginMixedGestureTransaction(nextGestureId, [pluginId]);
+      mocks.debounceCancel.mockClear();
+
+      cancelUncommittedMixedGestureTransaction(oldGestureId, {
+        discardPendingSave: true,
+      });
+
+      expect(mocks.debounceCancel).not.toHaveBeenCalled();
+      expect(mocks.debounceSchedule).not.toHaveBeenCalled();
+      expect(mocks.stagedOwners.get(pluginId)).toBe(nextGestureId);
+      cancelUncommittedMixedGestureTransaction(nextGestureId);
+      await expect(drainEditorWrites()).resolves.toBe(true);
+      expect(mocks.debounceSchedule).toHaveBeenCalledWith(nextGestureId);
     });
   });
 

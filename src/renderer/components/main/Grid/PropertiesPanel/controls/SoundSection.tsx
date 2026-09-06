@@ -1,4 +1,5 @@
 import { createPortal } from 'react-dom';
+import { ACTION_BUTTON_CHROME_CLASS } from '@utils/cardRecipes';
 import type { CompletionBinding } from '@src/renderer/contexts/EditSessionScope';
 import Checkbox from '@components/main/common/checkbox/Checkbox';
 import SoundPicker from '@components/main/Modal/content/pickers/sound/SoundPicker';
@@ -65,7 +66,7 @@ const SoundSection = ({
           ) : null}
           <button
             type="button"
-            className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
+            className={`${ACTION_BUTTON_CHROME_CLASS} ${
               activePageKey === pageKey ? 'shadow-focus-ring' : ''
             } text-fg text-body`}
             onClick={() => {

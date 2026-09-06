@@ -1,5 +1,6 @@
 /* eslint-disable react-hooks/refs */
 import React, { useEffect, useRef, useState } from 'react';
+import { ACTION_BUTTON_CHROME_CLASS } from '@utils/cardRecipes';
 import { patchKnobAxisIdById } from '@src/renderer/editor/runtime/operations/elementOps';
 import { reportElementOpError } from '@src/renderer/editor/runtime/intent/elementIntent';
 import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
@@ -300,6 +301,18 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
               kind="knob"
               onGeometryPreview={handleGeometryPreview}
               onGeometryCommit={handleGeometryCommit}
+              onRotationPreview={
+                onStylePropertyPreview
+                  ? (value) =>
+                      onStylePropertyPreview({ property: 'rotation', value })
+                  : undefined
+              }
+              onRotationCommit={
+                onStylePropertyCommit
+                  ? (value) =>
+                      onStylePropertyCommit({ property: 'rotation', value })
+                  : undefined
+              }
               t={t}
             />
 
@@ -440,7 +453,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                 <button
                   ref={imageButtonRef}
                   type="button"
-                  className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
+                  className={`${ACTION_BUTTON_CHROME_CLASS} ${
                     showImagePicker ? 'shadow-focus-ring' : ''
                   } text-fg text-body`}
                   onClick={() => setShowImagePicker(!showImagePicker)}

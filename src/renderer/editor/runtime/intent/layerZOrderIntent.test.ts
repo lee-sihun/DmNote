@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
@@ -64,6 +65,7 @@ const documentWith = (options?: {
     },
     graphPositions: {},
     knobPositions: {},
+    spritePositions: {},
     layerGroups: {},
   } as never);
 
@@ -93,6 +95,7 @@ const install = (document: CanonicalEditorDocumentV1) => {
   useStatItemStore.setState({ positions: document.statPositions });
   useGraphItemStore.setState({ positions: document.graphPositions });
   useKnobItemStore.setState({ positions: document.knobPositions });
+  useSpriteStore.setState({ positions: document.spritePositions });
   useLayerGroupStore.setState({ layerGroups: {}, collapsedGroups: new Set() });
 };
 

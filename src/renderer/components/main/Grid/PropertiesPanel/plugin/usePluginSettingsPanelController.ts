@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 
-export const usePluginSettingsPanelController = () => {
+interface UsePluginSettingsPanelControllerOptions {
+  t: (key: string) => string;
+}
+
+export const usePluginSettingsPanelController = ({
+  t,
+}: UsePluginSettingsPanelControllerOptions) => {
   const pluginSettingsPanel = usePropertiesPanelStore(
     (state) => state.pluginSettingsPanel,
   );
@@ -43,12 +49,21 @@ export const usePluginSettingsPanelController = () => {
       );
       pluginSettingsPanel.resolve(true);
     } catch (error) {
+      // settle은 세션이 1회 소유한다 - 여기서는 안내만
       console.error('[Plugin Settings] Failed to apply settings:', error);
-      pluginSettingsPanel.resolve(false);
+      void window.api.ui.dialog
+        .alert(t('common.saveFailed'), { confirmText: t('common.ok') })
+        .catch(() => {});
     } finally {
       pluginSettingsSavingRef.current = false;
       setIsPluginSettingsSaving(false);
-      closePluginSettingsPanel();
+      // 세션이 이미 뷰를 닫았거나 다른 세션이 올라왔으면 남의 패널을 닫지 않는다
+      if (
+        usePropertiesPanelStore.getState().pluginSettingsPanel ===
+        pluginSettingsPanel
+      ) {
+        closePluginSettingsPanel();
+      }
     }
   };
 

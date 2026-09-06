@@ -23,14 +23,14 @@ const fixture = (): PropertyTagFixture =>
 describe('editor property wire parity', () => {
   it('canonical property 태그 배열은 공유 fixture와 순서까지 일치한다', () => {
     const { properties } = fixture();
-    expect(properties).toHaveLength(75);
+    expect(properties).toHaveLength(76);
     expect([...EDITOR_ELEMENT_PROPERTY_KEYS]).toEqual(properties);
   });
 
-  it('ops 버전은 fixture version과 일치하는 2다', () => {
+  it('ops 버전은 fixture version과 일치하는 4이다', () => {
     // 양방향 anchor: 한쪽 상수만 승격되면 fixture 대조에서 걸린다
     // (Rust는 models::editor 테스트가 같은 fixture와 대조)
-    expect(EDITOR_OPS_VERSION).toBe(2);
+    expect(EDITOR_OPS_VERSION).toBe(4);
     expect(fixture().version).toBe(EDITOR_OPS_VERSION);
   });
 

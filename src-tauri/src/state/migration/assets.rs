@@ -10,11 +10,15 @@ use unicode_normalization::UnicodeNormalization;
 use uuid::Uuid;
 
 use super::super::{
-    assets::image_asset::{import_image_bytes, import_image_file},
+    assets::image_asset::{import_image_bytes, import_image_file, probe_local_raster_size},
     assets::local_asset_path::{file_url_to_path, path_identity_key, FileUrlPath},
 };
 use crate::{
-    models::{AppStoreData, FontType, FontWeightRange, KeyPosition, SoundLibraryEntry},
+    models::{
+        is_renderable_image_ref, rewrite_coupled_sprite_image_reference, AppStoreData, FontType,
+        FontWeightRange, KeyPosition, SoundLibraryEntry, SpriteImageMetrics, SpritePositions,
+        SpriteReferenceNaturalSize,
+    },
     services::font_metadata::parse_font_metadata,
 };
 
@@ -205,6 +209,14 @@ pub(crate) fn migrate_key_images_to_app_data(app_data_dir: &Path, data: &mut App
             option_has_non_empty_text(&knob_position.position.active_image)
                 || option_has_non_empty_text(&knob_position.position.inactive_image)
         })
+    }) || data.sprite_positions.values().any(|sprites| {
+        sprites.iter().any(|sprite| {
+            option_has_non_empty_text(&sprite.base_image)
+                || sprite
+                    .poses
+                    .iter()
+                    .any(|pose| option_has_non_empty_text(&pose.image_override))
+        })
     });
 
     if !has_any_images {
@@ -267,6 +279,19 @@ pub(crate) fn migrate_key_images_to_app_data(app_data_dir: &Path, data: &mut App
         }
     }
 
+    for sprites in data.sprite_positions.values_mut() {
+        for sprite in sprites {
+            changed |= rewrite_coupled_sprite_image_reference(sprite, |image_ref| {
+                migrate_image_reference_to_app_data(&images_dir, image_ref)
+            });
+            for pose in &mut sprite.poses {
+                changed |= rewrite_coupled_sprite_image_reference(pose, |image_ref| {
+                    migrate_image_reference_to_app_data(&images_dir, image_ref)
+                });
+            }
+        }
+    }
+
     changed
 }
 
@@ -295,6 +320,18 @@ pub(crate) fn rehome_foreign_asset_references(
     for positions in data.knob_positions.values_mut() {
         for position in positions {
             changed |= rehome_position_asset_references(app_data_dir, &mut position.position);
+        }
+    }
+    for sprites in data.sprite_positions.values_mut() {
+        for sprite in sprites {
+            changed |= rewrite_coupled_sprite_image_reference(sprite, |image_ref| {
+                rehome_optional_asset_reference(app_data_dir, image_ref)
+            });
+            for pose in &mut sprite.poses {
+                changed |= rewrite_coupled_sprite_image_reference(pose, |image_ref| {
+                    rehome_optional_asset_reference(app_data_dir, image_ref)
+                });
+            }
         }
     }
 
@@ -340,6 +377,67 @@ pub(crate) fn rehome_foreign_asset_references(
     }
 
     changed
+}
+
+pub(crate) fn fill_missing_sprite_image_metrics(sprite_positions: &mut SpritePositions) -> bool {
+    let mut changed = false;
+    for sprite in sprite_positions.values_mut().flatten() {
+        let sprite_id = if sprite.id.is_empty() {
+            "<missing>".to_string()
+        } else {
+            sprite.id.clone()
+        };
+        if sprite.reference_natural_size.is_none() {
+            if let Some((source, (width, height))) = sprite
+                .base_image
+                .as_deref()
+                .filter(|source| is_renderable_image_ref(Some(source)))
+                .and_then(|source| {
+                    probe_sprite_image_metrics(&sprite_id, source).map(|size| (source, size))
+                })
+            {
+                sprite.reference_natural_size = Some(SpriteReferenceNaturalSize {
+                    source: Some(source.to_string()),
+                    width,
+                    height,
+                });
+                changed = true;
+            }
+        }
+        for pose in &mut sprite.poses {
+            if pose.image_override_metrics.is_some() {
+                continue;
+            }
+            if let Some((source, (width, height))) = pose
+                .image_override
+                .as_deref()
+                .filter(|source| is_renderable_image_ref(Some(source)))
+                .and_then(|source| {
+                    probe_sprite_image_metrics(&sprite_id, source).map(|size| (source, size))
+                })
+            {
+                pose.image_override_metrics = Some(SpriteImageMetrics {
+                    source: source.to_string(),
+                    width,
+                    height,
+                });
+                changed = true;
+            }
+        }
+    }
+    changed
+}
+
+fn probe_sprite_image_metrics(sprite_id: &str, source: &str) -> Option<(u32, u32)> {
+    match probe_local_raster_size(source) {
+        Ok(size) => size,
+        Err(error) => {
+            log::warn!(
+                "[SpriteMigration] 로컬 래스터 크기 읽기 실패: sprite_id={sprite_id}, path={source}, error={error:#}"
+            );
+            None
+        }
+    }
 }
 
 fn rehome_position_asset_references(app_data_dir: &Path, position: &mut KeyPosition) -> bool {

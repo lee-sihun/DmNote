@@ -120,6 +120,79 @@ impl NativePlacement {
     }
 }
 
+pub(in crate::state::app_state) fn content_offset_change(
+    offset: Option<f64>,
+    previous: Option<f64>,
+) -> Option<(f64, f64)> {
+    let offset = offset.filter(|value| value.is_finite())?;
+    Some((offset, offset - previous.unwrap_or(offset)))
+}
+
+pub(in crate::state::app_state) fn adjust_overlay_resize_position(
+    placement: &mut NativePlacement,
+    current: NativePlacement,
+    anchor: &OverlayResizeAnchor,
+    fixed_position_delta_x: Option<f64>,
+    fixed_position_delta_y: Option<f64>,
+    content_left_delta: Option<f64>,
+    content_top_delta: Option<f64>,
+) {
+    let scale = placement.target_scale;
+    match anchor {
+        OverlayResizeAnchor::BottomLeft => {
+            placement.position.y += (current.height - placement.height) * scale
+        }
+        OverlayResizeAnchor::TopRight => {
+            placement.position.x += (current.width - placement.width) * scale
+        }
+        OverlayResizeAnchor::BottomRight => {
+            placement.position.x += (current.width - placement.width) * scale;
+            placement.position.y += (current.height - placement.height) * scale;
+        }
+        OverlayResizeAnchor::Center => {
+            placement.position.x += (current.width - placement.width) * scale / 2.0;
+            placement.position.y += (current.height - placement.height) * scale / 2.0;
+        }
+        OverlayResizeAnchor::FixedPosition | OverlayResizeAnchor::TopLeft => {}
+    }
+
+    if matches!(anchor, OverlayResizeAnchor::FixedPosition) {
+        if let Some(delta_x) = fixed_position_delta_x {
+            placement.position.x += delta_x * scale;
+        }
+        if let Some(delta_y) = fixed_position_delta_y {
+            placement.position.y += delta_y * scale;
+        }
+    }
+
+    if let Some(delta) = content_left_delta.filter(|delta| *delta != 0.0) {
+        match anchor {
+            OverlayResizeAnchor::Center => placement.position.x -= delta * scale / 2.0,
+            OverlayResizeAnchor::TopRight | OverlayResizeAnchor::BottomRight => {}
+            OverlayResizeAnchor::FixedPosition => placement.position.x -= delta * scale,
+            _ => placement.position.x -= delta * scale,
+        }
+    }
+
+    if let Some(delta) = content_top_delta.filter(|delta| *delta != 0.0) {
+        match anchor {
+            OverlayResizeAnchor::Center => placement.position.y -= delta * scale / 2.0,
+            OverlayResizeAnchor::BottomLeft | OverlayResizeAnchor::BottomRight => {}
+            OverlayResizeAnchor::FixedPosition => placement.position.y -= delta * scale,
+            _ => placement.position.y -= delta * scale,
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        // AppKit의 원점 내림 전에 이동량을 대칭 반올림해 왕복 시 위치 누적 방지
+        placement.position.x =
+            current.position.x + (placement.position.x - current.position.x).round();
+        placement.position.y =
+            current.position.y + (placement.position.y - current.position.y).round();
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(in crate::state::app_state) enum PendingOverlayScaleResolution {
     #[cfg(any(target_os = "windows", test))]
@@ -824,7 +897,7 @@ pub(in crate::state::app_state) fn persist_overlay_placement_from_window(
     authority: OverlayPersistenceAuthority,
 ) -> Result<()> {
     let frame = applied_overlay_frame_from_window(window)?;
-    persist_overlay_placement(store, generation, trust, frame, None, authority)
+    persist_overlay_placement(store, generation, trust, frame, None, None, authority)
 }
 
 pub(in crate::state::app_state) fn persist_overlay_placement(
@@ -832,6 +905,7 @@ pub(in crate::state::app_state) fn persist_overlay_placement(
     generation: &Arc<AtomicU64>,
     trust: &Arc<Mutex<OverlayPlacementTrust>>,
     frame: AppliedOverlayFrame,
+    content_left_offset: Option<f64>,
     content_top_offset: Option<f64>,
     authority: OverlayPersistenceAuthority,
 ) -> Result<()> {
@@ -846,6 +920,9 @@ pub(in crate::state::app_state) fn persist_overlay_placement(
     store.update_deferred(move |state| {
         state.overlay_bounds = Some(stored);
         state.overlay_bounds_are_logical = true;
+        if let Some(offset) = content_left_offset {
+            state.overlay_last_content_left_offset = Some(offset);
+        }
         if let Some(offset) = content_top_offset {
             state.overlay_last_content_top_offset = Some(offset);
         }

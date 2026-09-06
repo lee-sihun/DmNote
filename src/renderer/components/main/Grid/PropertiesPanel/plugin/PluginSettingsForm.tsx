@@ -139,7 +139,7 @@ const PluginSettingsForm = ({
         : 0;
       const stepString =
         schemaValue.step != null ? String(schemaValue.step) : '';
-      const dotIndex = stepString.indexOf('../index');
+      const dotIndex = stepString.indexOf('.');
       const hasDecimal = dotIndex !== -1;
       const decimalScale = hasDecimal ? stepString.length - dotIndex - 1 : 0;
       control = (

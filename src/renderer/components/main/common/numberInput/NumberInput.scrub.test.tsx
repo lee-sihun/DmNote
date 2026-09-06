@@ -4,6 +4,11 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { NumberInput, OptionalNumberInput } from './NumberInput';
+import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
+import {
+  acquireHistoryEditorFlushLock,
+  resetHistoryEditorFlushLock,
+} from '@src/renderer/editor/runtime/lifecycle/historyEditorFlushLock';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -86,6 +91,7 @@ describe('NumberInput 접두 스크럽', () => {
     act(() => root.unmount());
     vi.unstubAllGlobals();
     container.remove();
+    resetHistoryEditorFlushLock();
   });
 
   it('드래그 중에는 preview만 흐르고 손을 떼면 onChange가 한 번 나간다', async () => {
@@ -113,6 +119,74 @@ describe('NumberInput 접두 스크럽', () => {
     expect(document.documentElement.classList.contains('dmn-drag-cursor')).toBe(
       false,
     );
+  });
+
+  it.each(
+    [
+      { name: 'NumberInput', Input: NumberInput },
+      { name: 'OptionalNumberInput', Input: OptionalNumberInput },
+    ].flatMap((input) =>
+      ['applied', 'locked'].map((boundary) => ({ ...input, boundary })),
+    ),
+  )(
+    '$name $boundary 취소는 드래그 전 값을 프리뷰로 다시 발행하지 않는다',
+    async ({ Input, boundary }) => {
+      const onPreview = vi.fn();
+      const onChange = vi.fn();
+      act(() =>
+        root.render(
+          <Input
+            value={10}
+            onChange={onChange}
+            onPreview={onPreview}
+            prefix="X"
+          />,
+        ),
+      );
+      send('pointerdown', { clientX: 0 });
+      send('pointermove', { clientX: 5 });
+      await flushAfterPaintCommit();
+      expect(onPreview).toHaveBeenLastCalledWith(15);
+      onPreview.mockClear();
+      act(() => {
+        if (boundary === 'applied')
+          useCommittedApplyStore.getState().bump('historyUndo');
+        else acquireHistoryEditorFlushLock('number-release');
+        prefixEl().dispatchEvent(pointer('pointerup', { clientX: 5 }));
+        expect(onPreview).not.toHaveBeenCalled();
+        expect(onChange).not.toHaveBeenCalled();
+        if (boundary === 'locked')
+          useCommittedApplyStore.getState().bump('historyUndo');
+        root.render(
+          <Input
+            value={5}
+            onChange={onChange}
+            onPreview={onPreview}
+            prefix="X"
+          />,
+        );
+      });
+      await flushAfterPaintCommit();
+      expect(onPreview).not.toHaveBeenCalled();
+      expect(onChange).not.toHaveBeenCalled();
+      expect(inputEl().value).toBe('5');
+      expect(captured.size).toBe(0);
+    },
+  );
+
+  it('history 취소 사유를 외부 프리뷰 정리 콜백까지 전달한다', async () => {
+    const onCancel = vi.fn();
+    const onChange = vi.fn();
+    render({ onPreview: vi.fn(), onChange, onCancel });
+    act(() => inputEl().focus());
+    send('pointerdown', { clientX: 0 });
+    send('pointermove', { clientX: 5 });
+    await flushAfterPaintCommit();
+    act(() => useCommittedApplyStore.getState().bump('historyRedo'));
+    send('pointerup', { clientX: 5 });
+    act(() => inputEl().blur());
+    expect(onCancel).toHaveBeenCalledExactlyOnceWith('history');
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it('단위가 있는 값은 드래그 중과 부모 preview 뒤에 같은 문자열을 유지한다', async () => {
@@ -510,6 +584,7 @@ describe('OptionalNumberInput 접두 스크럽', () => {
     act(() => root.unmount());
     vi.unstubAllGlobals();
     container.remove();
+    resetHistoryEditorFlushLock();
   });
 
   it('값이 비어 있으면 placeholder 상속값에서 출발해 preview로 흐른다', async () => {

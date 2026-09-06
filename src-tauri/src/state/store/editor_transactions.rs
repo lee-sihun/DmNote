@@ -52,6 +52,7 @@ pub(super) fn prepare_editor_patch_transition(
     candidate.apply_to_store(&mut scratch);
     crate::state::migration::canonicalize_gradient_pairs(&mut scratch);
     crate::state::migration::canonicalize_image_modes(&mut scratch);
+    crate::state::migration::normalize_sprite_triggers(&mut scratch);
     candidate = EditorDocumentV1::from_store(&scratch);
 
     validate_paired_update(

@@ -18,6 +18,7 @@ import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
@@ -27,6 +28,7 @@ import {
 } from '@utils/plugin/layout/pluginLayoutElements';
 import OverlayScene from '@components/shared/OverlayScene';
 import { computeLayout } from '@hooks/shared/useLayoutComputation';
+import { buildSpriteKeyCanonicalMap } from '@utils/sprite/spriteKeyBinding';
 
 // 슬라이스 부재 시에도 identity 안정 - computeLayout 메모 deps로 사용됨
 // 이종 배열 5곳이 같은 인스턴스를 별칭하므로 freeze로 교차 오염 차단
@@ -83,6 +85,7 @@ export default function App() {
   const statPositions = useStatItemStore((state) => state.positions);
   const graphPositions = useGraphItemStore((state) => state.positions);
   const knobPositions = useKnobItemStore((state) => state.positions);
+  const spritePositions = useSpriteStore((state) => state.positions);
   // 레이아웃 필드만 투영 구독 - 플러그인 state/html 변경이 App 리렌더로 승격되지 않게
   const pluginElements = useStoreWithEqualityFn(
     usePluginDisplayElementStore,
@@ -169,6 +172,16 @@ export default function App() {
   const currentStatPositions = statPositions[selectedKeyType] ?? EMPTY_SLICE;
   const currentGraphPositions = graphPositions[selectedKeyType] ?? EMPTY_SLICE;
   const currentKnobPositions = knobPositions[selectedKeyType] ?? EMPTY_SLICE;
+  // 오버레이는 방송 화면이라 스크럽 프리뷰를 구독하지 않는다 (커밋 시점만 반영).
+  // 편집 중 실시간 피드백은 편집 캔버스 몫
+  const currentSpritePositions =
+    spritePositions[selectedKeyType] ?? EMPTY_SLICE;
+
+  // 스프라이트 트리거(키 요소 id) -> canonical 키 문자열, 잎이 시그널을 찾을 때 쓴다
+  const spriteKeyCanonicalMap = useMemo(
+    () => buildSpriteKeyCanonicalMap(currentSlots, currentPositions),
+    [currentSlots, currentPositions],
+  );
 
   // 레이아웃 입력이 실제로 바뀔 때만 재계산 - webglTracks identity가 안정되어
   // updateTrackLayouts effect·WebGL uniform effect가 무관한 리렌더에 재실행되지 않음
@@ -180,6 +193,7 @@ export default function App() {
         currentStatPositions,
         currentGraphPositions,
         currentKnobPositions,
+        currentSpritePositions,
         trackHeight,
         noteSettings,
         selectedKeyType,
@@ -192,6 +206,7 @@ export default function App() {
       currentStatPositions,
       currentGraphPositions,
       currentKnobPositions,
+      currentSpritePositions,
       trackHeight,
       noteSettings,
       selectedKeyType,
@@ -200,31 +215,26 @@ export default function App() {
     ],
   );
   const {
-    bounds,
+    backgroundBox,
+    contentBounds,
     displayPositions,
     displayStatPositions,
     displayGraphPositions,
     displayKnobPositions,
+    displaySpritePositions,
     positionOffset,
-    topOffset,
+    topMostY,
+    leftMostX,
     webglTracks,
   } = layout;
 
   // 레이아웃이 DOM에 반영된 뒤 키 rect를 실측해 네이티브 히트 창과 동기화
   useOverlayHitRegions(layout);
 
-  // 창 크기와 배경 박스가 같은 공식을 공유 (창 == 콘텐츠 박스 불변식)
-  // 높이는 computeLayout의 topOffset을 그대로 재사용 - 공식이 한 곳에만 있다
-  const contentSize = useMemo(
-    () =>
-      bounds
-        ? {
-            width: bounds.maxX - bounds.minX + overlayPadding * 2,
-            height: bounds.maxY - bounds.minY + overlayPadding + topOffset,
-          }
-        : undefined,
-    [bounds, overlayPadding, topOffset],
-  );
+  // 창 크기는 computeLayout의 contentSize 하나로 - 창 바운즈(스프라이트 도달
+  // 범위·회전 얼굴 포함)와 트랙 밴드·회전 트랙·패딩 공식이 한 곳에만 있다.
+  // 배경 박스는 backgroundBox(콘텐츠 바운즈 기준)를 쓰므로 오버행 여유는 투명하다
+  const contentSize = layout.contentSize ?? undefined;
 
   // updateTrackLayouts는 useNoteSystem이 마운트 1회 고정 참조를 보장하므로
   // deps 포함이 재실행을 유발하지 않으며, 훅이 updater를 교체하는 미래 변경에도 안전
@@ -241,22 +251,27 @@ export default function App() {
     height: number;
     anchor: string;
     contentTopOffset: number;
+    contentLeftOffset: number;
     minX: number;
     minY: number;
   } | null>(null);
 
   useEffect(() => {
-    if (!bounds || !contentSize) return;
+    if (!contentBounds || !contentSize) return;
     // OBS 오버레이에는 네이티브 창이 없다 - allowlist 밖이라 호출이 항상 거부되고,
     // 기준선을 지우는 실패 처리와 맞물려 레이아웃이 바뀔 때마다 헛호출이 반복된다
     if (window.__dmn_runtime === 'obs') return;
 
     const totalWidth = contentSize.width;
     const totalHeight = contentSize.height;
-    // computeLayout이 계산한 값을 그대로 - 같은 공식을 여기서 또 쓰지 않는다
-    const contentTopOffset = topOffset;
-    const currentMinX = bounds.minX;
-    const currentMinY = bounds.minY;
+    // computeLayout이 계산한 콘텐츠 원점의 창 좌표를 그대로 - 스프라이트 오버행으로
+    // 창이 위·왼쪽으로 자라면 이 값의 delta만큼 네이티브가 창 원점을 되당긴다
+    const contentTopOffset = topMostY;
+    const contentLeftOffset = leftMostX;
+    // fixed-position 델타는 콘텐츠 원점 기준 - 창 바운즈 기준이면 오버행 시
+    // 콘텐츠 오프셋 보정과 겹쳐 이중 이동이 된다
+    const currentMinX = contentBounds.minX;
+    const currentMinY = contentBounds.minY;
 
     // 이전 값과 비교하여 실제로 변경되었을 때만 resize 호출
     const lastParams = lastResizeParams.current;
@@ -275,6 +290,7 @@ export default function App() {
       Math.abs(lastParams.height - totalHeight) < 0.5 &&
       lastParams.anchor === overlayAnchor &&
       Math.abs(lastParams.contentTopOffset - contentTopOffset) < 0.5 &&
+      Math.abs(lastParams.contentLeftOffset - contentLeftOffset) < 0.5 &&
       (!fixedPositionAnchor ||
         (Math.abs(lastParams.minX - currentMinX) < 0.5 &&
           Math.abs(lastParams.minY - currentMinY) < 0.5))
@@ -287,6 +303,7 @@ export default function App() {
       height: totalHeight,
       anchor: overlayAnchor,
       contentTopOffset,
+      contentLeftOffset,
       minX: currentMinX,
       minY: currentMinY,
     };
@@ -298,6 +315,7 @@ export default function App() {
         height: totalHeight,
         anchor: overlayAnchor,
         contentTopOffset,
+        contentLeftOffset,
         fixedPositionDeltaX: fixedPositionAnchor
           ? fixedPositionDeltaX
           : undefined,
@@ -313,7 +331,14 @@ export default function App() {
       .finally(() => {
         setResizeInFlight((count) => Math.max(0, count - 1));
       });
-  }, [bounds, contentSize, topOffset, overlayAnchor, overlayPadding]);
+  }, [
+    contentBounds,
+    contentSize,
+    topMostY,
+    leftMostX,
+    overlayAnchor,
+    overlayPadding,
+  ]);
 
   // 모든 요소가 자리 잡은 뒤 한 번에 공개 - 플러그인 요소가 늦게 뜨며 생기던 덜컥거림 제거
   const revealed = useOverlayReveal(isBootstrapped, resizeInFlight > 0);
@@ -327,9 +352,11 @@ export default function App() {
       displayStatPositions={displayStatPositions}
       displayGraphPositions={displayGraphPositions}
       displayKnobPositions={displayKnobPositions}
+      displaySpritePositions={displaySpritePositions}
+      spriteKeyCanonicalMap={spriteKeyCanonicalMap}
       selectedKeyType={selectedKeyType}
       noteEffect={noteEffect}
-      contentSize={contentSize}
+      contentSize={backgroundBox ?? undefined}
       contentFade={contentFade}
       revealed={revealed}
       noteSettings={noteSettings}

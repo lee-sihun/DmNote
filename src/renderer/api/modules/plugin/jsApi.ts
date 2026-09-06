@@ -1,3 +1,4 @@
+import { invokeEditorWrite } from '../editor/invokeEditorWrite';
 import { invoke } from '@tauri-apps/api/core';
 import { subscribe } from '../shared';
 
@@ -15,15 +16,19 @@ export const jsApi = {
   get: () => invoke<CustomJs>('js_get'),
   getUse: () => invoke<boolean>('js_get_use'),
   toggle: (enabled: boolean) =>
-    invoke<JsTogglePayload>('js_toggle', { enabled }),
-  load: () => invoke<JsLoadResult>('js_load'),
-  reload: () => invoke<JsReloadResult>('js_reload'),
-  remove: (id: string) => invoke<JsRemoveResult>('js_remove_plugin', { id }),
+    invokeEditorWrite<JsTogglePayload>('js_toggle', { enabled }),
+  load: () => invokeEditorWrite<JsLoadResult>('js_load'),
+  reload: () => invokeEditorWrite<JsReloadResult>('js_reload'),
+  remove: (id: string) =>
+    invokeEditorWrite<JsRemoveResult>('js_remove_plugin', { id }),
   setPluginEnabled: (id: string, enabled: boolean) =>
-    invoke<JsPluginUpdateResult>('js_set_plugin_enabled', { id, enabled }),
+    invokeEditorWrite<JsPluginUpdateResult>('js_set_plugin_enabled', {
+      id,
+      enabled,
+    }),
   setContent: (content: string) =>
-    invoke<JsSetContentResult>('js_set_content', { content }),
-  reset: () => invoke<void>('js_reset'),
+    invokeEditorWrite<JsSetContentResult>('js_set_content', { content }),
+  reset: () => invokeEditorWrite<void>('js_reset'),
   onUse: (listener: (payload: JsTogglePayload) => void) =>
     subscribe<JsTogglePayload>('js:use', listener),
   onState: (listener: (payload: JsStatePayload) => void) =>

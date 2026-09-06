@@ -26,9 +26,11 @@ import {
   useGridElementInteraction,
   type GridElementInteractionProps,
 } from '@hooks/Grid/useGridElementInteraction';
+import { elementRotationTransform } from '@utils/element/rotation';
 
 interface KnobPosition {
   hidden?: boolean;
+  rotation?: number;
   dx?: number;
   dy?: number;
   width?: number;
@@ -244,7 +246,9 @@ const KnobItem = ({
   });
 
   if (position?.hidden) return null;
-  const transform = `translate(calc(${renderDx}px + var(--key-offset-x, 0px)), calc(${renderDy}px + var(--key-offset-y, 0px)))`;
+  const transform = `translate(calc(${renderDx}px + var(--key-offset-x, 0px)), calc(${renderDy}px + var(--key-offset-y, 0px)))${elementRotationTransform(
+    position.rotation,
+  )}`;
 
   return (
     <div

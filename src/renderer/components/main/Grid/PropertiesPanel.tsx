@@ -22,6 +22,7 @@ import {
   PluginSelectionPanel,
   SingleGraphPanel,
   SingleKnobPanel,
+  SingleSpritePanel,
   SingleKeyStatPanel,
   BatchKeyLikePanel,
   BatchGraphOnlyPanel,
@@ -88,12 +89,16 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     statItemPositions,
     graphItemPositions,
     knobItemPositions,
+    canonicalSpritePositions,
+    spriteItemPositions,
     selectedKeyElements,
     selectedStatElements,
     selectedGraphElements,
     selectedKnobElements,
+    selectedSpriteElements,
     selectedKeyLikeElements,
     selectedBatchStyleElements,
+    selectedBatchGeometryElements,
     selectedPluginElements,
     selectedPluginElement,
     stableBatchGeometryTargets,
@@ -116,6 +121,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     singleGraphIndex,
     singleGraphPosition,
     singleKnobPosition,
+    singleSpritePosition,
     selectedGroupInfo,
   } = usePropertiesPanelSelection();
   const {
@@ -131,6 +137,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     getMixedValueKnobs,
     getMixedValueKnobsAsKey,
     getMixedValueBatch,
+    getMixedValueGeometry,
     getMixedValueActiveCapable,
     getMixedValueKeysOnly,
   } = createBatchSelectionModel({
@@ -141,11 +148,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     statItemPositions,
     graphItemPositions,
     knobItemPositions,
+    spriteItemPositions,
     selectedKeyElements,
     selectedKeyLikeElements,
     selectedGraphElements,
     selectedKnobElements,
     selectedBatchStyleElements,
+    selectedBatchGeometryElements,
   });
   const { useCustomCSS } = useSettingsStore();
   const {
@@ -156,7 +165,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     handleChange: handlePluginSettingsPanelChange,
     handleConfirm: handlePluginSettingsPanelConfirm,
     handleCancel: handlePluginSettingsPanelCancel,
-  } = usePluginSettingsPanelController();
+  } = usePluginSettingsPanelController({ t });
   const isPanelVisibleStore = usePropertiesPanelStore(
     (state) => state.isCanvasPanelOpen,
   );
@@ -212,6 +221,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     selectedPluginElements.length,
     selectedGraphElements.length,
     selectedKnobElements.length,
+    selectedSpriteElements.length,
   ].join('|');
   const {
     activePageKey,
@@ -255,6 +265,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     singleStatPosition,
     singleGraphPosition,
     singleKnobPosition,
+    singleSpritePosition,
     singleKeyInfo,
     singleKeyCode,
     setPanelMode,
@@ -323,7 +334,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       selectedElements,
       selectedKeyElementsLength: selectedKeyElements.length,
       selectedKeyLikeElementsLength: selectedKeyLikeElements.length,
-      selectedBatchStyleElementsLength: selectedBatchStyleElements.length,
+      selectedBatchGeometryElementsLength: selectedBatchGeometryElements.length,
       selectedPluginElementsLength: selectedPluginElements.length,
       pluginSettingsPanel,
       closePage,
@@ -435,7 +446,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     statItemPositions,
     graphItemPositions,
     knobItemPositions,
-    selectedBatchStyleElements,
+    canonicalSpritePositions,
+    spriteItemPositions,
+    selectedBatchGeometryElements,
     stableBatchGeometryTargets,
     stablePluginGeometryElements,
     stablePluginGeometryTargets,
@@ -502,16 +515,18 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // 플러그인 단독 다중은 경량 기하 배치 패널에 라우트
   const renderSelectionPanelBody = () => {
     const selectionTotalCount =
-      selectedBatchStyleElements.length + selectedPluginElements.length;
+      selectedBatchGeometryElements.length + selectedPluginElements.length;
     const route = resolveSelectionPanelRoute({
       keyLikeCount: selectedKeyLikeElements.length,
       graphCount: selectedGraphElements.length,
       knobCount: selectedKnobElements.length,
+      spriteCount: selectedSpriteElements.length,
       pluginCount: selectedPluginElements.length,
       hasSingleKeyPosition: !!singleKeyPosition,
       hasSingleStatPosition: !!singleStatPosition,
       hasSingleGraphPosition: !!singleGraphPosition,
       hasSingleKnobPosition: !!singleKnobPosition,
+      hasSingleSpritePosition: !!singleSpritePosition,
     });
 
     // 다중 선택인 경우 (키/통계 포함, 또는 그래프+노브 혼합)
@@ -551,6 +566,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           getMixedValue={getMixedValue}
           getMixedValueCanonical={getMixedValueCanonical}
           getMixedValueBatch={getMixedValueBatch}
+          getMixedValueGeometry={getMixedValueGeometry}
           getMixedValueGraphs={getMixedValueGraphs}
           getMixedValueGraphsAsKey={getMixedValueGraphsAsKey}
           getMixedValueKeysOnly={getMixedValueKeysOnly}
@@ -618,6 +634,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handleBatchResizePreview={handleBatchResizePreview}
           onElementPropertyCommit={handleBatchElementPropertyCommit}
           handleKnobBatchSharedSetting={handleKnobBatchSharedSetting}
+          getMixedValueGeometry={getMixedValueGeometry}
           getMixedValueKnobs={getMixedValueKnobs}
           getMixedValueKnobsAsKey={getMixedValueKnobsAsKey}
           getSelectedKnobsData={getSelectedKnobsData}
@@ -659,6 +676,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handleBatchResizePreview={handleBatchResizePreview}
           onElementPropertyCommit={handleBatchElementPropertyCommit}
           handleGraphBatchSharedSetting={handleGraphBatchSharedSetting}
+          getMixedValueGeometry={getMixedValueGeometry}
           getMixedValueGraphs={getMixedValueGraphs}
           getMixedValueGraphsAsKey={getMixedValueGraphsAsKey}
           getSelectedGraphsData={getSelectedGraphsData}
@@ -727,6 +745,28 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           selectedPluginDefinition={selectedPluginDefinition}
           resolvedPluginSettings={resolvedPluginSettings}
           handlePluginSettingChange={handlePluginSettingChange}
+          t={t}
+        />
+      );
+    }
+
+    // 단일 스프라이트 요소 선택인 경우 - 전용 필드 커밋·프리뷰는 패널이 소유
+    if (route.kind === 'singleSprite' && singleSpritePosition) {
+      return (
+        <SingleSpritePanel
+          setPanelElement={setPanelElement}
+          panelElement={panelElement}
+          singleSpritePosition={singleSpritePosition}
+          selectedKeyType={selectedKeyType}
+          isRenaming={isRenaming}
+          renameInputRef={renameInputRef}
+          renameValue={renameValue}
+          setRenameValue={setRenameValue}
+          renameCancelledRef={renameCancelledRef}
+          handleRenameCommit={handleRenameCommit}
+          handleRenameCancel={handleRenameCancel}
+          handleRenameStart={handleRenameStart}
+          singleScrollRefFor={singleScrollRefFor}
           t={t}
         />
       );
@@ -854,6 +894,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             selectedGraphElements[0]?.id,
           )}
           handleGeometryCommit={stableGeometryHandler(
+            'graph',
+            selectedGraphElements[0]?.id,
+          )}
+          onStylePropertyPreview={stableStylePropertyPreviewHandler(
             'graph',
             selectedGraphElements[0]?.id,
           )}

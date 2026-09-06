@@ -1,3 +1,4 @@
+import { invokeEditorWrite } from './invokeEditorWrite';
 import { invoke } from '@tauri-apps/api/core';
 import { subscribe } from '../shared';
 
@@ -14,12 +15,15 @@ export const noteTabApi = {
     tabId: string,
     settings: import('@src/types/settings/noteSettings').TabNoteSettings | null,
   ) =>
-    invoke<import('@src/types/plugin/api').TabNoteSetResult>('note_tab_set', {
-      tabId,
-      settings,
-    }),
+    invokeEditorWrite<import('@src/types/plugin/api').TabNoteSetResult>(
+      'note_tab_set',
+      {
+        tabId,
+        settings,
+      },
+    ),
   clear: (tabId: string) =>
-    invoke<import('@src/types/plugin/api').TabNoteClearResult>(
+    invokeEditorWrite<import('@src/types/plugin/api').TabNoteClearResult>(
       'note_tab_clear',
       {
         tabId,

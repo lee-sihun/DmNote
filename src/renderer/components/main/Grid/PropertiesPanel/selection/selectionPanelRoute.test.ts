@@ -11,11 +11,13 @@ const input = (
   keyLikeCount: 0,
   graphCount: 0,
   knobCount: 0,
+  spriteCount: 0,
   pluginCount: 0,
   hasSingleKeyPosition: false,
   hasSingleStatPosition: false,
   hasSingleGraphPosition: false,
   hasSingleKnobPosition: false,
+  hasSingleSpritePosition: false,
   ...overrides,
 });
 
@@ -156,6 +158,66 @@ describe('selectionPanelRoute 혼합 선택(네이티브+플러그인)', () => {
     // 기하 커밋 경로가 fail-closed라 미해결 대상은 커밋 없이 무시된다
     expect(
       resolveSelectionPanelRoute(input({ knobCount: 1, pluginCount: 1 })),
+    ).toEqual({ kind: 'batchKnobOnly' });
+  });
+});
+
+describe('selectionPanelRoute 스프라이트 선택', () => {
+  it('단일 스프라이트는 singleSprite', () => {
+    expect(
+      resolveSelectionPanelRoute(
+        input({ spriteCount: 1, hasSingleSpritePosition: true }),
+      ),
+    ).toEqual({ kind: 'singleSprite' });
+  });
+
+  it('위치 미해결 단일 스프라이트는 none', () => {
+    expect(resolveSelectionPanelRoute(input({ spriteCount: 1 }))).toEqual({
+      kind: 'none',
+    });
+  });
+
+  it('스프라이트만 다중이면 경량 기하 배치', () => {
+    expect(resolveSelectionPanelRoute(input({ spriteCount: 2 }))).toEqual({
+      kind: 'pluginBatch',
+    });
+  });
+
+  it('스프라이트+플러그인은 경량 기하 배치', () => {
+    expect(
+      resolveSelectionPanelRoute(
+        input({
+          spriteCount: 1,
+          hasSingleSpritePosition: true,
+          pluginCount: 1,
+        }),
+      ),
+    ).toEqual({ kind: 'pluginBatch' });
+  });
+
+  it('스프라이트+키는 batchKeyLike', () => {
+    expect(
+      resolveSelectionPanelRoute(input({ spriteCount: 1, keyLikeCount: 1 })),
+    ).toEqual({ kind: 'batchKeyLike' });
+  });
+
+  it('스프라이트+노브는 batchKnobOnly', () => {
+    expect(
+      resolveSelectionPanelRoute(input({ spriteCount: 1, knobCount: 1 })),
+    ).toEqual({ kind: 'batchKnobOnly' });
+  });
+
+  it('스프라이트+그래프는 batchGraphOnly', () => {
+    expect(
+      resolveSelectionPanelRoute(input({ spriteCount: 1, graphCount: 1 })),
+    ).toEqual({ kind: 'batchGraphOnly' });
+  });
+
+  it('스프라이트가 섞여도 단일 노브 라우트로 새지 않는다', () => {
+    expect(
+      resolveSelectionPanelRoute(
+        input({ spriteCount: 1, knobCount: 1, hasSingleKnobPosition: true }),
+      ),
     ).toEqual({ kind: 'batchKnobOnly' });
   });
 });

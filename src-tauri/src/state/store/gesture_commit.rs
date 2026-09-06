@@ -60,7 +60,7 @@ impl AppStore {
         admission: &HistoryAdmissionLease,
         runtime_counters: Option<&KeyCounters>,
     ) -> std::result::Result<GestureCommitOutcome, EditorCommitError> {
-        let fingerprint = canonical_request_fingerprint(&request)?;
+        let fingerprint = gesture_request_fingerprint(&request)?;
         let mut guard = self
             .lock_for_update()
             .map_err(|error| EditorCommitError::io(error.to_string()))?;
@@ -98,6 +98,7 @@ impl AppStore {
         }
 
         if let Some(changes) = request.editor_changes.as_mut() {
+            changes.merge_omitted_sprite_fields(&guard.data.sprite_positions);
             native_element_id::prepare_commit_patch_element_ids(&guard.data, changes)?;
         }
 

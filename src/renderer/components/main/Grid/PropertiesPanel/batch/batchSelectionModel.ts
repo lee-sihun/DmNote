@@ -9,6 +9,7 @@ import type {
 } from '@src/types/key/keys';
 import type { KnobItemPosition, KnobItemPositions } from '@src/types/key/knobs';
 import type { StatItemPositions } from '@src/types/key/statItems';
+import type { CanonicalReactiveSpritePosition } from '@src/types/editor';
 import { getKeyInfoByGlobalKey } from '@utils/input/KeyMaps';
 import { aggregateMixedValue } from '@src/renderer/components/main/Grid/PropertiesPanel/batch/mixedValue';
 import { slotCanonical, slotDisplayName } from '@utils/keySlot';
@@ -68,12 +69,17 @@ export interface BatchSelectionModelInput {
   statItemPositions: StatItemPositions;
   graphItemPositions: GraphItemPositions;
   knobItemPositions: KnobItemPositions;
+  spriteItemPositions: Record<string, CanonicalReactiveSpritePosition[]>;
   selectedKeyElements: readonly BatchSelectedElement<'key'>[];
   selectedKeyLikeElements: readonly BatchSelectedElement<'key' | 'stat'>[];
   selectedGraphElements: readonly BatchSelectedElement<'graph'>[];
   selectedKnobElements: readonly BatchSelectedElement<'knob'>[];
   selectedBatchStyleElements: readonly BatchSelectedElement<
     'key' | 'stat' | 'graph' | 'knob'
+  >[];
+  // resize가 실제로 조절하는 집합 - 스타일 집합에 sprite가 더해진다
+  selectedBatchGeometryElements: readonly BatchSelectedElement<
+    'key' | 'stat' | 'graph' | 'knob' | 'sprite'
   >[];
 }
 
@@ -85,11 +91,13 @@ export const createBatchSelectionModel = ({
   statItemPositions,
   graphItemPositions,
   knobItemPositions,
+  spriteItemPositions,
   selectedKeyElements,
   selectedKeyLikeElements,
   selectedGraphElements,
   selectedKnobElements,
   selectedBatchStyleElements,
+  selectedBatchGeometryElements,
 }: BatchSelectionModelInput) => {
   const modePositions = positions[selectedKeyType] ?? [];
   const modeCanonicalPositions = canonicalPositions[selectedKeyType] ?? [];
@@ -97,11 +105,13 @@ export const createBatchSelectionModel = ({
   const modeStatPositions = statItemPositions[selectedKeyType] ?? [];
   const modeGraphPositions = graphItemPositions[selectedKeyType] ?? [];
   const modeKnobPositions = knobItemPositions[selectedKeyType] ?? [];
+  const modeSpritePositions = spriteItemPositions[selectedKeyType] ?? [];
 
   const keyIndex = indexPositionsById(modePositions);
   const statIndex = indexPositionsById(modeStatPositions);
   const graphIndex = indexPositionsById(modeGraphPositions);
   const knobIndex = indexPositionsById(modeKnobPositions);
+  const spriteIndex = indexPositionsById(modeSpritePositions);
   const canonicalKeyGroups = groupPositionsById(modeCanonicalPositions);
 
   const selectedKeysData = selectedKeyLikeElements
@@ -185,6 +195,26 @@ export const createBatchSelectionModel = ({
   const selectedKeyOnlyPositions = selectedKeyElements
     .map((element) => keyIndex.get(element.id) ?? null)
     .filter((value): value is NonNullable<typeof value> => value !== null);
+
+  // 크기 표시·Mixed 판정 전용. resize가 실제로 조절하는 집합에서 그대로 파생시켜
+  // 두 집합이 갈릴 수 없게 한다 - 스타일 집합에는 스프라이트가 없어서 그걸 쓰면
+  // 키 60·스프라이트 200이 Mixed 없이 60으로 보이고, 그 값을 확정하면
+  // 스프라이트의 모든 자세 오프셋까지 배율이 먹는다
+  const selectedGeometryPositions = selectedBatchGeometryElements
+    .map((element) => {
+      const indexed =
+        element.type === 'key'
+          ? keyIndex.get(element.id)
+          : element.type === 'stat'
+          ? statIndex.get(element.id)
+          : element.type === 'graph'
+          ? graphIndex.get(element.id)
+          : element.type === 'knob'
+          ? knobIndex.get(element.id)
+          : spriteIndex.get(element.id);
+      return indexed ? (indexed.position as KeyPosition) : null;
+    })
+    .filter((position): position is KeyPosition => position !== null);
 
   const selectedActiveCapablePositions: KeyPosition[] = [
     ...selectedKeyOnlyPositions.map(({ position }) => position),
@@ -274,6 +304,10 @@ export const createBatchSelectionModel = ({
         getter,
         defaultValue,
       ),
+    getMixedValueGeometry: <Value>(
+      getter: (position: KeyPosition) => Value | undefined,
+      defaultValue: Value,
+    ) => aggregateMixedValue(selectedGeometryPositions, getter, defaultValue),
     getMixedValueActiveCapable: <Value>(
       getter: (position: KeyPosition) => Value | undefined,
       defaultValue: Value,

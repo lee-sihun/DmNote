@@ -6,8 +6,8 @@ use crate::{
     errors::EditorCommitError,
     models::{
         AppStoreData, EditorDocumentV1, EditorPatchV1, GraphPosition, KeyMappings, KeyPosition,
-        KeySlot, KnobPosition, StatPosition, EDITOR_COMMIT_SCHEMA_VERSION_V2,
-        EDITOR_SCHEMA_VERSION,
+        KeySlot, KnobPosition, ReactiveSpritePosition, SpritePose, StatPosition,
+        EDITOR_COMMIT_SCHEMA_VERSION_V2, EDITOR_SCHEMA_VERSION,
     },
 };
 
@@ -27,47 +27,57 @@ pub(crate) struct BackfillOutcome {
 }
 
 trait NativeElement: Clone + PartialEq {
-    fn position(&self) -> &KeyPosition;
-    fn position_mut(&mut self) -> &mut KeyPosition;
+    fn id(&self) -> &str;
+    fn id_mut(&mut self) -> &mut String;
 }
 
 impl NativeElement for KeyPosition {
-    fn position(&self) -> &KeyPosition {
-        self
+    fn id(&self) -> &str {
+        &self.id
     }
 
-    fn position_mut(&mut self) -> &mut KeyPosition {
-        self
+    fn id_mut(&mut self) -> &mut String {
+        &mut self.id
     }
 }
 
 impl NativeElement for StatPosition {
-    fn position(&self) -> &KeyPosition {
-        &self.position
+    fn id(&self) -> &str {
+        &self.position.id
     }
 
-    fn position_mut(&mut self) -> &mut KeyPosition {
-        &mut self.position
+    fn id_mut(&mut self) -> &mut String {
+        &mut self.position.id
     }
 }
 
 impl NativeElement for GraphPosition {
-    fn position(&self) -> &KeyPosition {
-        &self.position
+    fn id(&self) -> &str {
+        &self.position.id
     }
 
-    fn position_mut(&mut self) -> &mut KeyPosition {
-        &mut self.position
+    fn id_mut(&mut self) -> &mut String {
+        &mut self.position.id
     }
 }
 
 impl NativeElement for KnobPosition {
-    fn position(&self) -> &KeyPosition {
-        &self.position
+    fn id(&self) -> &str {
+        &self.position.id
     }
 
-    fn position_mut(&mut self) -> &mut KeyPosition {
-        &mut self.position
+    fn id_mut(&mut self) -> &mut String {
+        &mut self.position.id
+    }
+}
+
+impl NativeElement for ReactiveSpritePosition {
+    fn id(&self) -> &str {
+        &self.id
+    }
+
+    fn id_mut(&mut self) -> &mut String {
+        &mut self.id
     }
 }
 
@@ -109,8 +119,8 @@ fn backfill_collection<T: NativeElement>(
             continue;
         };
         for element in elements {
-            let id = &element.position().id;
-            if is_valid_element_id(id) && seen.insert(id.clone()) {
+            let id = element.id();
+            if is_valid_element_id(id) && seen.insert(id.to_string()) {
                 continue;
             }
 
@@ -120,8 +130,39 @@ fn backfill_collection<T: NativeElement>(
             }
             let id = new_unique_id(reserved);
             seen.insert(id.clone());
-            element.position_mut().id = id;
+            *element.id_mut() = id;
             outcome.changed = true;
+        }
+    }
+}
+
+fn backfill_sprite_pose_ids(
+    collection: &mut HashMap<String, Vec<ReactiveSpritePosition>>,
+    mode: Option<&str>,
+    seen: &mut HashSet<String>,
+    reserved: &mut HashSet<String>,
+    outcome: &mut BackfillOutcome,
+) {
+    for collection_mode in sorted_modes(collection) {
+        if mode.is_some_and(|mode| mode != collection_mode) {
+            continue;
+        }
+        let Some(sprites) = collection.get_mut(&collection_mode) else {
+            continue;
+        };
+        for sprite in sprites {
+            for pose in &mut sprite.poses {
+                if is_valid_element_id(&pose.pose_id) && seen.insert(pose.pose_id.clone()) {
+                    continue;
+                }
+                if !pose.pose_id.is_empty() {
+                    outcome.repaired = true;
+                }
+                let id = new_unique_id(reserved);
+                seen.insert(id.clone());
+                pose.pose_id = id;
+                outcome.changed = true;
+            }
         }
     }
 }
@@ -154,6 +195,19 @@ pub(crate) fn backfill_store_element_ids(store: &mut AppStoreData) -> BackfillOu
         &mut reserved,
         &mut outcome,
     );
+    backfill_collection(
+        &mut store.sprite_positions,
+        &mut seen,
+        &mut reserved,
+        &mut outcome,
+    );
+    backfill_sprite_pose_ids(
+        &mut store.sprite_positions,
+        None,
+        &mut seen,
+        &mut reserved,
+        &mut outcome,
+    );
     outcome
 }
 
@@ -163,8 +217,8 @@ fn collect_collection_ids<T: NativeElement>(
 ) {
     for elements in collection.values() {
         for element in elements {
-            if is_valid_element_id(&element.position().id) {
-                ids.insert(element.position().id.clone());
+            if is_valid_element_id(element.id()) {
+                ids.insert(element.id().to_string());
             }
         }
     }
@@ -176,6 +230,14 @@ fn collect_store_ids(store: &AppStoreData) -> HashSet<String> {
     collect_collection_ids(&store.stat_positions, &mut ids);
     collect_collection_ids(&store.graph_positions, &mut ids);
     collect_collection_ids(&store.knob_positions, &mut ids);
+    collect_collection_ids(&store.sprite_positions, &mut ids);
+    for sprite in store.sprite_positions.values().flatten() {
+        for pose in &sprite.poses {
+            if is_valid_element_id(&pose.pose_id) {
+                ids.insert(pose.pose_id.clone());
+            }
+        }
+    }
     ids
 }
 
@@ -186,7 +248,72 @@ fn rekey_collection<T: NativeElement>(
     for mode in sorted_modes(collection) {
         if let Some(elements) = collection.get_mut(&mode) {
             for element in elements {
-                element.position_mut().id = new_unique_id(reserved);
+                *element.id_mut() = new_unique_id(reserved);
+            }
+        }
+    }
+}
+
+fn rekey_key_collection(
+    collection: &mut HashMap<String, Vec<KeyPosition>>,
+    mode: Option<&str>,
+    reserved: &mut HashSet<String>,
+) -> HashMap<String, String> {
+    let mut replacements = HashMap::new();
+    for collection_mode in sorted_modes(collection) {
+        if mode.is_some_and(|mode| mode != collection_mode) {
+            continue;
+        }
+        let Some(elements) = collection.get_mut(&collection_mode) else {
+            continue;
+        };
+        for element in elements {
+            let old_id = element.id.clone();
+            let new_id = new_unique_id(reserved);
+            if !old_id.is_empty() {
+                replacements.insert(old_id, new_id.clone());
+            }
+            element.id = new_id;
+        }
+    }
+    replacements
+}
+
+fn rekey_sprite_pose_ids(
+    collection: &mut HashMap<String, Vec<ReactiveSpritePosition>>,
+    mode: Option<&str>,
+    reserved: &mut HashSet<String>,
+) {
+    for collection_mode in sorted_modes(collection) {
+        if mode.is_some_and(|mode| mode != collection_mode) {
+            continue;
+        }
+        if let Some(sprites) = collection.get_mut(&collection_mode) {
+            for sprite in sprites {
+                for pose in &mut sprite.poses {
+                    pose.pose_id = new_unique_id(reserved);
+                }
+            }
+        }
+    }
+}
+
+fn remap_sprite_triggers(
+    collection: &mut HashMap<String, Vec<ReactiveSpritePosition>>,
+    mode: Option<&str>,
+    replacements: &HashMap<String, String>,
+) {
+    for (collection_mode, sprites) in collection {
+        if mode.is_some_and(|mode| mode != collection_mode) {
+            continue;
+        }
+        for sprite in sprites {
+            for pose in &mut sprite.poses {
+                for trigger in &mut pose.triggers {
+                    if let Some(replacement) = replacements.get(trigger) {
+                        trigger.clone_from(replacement);
+                    }
+                }
             }
         }
     }
@@ -194,10 +321,13 @@ fn rekey_collection<T: NativeElement>(
 
 pub(crate) fn rekey_store_element_ids(store: &mut AppStoreData) {
     let mut reserved = collect_store_ids(store);
-    rekey_collection(&mut store.key_positions, &mut reserved);
+    let key_replacements = rekey_key_collection(&mut store.key_positions, None, &mut reserved);
     rekey_collection(&mut store.stat_positions, &mut reserved);
     rekey_collection(&mut store.graph_positions, &mut reserved);
     rekey_collection(&mut store.knob_positions, &mut reserved);
+    rekey_collection(&mut store.sprite_positions, &mut reserved);
+    rekey_sprite_pose_ids(&mut store.sprite_positions, None, &mut reserved);
+    remap_sprite_triggers(&mut store.sprite_positions, None, &key_replacements);
 }
 
 fn rekey_collection_mode<T: NativeElement>(
@@ -207,13 +337,13 @@ fn rekey_collection_mode<T: NativeElement>(
 ) {
     if let Some(elements) = collection.get_mut(mode) {
         for element in elements {
-            element.position_mut().id = new_unique_id(reserved);
+            *element.id_mut() = new_unique_id(reserved);
         }
     }
 }
 
 pub(crate) fn rekey_mode_element_ids(store: &mut AppStoreData, mode: &str) {
-    rekey_mode_element_ids_for_collections(store, mode, true, true, true, true);
+    rekey_mode_element_ids_for_collections(store, mode, true, true, true, true, true);
 }
 
 pub(crate) fn rekey_mode_element_ids_for_collections(
@@ -223,10 +353,13 @@ pub(crate) fn rekey_mode_element_ids_for_collections(
     stat_positions: bool,
     graph_positions: bool,
     knob_positions: bool,
+    sprite_positions: bool,
 ) {
     let mut reserved = collect_store_ids(store);
+    let mut key_replacements = HashMap::new();
     if key_positions {
-        rekey_collection_mode(&mut store.key_positions, mode, &mut reserved);
+        key_replacements =
+            rekey_key_collection(&mut store.key_positions, Some(mode), &mut reserved);
     }
     if stat_positions {
         rekey_collection_mode(&mut store.stat_positions, mode, &mut reserved);
@@ -237,6 +370,11 @@ pub(crate) fn rekey_mode_element_ids_for_collections(
     if knob_positions {
         rekey_collection_mode(&mut store.knob_positions, mode, &mut reserved);
     }
+    if sprite_positions {
+        rekey_collection_mode(&mut store.sprite_positions, mode, &mut reserved);
+        rekey_sprite_pose_ids(&mut store.sprite_positions, Some(mode), &mut reserved);
+    }
+    remap_sprite_triggers(&mut store.sprite_positions, Some(mode), &key_replacements);
 }
 
 fn backfill_collection_mode<T: NativeElement>(
@@ -250,8 +388,8 @@ fn backfill_collection_mode<T: NativeElement>(
         return;
     };
     for element in elements {
-        let id = &element.position().id;
-        if is_valid_element_id(id) && seen.insert(id.clone()) {
+        let id = element.id();
+        if is_valid_element_id(id) && seen.insert(id.to_string()) {
             continue;
         }
 
@@ -261,7 +399,7 @@ fn backfill_collection_mode<T: NativeElement>(
         }
         let id = new_unique_id(reserved);
         seen.insert(id.clone());
-        element.position_mut().id = id;
+        *element.id_mut() = id;
         outcome.changed = true;
     }
 }
@@ -275,12 +413,31 @@ pub(crate) fn backfill_mode_element_ids_for_collections(
     stat_positions: bool,
     graph_positions: bool,
     knob_positions: bool,
+    sprite_positions: bool,
 ) -> BackfillOutcome {
     let mut seen = HashSet::new();
     collect_collection_ids_outside_target(&store.key_positions, mode, key_positions, &mut seen);
     collect_collection_ids_outside_target(&store.stat_positions, mode, stat_positions, &mut seen);
     collect_collection_ids_outside_target(&store.graph_positions, mode, graph_positions, &mut seen);
     collect_collection_ids_outside_target(&store.knob_positions, mode, knob_positions, &mut seen);
+    collect_collection_ids_outside_target(
+        &store.sprite_positions,
+        mode,
+        sprite_positions,
+        &mut seen,
+    );
+    for (collection_mode, sprites) in &store.sprite_positions {
+        if sprite_positions && collection_mode == mode {
+            continue;
+        }
+        for sprite in sprites {
+            for pose in &sprite.poses {
+                if is_valid_element_id(&pose.pose_id) {
+                    seen.insert(pose.pose_id.clone());
+                }
+            }
+        }
+    }
     let mut reserved = collect_store_ids(store);
     let mut outcome = BackfillOutcome::default();
     if key_positions {
@@ -314,6 +471,22 @@ pub(crate) fn backfill_mode_element_ids_for_collections(
         backfill_collection_mode(
             &mut store.knob_positions,
             mode,
+            &mut seen,
+            &mut reserved,
+            &mut outcome,
+        );
+    }
+    if sprite_positions {
+        backfill_collection_mode(
+            &mut store.sprite_positions,
+            mode,
+            &mut seen,
+            &mut reserved,
+            &mut outcome,
+        );
+        backfill_sprite_pose_ids(
+            &mut store.sprite_positions,
+            Some(mode),
             &mut seen,
             &mut reserved,
             &mut outcome,

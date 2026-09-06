@@ -71,6 +71,7 @@ const FORWARDED_EVENTS: &[&str] = &[
     "statPositions:changed",
     "graphPositions:changed",
     "knobPositions:changed",
+    "spritePositions:changed",
     "layerGroups:changed",
     "overlay:visibility",
     "overlay:lock",

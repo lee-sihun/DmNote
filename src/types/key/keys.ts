@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { imageModeSchema, imageTransformSchema } from './imageLayer';
+import { DEFAULT_ELEMENT_ROTATION, elementRotationSchema } from './rotation';
 import { elementShadowSpecSchema } from './shadows';
 import { NOTE_SETTINGS_CONSTRAINTS } from '../settings/noteSettingsConstraints';
 import { getDefaultCounterSettings } from '@src/renderer/defaults';
@@ -277,6 +278,9 @@ export const keyPositionSchema = z.object({
   dy: z.number(),
   width: z.number().positive(),
   height: z.number().positive(),
+  // 요소 회전(도). 논리 상자는 축 정렬 그대로 두고 얼굴·트랙·외부 카운터가
+  // 상자 중심 기준으로 돈다. 백엔드가 항상 직렬화하고 구형 문서·플러그인 입력은 0
+  rotation: elementRotationSchema.default(DEFAULT_ELEMENT_ROTATION),
   // 레이어 표시 여부 (false면 그리드/오버레이에서 렌더링하지 않음)
   hidden: z.boolean().optional().default(false),
   activeImage: z.string().optional().or(z.literal('')),

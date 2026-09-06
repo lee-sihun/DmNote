@@ -4,7 +4,8 @@ import { useDropdownRuntime, type DropdownOption } from './useDropdownRuntime';
 
 interface DropdownProps {
   options: DropdownOption[];
-  value: string;
+  /** 단일 모드 선택 값 (다중 모드에서는 미사용) */
+  value?: string;
   onChange: (value: string) => void;
   commitStrategy?: CommitStrategy;
   placeholder?: string;
@@ -19,13 +20,23 @@ interface DropdownProps {
   widthClass?: string;
   /** 아이콘 트리거의 접근 가능한 이름 - 아이콘만 있는 버튼은 용도·현재 값이 안 읽힌다 */
   ariaLabel?: string;
-  /** 트리거 크기 — sm: 24px 크롬(기본), lg: 30px 크롬(패널 페이지) */
+  /** 트리거 크기 - sm: 23px 크롬(기본), lg: 30px 크롬(패널 페이지) */
   size?: 'sm' | 'lg';
+  /** 다중 선택 모드: 항목 클릭이 메뉴를 닫지 않는 토글이 되고 onChange가 토글된 값을 받음 */
+  multiple?: boolean;
+  /** 다중 모드의 선택 값 목록, 체크 표시와 트리거 요약의 기준 */
+  values?: string[];
+  /** 현재 값이 충돌 상태 - 트리거 요약을 danger 톤으로 표시 */
+  danger?: boolean;
+  /** danger 상태에서 요약 대신 표시할 짧은 라벨 (긴 요약·번역 잘림 방지) */
+  dangerLabel?: string;
+  /** 트리거 툴팁 (충돌 사유 등) */
+  title?: string;
 }
 
 const Dropdown: React.FC<DropdownProps> = ({
   options,
-  value,
+  value = '',
   onChange,
   commitStrategy = 'sync',
   placeholder = '선택',
@@ -36,6 +47,11 @@ const Dropdown: React.FC<DropdownProps> = ({
   widthClass = '',
   size = 'sm',
   ariaLabel,
+  multiple = false,
+  values,
+  danger = false,
+  dangerLabel,
+  title,
 }) => {
   const {
     buttonRef,
@@ -44,8 +60,8 @@ const Dropdown: React.FC<DropdownProps> = ({
     menuId,
     open,
     ref,
-    selected,
     toggleOpen,
+    triggerText,
   } = useDropdownRuntime({
     options,
     value,
@@ -55,6 +71,8 @@ const Dropdown: React.FC<DropdownProps> = ({
     fullWidth,
     align,
     widthClass,
+    multiple,
+    values,
   });
   return (
     <div
@@ -85,6 +103,7 @@ const Dropdown: React.FC<DropdownProps> = ({
           aria-haspopup="listbox"
           aria-expanded={open}
           aria-controls={open ? menuId : undefined}
+          title={title}
           className={`flex box-border items-center justify-between ${
             size === 'lg'
               ? 'h-[30px] px-[10px] rounded-surface'
@@ -96,8 +115,12 @@ const Dropdown: React.FC<DropdownProps> = ({
           onKeyDown={handleTriggerKeyDown}
           disabled={disabled}
         >
-          <span className={`truncate ${!selected ? 'text-fg-muted' : ''}`}>
-            {selected ? selected.label : placeholder}
+          <span
+            className={`truncate ${
+              triggerText === null ? 'text-fg-muted' : ''
+            } ${danger ? 'text-danger-fg' : ''}`}
+          >
+            {danger && dangerLabel ? dangerLabel : triggerText ?? placeholder}
           </span>
           {/* viewBox 14를 8px로 렌더 - 스트로크 2.1이 화면상 1.2 */}
           <svg

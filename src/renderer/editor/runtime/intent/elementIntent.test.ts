@@ -15,6 +15,7 @@ import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import {
   applySealedSliceMutation,
   applyPropertyIntentsEagerly,
+  createNativePositionDragReceipt,
   intentPatch,
   runElementIntent,
 } from './elementIntent';
@@ -45,6 +46,44 @@ describe('elementIntent', () => {
         '4key': [{ id: ID_B, dx: 0, dy: 0, width: 10, height: 10, zIndex: 2 }],
       } as never,
     });
+  });
+
+  it.each([false, true])(
+    '드래그 receipt는 새 canonical 위치를 보존한다 (이후 이동=%s)',
+    (moveAgain) => {
+      const receipt = createNativePositionDragReceipt([
+        { type: 'key', id: ID_A },
+      ]);
+      const move = (dx: number) => {
+        const state = useKeyStore.getState();
+        state.setPositions({
+          '4key': [{ ...state.canonicalPositions['4key'][0], dx }],
+        });
+      };
+      receipt.apply(() => move(20));
+      const current = useKeyStore.getState().canonicalPositions['4key'][0];
+      useKeyStore
+        .getState()
+        .setPositions({ '4key': [{ ...current, dx: 100, width: 321 }] });
+      if (moveAgain) receipt.apply(() => move(120));
+      receipt.rollback();
+      expect(
+        useKeyStore.getState().canonicalPositions['4key'][0],
+      ).toMatchObject({ dx: 100, dy: 0, width: 321 });
+    },
+  );
+
+  it('드래그 receipt는 삭제된 대상을 되살리지 않는다', () => {
+    const receipt = createNativePositionDragReceipt([
+      { type: 'key', id: ID_A },
+    ]);
+    receipt.apply(() => {
+      const current = useKeyStore.getState().canonicalPositions['4key'][0];
+      useKeyStore.getState().setPositions({ '4key': [{ ...current, dx: 20 }] });
+    });
+    useKeyStore.getState().setPositions({ '4key': [] });
+    receipt.rollback();
+    expect(useKeyStore.getState().canonicalPositions['4key']).toEqual([]);
   });
 
   it('속성 receipt는 필드 단위로 복원한다', () => {

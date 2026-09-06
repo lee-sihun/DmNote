@@ -10,6 +10,7 @@ import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import {
@@ -114,6 +115,7 @@ export function useGridSelection({
     const currentStatPositions = useStatItemStore.getState().positions;
     const currentGraphPositions = useGraphItemStore.getState().positions;
     const currentKnobPositions = useKnobItemStore.getState().positions;
+    const currentSpritePositions = useSpriteStore.getState().positions;
     const frozen = frozenTargets ?? frozenGestureTargetsRef.current;
     frozenGestureTargetsRef.current = null;
     const currentSelection =
@@ -144,7 +146,7 @@ export function useGridSelection({
           element.type !== 'plugin',
       )
       .map((element) => ({
-        type: element.type as 'key' | 'stat' | 'graph' | 'knob',
+        type: element.type as 'key' | 'stat' | 'graph' | 'knob' | 'sprite',
         id: element.id,
       }));
     const allStableIds =
@@ -166,7 +168,7 @@ export function useGridSelection({
         // 이동 정산은 dx·dy만 동결 - width·height까지 실으면 병행 리사이즈를
         // 되돌린다. wire는 슬롯 generator가 최신 base에 id 의도를 재적용
         const geometryIntents: PropertyIntents = new Map(
-          (['key', 'stat', 'graph', 'knob'] as const).map((type) => [
+          (['key', 'stat', 'graph', 'knob', 'sprite'] as const).map((type) => [
             type,
             new Map(
               nativeTargets
@@ -180,7 +182,9 @@ export function useGridSelection({
                       ? currentStatPositions
                       : type === 'graph'
                       ? currentGraphPositions
-                      : currentKnobPositions;
+                      : type === 'knob'
+                      ? currentKnobPositions
+                      : currentSpritePositions;
                   const position = locator
                     ? (
                         record as Record<
@@ -213,7 +217,9 @@ export function useGridSelection({
                 ? 'statPositions'
                 : type === 'graph'
                 ? 'graphPositions'
-                : 'knobPositions';
+                : type === 'knob'
+                ? 'knobPositions'
+                : 'spritePositions';
             const collections = lastAck[field] as Record<
               string,
               Array<{ id: string } & Record<string, unknown>>
@@ -326,7 +332,7 @@ export function useGridSelection({
       usePluginDisplayElementStore.getState().elements;
 
     const selectedNativeIds = (
-      type: 'key' | 'stat' | 'graph' | 'knob',
+      type: 'key' | 'stat' | 'graph' | 'knob' | 'sprite',
     ): Set<string> =>
       new Set(
         selectedElements
@@ -391,6 +397,22 @@ export function useGridSelection({
             current,
             selectedKeyType,
             knobIds,
+            deltaX,
+            deltaY,
+          ),
+        );
+    }
+
+    const spriteIds = selectedNativeIds('sprite');
+    if (spriteIds.size > 0) {
+      const current = useSpriteStore.getState().positions;
+      useSpriteStore
+        .getState()
+        .setPositions(
+          moveSelectedNativePositions(
+            current,
+            selectedKeyType,
+            spriteIds,
             deltaX,
             deltaY,
           ),
@@ -469,13 +491,16 @@ export function useGridSelection({
         useGraphItemStore.getState().positions[selectedKeyType] || [],
       knobPositions:
         useKnobItemStore.getState().positions[selectedKeyType] || [],
+      spritePositions:
+        useSpriteStore.getState().positions[selectedKeyType] || [],
       pluginElements: usePluginDisplayElementStore.getState().elements,
       selectedGroupIds: selectionState.selectedGroupIds,
       layerGroups: layerGroupState.getGroupsForMode(selectedKeyType),
       collapsedGroupIds: layerGroupState.collapsedGroups,
     });
     if (snapshot.items.length > 0) {
-      setClipboard(snapshot.items, snapshot.groups);
+      // 복사 원본 탭 - 다른 탭에 붙일 때 스프라이트 트리거 재결합 판정에 쓴다
+      setClipboard(snapshot.items, snapshot.groups, selectedKeyType);
     }
   };
 

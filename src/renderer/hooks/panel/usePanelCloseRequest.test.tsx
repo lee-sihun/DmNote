@@ -22,9 +22,6 @@ vi.mock('@api/modules/window/panelWindowApi', () => ({
     },
   },
 }));
-vi.mock('@hooks/pendingOptimisticCommits', () => ({
-  drainPendingOptimisticCommits: vi.fn(),
-}));
 vi.mock('@src/renderer/editor/runtime/lifecycle/lifecycleEditorFlush', () => ({
   flushFocusedEditor: () => Promise.resolve(mocks.flushResult),
 }));

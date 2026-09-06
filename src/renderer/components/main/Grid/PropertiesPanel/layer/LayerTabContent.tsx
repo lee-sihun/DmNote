@@ -8,6 +8,7 @@ import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import {
   selectPropertyPanelPluginElements,
   usePluginDisplayElementStore,
@@ -30,6 +31,7 @@ import {
   PluginIcon,
   StatIcon,
   GraphIcon,
+  SpriteIcon,
 } from './LayerIcons';
 import { useLayerActions } from './useLayerActions';
 import { useLayerDnD } from './useLayerDnD';
@@ -148,6 +150,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
   const statPositions = useStatItemStore((state) => state.positions);
   const graphPositions = useGraphItemStore((state) => state.positions);
   const knobPositions = useKnobItemStore((state) => state.positions);
+  const spritePositions = useSpriteStore((state) => state.positions);
   const pluginElements = usePluginDisplayElementStore(
     selectPropertyPanelPluginElements,
   );
@@ -214,6 +217,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     statPositions,
     graphPositions,
     knobPositions,
+    spritePositions,
     pluginElements,
     layerGroupsForMode,
   });
@@ -289,6 +293,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       statPositions: useStatItemStore.getState().positions,
       graphPositions: useGraphItemStore.getState().positions,
       knobPositions: useKnobItemStore.getState().positions,
+      spritePositions: useSpriteStore.getState().positions,
       // 패널 창의 elements는 항상 비어 있으므로 창별 미러 셀렉터를 경유한다
       pluginElements: selectPropertyPanelPluginElements(
         usePluginDisplayElementStore.getState(),
@@ -646,6 +651,8 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                       <GraphIcon />
                     ) : item.type === 'knob' ? (
                       <KnobIcon />
+                    ) : item.type === 'sprite' ? (
+                      <SpriteIcon />
                     ) : (
                       <PluginIcon />
                     )}

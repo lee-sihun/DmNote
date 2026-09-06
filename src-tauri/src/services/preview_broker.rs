@@ -24,6 +24,7 @@ const KEY_POSITION_PATCH_FIELDS: &[&str] = &[
     "dy",
     "width",
     "height",
+    "rotation",
     "hidden",
     "activeImage",
     "inactiveImage",
@@ -89,6 +90,22 @@ const KEY_POSITION_PATCH_FIELDS: &[&str] = &[
     "fontStrikethrough",
 ];
 
+const SPRITE_POSITION_PATCH_FIELDS: &[&str] = &[
+    "dx",
+    "dy",
+    "width",
+    "height",
+    "rotation",
+    "pivot",
+    "idleTransform",
+    "poses",
+    "pressDurationMs",
+    "transitionMs",
+    "transitionEasing",
+    "baseImage",
+    "referenceNaturalSize",
+];
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum PreviewKind {
@@ -104,6 +121,7 @@ pub enum PreviewDomain {
     StatPosition,
     GraphPosition,
     KnobPosition,
+    SpritePosition,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -425,10 +443,14 @@ fn validate_publish_request(request: &PreviewPublishRequest) -> Result<(), Strin
             "preview target count exceeds {MAX_PREVIEW_TARGETS}"
         ));
     }
+    let allowed_fields = match request.domain {
+        PreviewDomain::SpritePosition => SPRITE_POSITION_PATCH_FIELDS,
+        _ => KEY_POSITION_PATCH_FIELDS,
+    };
     if let Some(field) = request
         .patch
         .keys()
-        .find(|field| !KEY_POSITION_PATCH_FIELDS.contains(&field.as_str()))
+        .find(|field| !allowed_fields.contains(&field.as_str()))
     {
         return Err(format!("preview patch field '{field}' is not allowed"));
     }

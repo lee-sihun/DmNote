@@ -7,9 +7,13 @@ import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import type { CanonicalKeyPosition } from '@src/types/editor';
+import type {
+  CanonicalKeyPosition,
+  CanonicalReactiveSpritePosition,
+} from '@src/types/editor';
 import type {
   PluginDefinitionInternal,
   PluginDisplayElementInternal,
@@ -127,6 +131,38 @@ const STABLE_KEY_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const STABLE_STAT_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const STABLE_GRAPH_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const STABLE_KNOB_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+const STABLE_SPRITE_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+const spriteAt = (id: string): CanonicalReactiveSpritePosition => ({
+  activation: 'whileHeld',
+  pressDurationMs: 300,
+  id,
+  dx: 15,
+  dy: 25,
+  width: 200,
+  height: 120,
+  hidden: false,
+  zIndex: null,
+  layerName: null,
+  groupId: null,
+  className: null,
+  useInlineStyles: null,
+  rotation: 0,
+  baseImage: null,
+  pivot: { x: 0.5, y: 0.5 },
+  idleTransform: { x: 0, y: 0, rotation: 0, scale: 1 },
+  poses: [
+    {
+      imageOverrideMetrics: null,
+      poseId: 'pose-1',
+      triggers: [STABLE_KEY_ID],
+      transform: { x: 12, y: -6, rotation: 15, scale: 1.2 },
+      imageOverride: null,
+    },
+  ],
+  transitionMs: 90,
+  transitionEasing: 'linear',
+  referenceNaturalSize: null,
+});
 const keyPosition = {
   id: STABLE_KEY_ID,
   dx: 10,
@@ -203,6 +239,7 @@ describe('useGridSelection compound history gesture', () => {
     useStatItemStore.setState({ positions: {} });
     useGraphItemStore.setState({ positions: {} });
     useKnobItemStore.setState({ positions: {} });
+    useSpriteStore.setState({ positions: {} });
     useLayerGroupStore.setState({ layerGroups: {} });
     usePluginDisplayElementStore.setState({
       elements: [pluginElement()],
@@ -389,6 +426,293 @@ describe('useGridSelection compound history gesture', () => {
     expect(useGridSelectionStore.getState().clipboard).toEqual([
       { type: 'key', keyCode: '', position: keyPosition },
     ]);
+  });
+
+  it('키와 함께 붙여넣은 스프라이트 트리거는 재결합 뒤에도 정렬을 유지한다', async () => {
+    const external = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const original = spriteAt(STABLE_SPRITE_ID);
+    original.poses[0].triggers = [STABLE_KEY_ID, external];
+    // 재발급 id를 전부 외부 참조보다 사전순 뒤로 고정 - 치환이 정렬을 깨게 강제
+    let issued = 0;
+    const uuidSpy = vi
+      .spyOn(globalThis.crypto, 'randomUUID')
+      .mockImplementation(() => {
+        issued += 1;
+        return `ffffffff-ffff-4fff-8fff-${String(999 - issued).padStart(
+          12,
+          '0',
+        )}` as `${string}-${string}-${string}-${string}-${string}`;
+      });
+    try {
+      act(() => {
+        useSpriteStore.setState({ positions: { '4key': [original] } });
+        useGridSelectionStore.getState().setSelectedElements([
+          { type: 'key', id: STABLE_KEY_ID, index: 0 },
+          { type: 'sprite', id: STABLE_SPRITE_ID, index: 0 },
+        ]);
+      });
+
+      act(() => api.copySelectedElements());
+      await act(async () => api.pasteElements());
+
+      const sprites = useSpriteStore.getState().positions['4key'];
+      const pasted = sprites.find(
+        (position) => position.id !== STABLE_SPRITE_ID,
+      )!;
+      const triggers = pasted.poses[0].triggers;
+      // 배치 안 키는 새 id로 재결합, 배치 밖 참조는 유지
+      expect(triggers).toContain(external);
+      expect(triggers).not.toContain(STABLE_KEY_ID);
+      // 치환된 id가 사전순 뒤로 가도 wire 정규형(정렬)이 유지되어야 한다
+      expect([...triggers].sort()).toEqual(triggers);
+    } finally {
+      uuidSpy.mockRestore();
+    }
+  });
+
+  it('sprite 복사-붙여넣기 왕복은 poseId만 재발급하고 나머지 로컬 데이터를 유지한다', async () => {
+    const original = spriteAt(STABLE_SPRITE_ID);
+    act(() => {
+      useSpriteStore.setState({ positions: { '4key': [original] } });
+      useGridSelectionStore
+        .getState()
+        .setSelectedElements([
+          { type: 'sprite', id: STABLE_SPRITE_ID, index: 0 },
+        ]);
+    });
+
+    act(() => api.copySelectedElements());
+    expect(useGridSelectionStore.getState().clipboard).toEqual([
+      {
+        type: 'sprite',
+        position: original,
+        // 다른 탭 붙여넣기에서 같은 키로 다시 결합하기 위한 동결분
+        triggerCanonicals: { [STABLE_KEY_ID]: 'KeyA' },
+      },
+    ]);
+
+    await act(async () => api.pasteElements());
+
+    // eager: 사본은 새 id로 추가되고 dx·dy만 PASTE_OFFSET만큼 어긋난다
+    const sprites = useSpriteStore.getState().positions['4key'];
+    expect(sprites).toHaveLength(2);
+    const pasted = sprites.find(
+      (position) => position.id !== STABLE_SPRITE_ID,
+    )!;
+    expect(pasted.dx).toBe(original.dx + PASTE_OFFSET);
+    expect(pasted.dy).toBe(original.dy + PASTE_OFFSET);
+    expect(pasted.width).toBe(original.width);
+    expect(pasted.height).toBe(original.height);
+    expect(pasted.pivot).toEqual(original.pivot);
+    // 사본 poseId는 재발급 - 원본과 공유하면 백엔드 커밋이 중복으로 거부.
+    // 트리거·변환·이미지는 원본과 동일
+    expect(pasted.poses).toHaveLength(original.poses.length);
+    expect(pasted.poses[0].poseId).not.toBe(original.poses[0].poseId);
+    expect(pasted.poses[0]).toEqual({
+      ...original.poses[0],
+      poseId: pasted.poses[0].poseId,
+    });
+
+    // wire: 동결 payload가 sprite full payload로 batch op에 실린다
+    const options = (
+      mocks.runMixedGestureIntent.mock.calls[0] as unknown[]
+    )[0] as {
+      generate: (context: { base: unknown; pluginProjection: unknown[] }) => {
+        ops?: Array<{
+          elements: Array<{
+            elementType: string;
+            position: Record<string, unknown>;
+          }>;
+        }>;
+      };
+    };
+    const result = options.generate({
+      base: {
+        schemaVersion: 1,
+        keys: { '4key': [] },
+        keyPositions: { '4key': [] },
+        statPositions: {},
+        graphPositions: {},
+        knobPositions: {},
+        spritePositions: { '4key': [] },
+        layerGroups: {},
+      },
+      pluginProjection: [],
+    });
+    const spriteElement = result.ops![0].elements.find(
+      (element) => element.elementType === 'sprite',
+    )!;
+    expect(spriteElement.position.id).toBe(pasted.id);
+    expect(spriteElement.position.dx).toBe(original.dx + PASTE_OFFSET);
+    // wire payload도 eager 사본과 같은 재발급 poseId를 싣는다
+    expect(spriteElement.position.poses).toEqual(pasted.poses);
+  });
+
+  it('키와 함께 붙여넣은 sprite 트리거는 사본 키의 새 id로 재결합된다', async () => {
+    let serial = 0;
+    randomUUID.mockImplementation(
+      () => `80000000-0000-4000-8000-${String(++serial).padStart(12, '0')}`,
+    );
+    const externalKeyId = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+    const original: CanonicalReactiveSpritePosition = {
+      ...spriteAt(STABLE_SPRITE_ID),
+      poses: [
+        {
+          imageOverrideMetrics: null,
+          poseId: 'pose-1',
+          // 배치 안 키와 배치 밖 키 참조 혼합
+          triggers: [STABLE_KEY_ID, externalKeyId],
+          transform: { x: 12, y: -6, rotation: 15, scale: 1.2 },
+          imageOverride: null,
+        },
+      ],
+    };
+    act(() => {
+      useSpriteStore.setState({ positions: { '4key': [original] } });
+      useGridSelectionStore.getState().setSelectedElements([
+        { type: 'key', id: STABLE_KEY_ID, index: 0 },
+        { type: 'sprite', id: STABLE_SPRITE_ID, index: 0 },
+      ]);
+    });
+
+    act(() => api.copySelectedElements());
+    await act(async () => api.pasteElements());
+
+    const pastedKey = useKeyStore
+      .getState()
+      .canonicalPositions['4key'].find(
+        (position) => position.id !== STABLE_KEY_ID,
+      )!;
+    const pastedSprite = useSpriteStore
+      .getState()
+      .positions['4key'].find((position) => position.id !== STABLE_SPRITE_ID)!;
+    // 같은 배치의 키는 사본 id로 재결합, 배치 밖 키 참조는 보존
+    expect(pastedSprite.poses[0].triggers).toEqual([
+      pastedKey.id,
+      externalKeyId,
+    ]);
+    // 원본 sprite의 트리거는 그대로
+    expect(
+      useSpriteStore.getState().positions['4key'][0].poses[0].triggers,
+    ).toEqual([STABLE_KEY_ID, externalKeyId]);
+  });
+
+  it('sprite 단독 붙여넣기는 배치 밖 키를 가리키는 트리거를 유지한다', async () => {
+    const original = spriteAt(STABLE_SPRITE_ID);
+    act(() => {
+      useSpriteStore.setState({ positions: { '4key': [original] } });
+      useGridSelectionStore
+        .getState()
+        .setSelectedElements([
+          { type: 'sprite', id: STABLE_SPRITE_ID, index: 0 },
+        ]);
+    });
+
+    act(() => api.copySelectedElements());
+    await act(async () => api.pasteElements());
+
+    const pastedSprite = useSpriteStore
+      .getState()
+      .positions['4key'].find((position) => position.id !== STABLE_SPRITE_ID)!;
+    // 담당 키가 배치에 없으므로 원본 키 참조 유지
+    expect(pastedSprite.poses[0].triggers).toEqual([STABLE_KEY_ID]);
+  });
+
+  // 요소 id는 문서 전역 유일이라 다른 탭 키를 가리키는 트리거는 절대 해석되지
+  // 않는다. 자세를 지우면 변환·이미지까지 잃으므로 같은 키로 다시 결합한다
+  it('다른 탭에서 복사한 sprite는 같은 키에 다시 결합한다', async () => {
+    const targetKeyId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    act(() => {
+      // 대상 탭의 KeyA는 다른 요소 id를 갖는다 (id는 문서 전역 유일)
+      useKeyStore.setState({
+        keyMappings: { '4key': ['KeyA'] },
+        positions: { '4key': [{ ...keyPosition, id: targetKeyId }] },
+        canonicalPositions: { '4key': [{ ...keyPosition, id: targetKeyId }] },
+      });
+      useSpriteStore.setState({ positions: { '4key': [] } });
+      useGridSelectionStore.getState().setClipboard(
+        [
+          {
+            type: 'sprite',
+            position: spriteAt(STABLE_SPRITE_ID),
+            // 원본 탭에서 이 트리거는 KeyA에 물려 있었다
+            triggerCanonicals: { [STABLE_KEY_ID]: 'KeyA' },
+          },
+        ],
+        [],
+        '7key',
+      );
+    });
+
+    await act(async () => api.pasteElements());
+
+    const pasted = useSpriteStore.getState().positions['4key'][0];
+    // 원본 탭 키 id가 아니라 대상 탭의 같은 키로 옮겨 붙는다
+    expect(pasted.poses).toHaveLength(1);
+    expect(pasted.poses[0].triggers).toEqual([targetKeyId]);
+    expect(pasted.poses[0].transform).toEqual(
+      spriteAt(STABLE_SPRITE_ID).poses[0].transform,
+    );
+  });
+
+  // 대상 탭에 같은 키가 없으면 원본 참조를 남긴다 - 패널이 "삭제된 키"로 보여주고
+  // 사용자가 직접 고른다. 지우면 변환·이미지가 조용히 사라진다
+  it('대상 탭에 같은 키가 없으면 자세를 지우지 않고 참조를 남긴다', async () => {
+    act(() => {
+      useKeyStore.setState({
+        keyMappings: { '4key': ['KeyZ'] },
+        positions: { '4key': [keyPosition] },
+        canonicalPositions: { '4key': [keyPosition] },
+      });
+      useSpriteStore.setState({ positions: { '4key': [] } });
+      useGridSelectionStore.getState().setClipboard(
+        [
+          {
+            type: 'sprite',
+            position: spriteAt(STABLE_SPRITE_ID),
+            triggerCanonicals: { [STABLE_KEY_ID]: 'KeyA' },
+          },
+        ],
+        [],
+        '7key',
+      );
+    });
+
+    await act(async () => api.pasteElements());
+
+    const pasted = useSpriteStore.getState().positions['4key'][0];
+    expect(pasted.poses).toHaveLength(1);
+    expect(pasted.poses[0].triggers).toEqual([STABLE_KEY_ID]);
+  });
+
+  // 담당 키를 함께 복사했으면 사본 키로 재결합되므로 자세가 살아남는다
+  it('다른 탭 붙여넣기도 함께 복사한 키의 자세는 살린다', async () => {
+    let serial = 0;
+    randomUUID.mockImplementation(
+      () => `80000000-0000-4000-8000-${String(++serial).padStart(12, '0')}`,
+    );
+    act(() => {
+      useSpriteStore.setState({ positions: { '4key': [] } });
+      useGridSelectionStore.getState().setClipboard(
+        [
+          { type: 'key', keyCode: 'KeyA', position: keyPosition },
+          { type: 'sprite', position: spriteAt(STABLE_SPRITE_ID) },
+        ],
+        [],
+        '7key',
+      );
+    });
+
+    await act(async () => api.pasteElements());
+
+    const pastedKey = useKeyStore
+      .getState()
+      .canonicalPositions['4key'].find(
+        (position) => position.id !== STABLE_KEY_ID,
+      )!;
+    const pasted = useSpriteStore.getState().positions['4key'][0];
+    expect(pasted.poses).toHaveLength(1);
+    expect(pasted.poses[0].triggers).toEqual([pastedKey.id]);
   });
 
   it('혼합 붙여넣기는 editor와 plugin에 같은 gestureId를 전달한다', async () => {
@@ -835,6 +1159,7 @@ describe('useGridSelection compound history gesture', () => {
       statPositions: {},
       graphPositions: {},
       knobPositions: {},
+      spritePositions: {},
       layerGroups: {},
     };
     const [existing, pasted] = usePluginDisplayElementStore.getState().elements;
@@ -1098,6 +1423,7 @@ describe('useGridSelection compound history gesture', () => {
     statPositions: {},
     graphPositions: {},
     knobPositions: {},
+    spritePositions: {},
     layerGroups: {},
   });
 
@@ -1415,6 +1741,7 @@ describe('useGridSelection compound history gesture', () => {
       statPositions: {},
       graphPositions: {},
       knobPositions: {},
+      spritePositions: {},
       layerGroups: {},
     };
     const result = options.generate({ base: emptyBase, pluginProjection: [] });
@@ -1501,6 +1828,7 @@ describe('useGridSelection compound history gesture', () => {
         statPositions: { '4key': [] },
         graphPositions: { '4key': [] },
         knobPositions: { '4key': [] },
+        spritePositions: { '4key': [] },
         layerGroups: {},
       },
       pluginProjection: [],
@@ -1558,6 +1886,7 @@ describe('useGridSelection compound history gesture', () => {
       statPositions: {},
       graphPositions: {},
       knobPositions: {},
+      spritePositions: {},
       layerGroups: {},
     };
     expect(() =>
@@ -1601,6 +1930,7 @@ describe('useGridSelection compound history gesture', () => {
       statPositions: {},
       graphPositions: {},
       knobPositions: {},
+      spritePositions: {},
       layerGroups: {},
     };
     const frozenGroup = groupedOptions.generate({
@@ -1686,6 +2016,7 @@ describe('useGridSelection compound history gesture', () => {
         statPositions: {},
         graphPositions: {},
         knobPositions: {},
+        spritePositions: {},
         layerGroups: {},
       },
       pluginProjection: [],
@@ -1737,6 +2068,7 @@ describe('useGridSelection compound history gesture', () => {
         statPositions: {},
         graphPositions: {},
         knobPositions: {},
+        spritePositions: {},
         layerGroups: {},
       },
       pluginProjection: [],
@@ -1793,6 +2125,7 @@ describe('useGridSelection compound history gesture', () => {
           statPositions: {},
           graphPositions: {},
           knobPositions: {},
+          spritePositions: {},
           layerGroups: {},
         },
         pluginProjection: [],
@@ -1889,6 +2222,7 @@ describe('useGridSelection compound history gesture', () => {
       statPositions: {},
       graphPositions: {},
       knobPositions: {},
+      spritePositions: {},
       layerGroups: { '4key': [{ id: 'g1', name: 'g1' }] },
     };
     const result = options.generate({ base, pluginProjection: [] });

@@ -47,12 +47,31 @@ const rect = (x: number, y: number, width: number, height: number) =>
     toJSON: () => undefined,
   } as DOMRect);
 
-const Probe = ({ typography }: { typography: string }) => {
+const Probe = ({
+  typography,
+  rotation = 0,
+}: {
+  typography: string;
+  rotation?: number;
+}) => {
   const spanRef = useRef<HTMLSpanElement | null>(null);
   useCounterGlyphPaint(spanRef, true, 42, typography);
-  useCounterAxisAnchor(session, spanRef, 42);
+  useCounterAxisAnchor(
+    session,
+    spanRef,
+    42,
+    undefined,
+    'counterFill',
+    undefined,
+    rotation,
+  );
   return (
-    <span ref={spanRef} className="counter" data-text="42">
+    <span
+      ref={spanRef}
+      className="counter"
+      data-text="42"
+      style={{ width: 40, height: 20, boxSizing: 'border-box' }}
+    >
       42
     </span>
   );
@@ -129,6 +148,25 @@ describe('카운터 글리프 재측정과 축 앵커 동기화', () => {
       sessionKey: session.sessionKey,
       bounds: { x: 100, y: 200, width: 40, height: 20 },
       origin: null,
+    });
+  });
+
+  it('회전된 카운터의 로컬 잉크 박스를 회전 중심에 맞춰 등록한다', () => {
+    HTMLElement.prototype.getBoundingClientRect = function () {
+      if (this.hasAttribute('data-dmn-grid-space')) return rect(0, 0, 800, 600);
+      if (this.classList.contains('counter')) return rect(110, 190, 20, 40);
+      return rect(0, 0, 0, 0);
+    };
+    measureMock.mockReturnValue({ x: 2, y: 3, width: 30, height: 12 });
+    act(() =>
+      root.render(<Probe typography="16|font|400|false" rotation={90} />),
+    );
+    expect(useGradientEditStore.getState().anchorBounds?.bounds).toEqual({
+      x: 106,
+      y: 201,
+      width: 30,
+      height: 12,
+      rotation: 90,
     });
   });
 });

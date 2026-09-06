@@ -252,12 +252,13 @@ fn bridge_messages_targeting_main_are_not_forwarded_to_obs() {
 
 #[test]
 fn public_overlay_events_are_forwarded_to_obs_clients() {
-    assert_eq!(FORWARDED_EVENTS.len(), 32);
+    assert_eq!(FORWARDED_EVENTS.len(), 33);
     for event in [
         "customTabs:changed",
         "overlay:resized",
         "counterAnimation:changed",
         "preset:snapshot",
+        "spritePositions:changed",
     ] {
         assert!(FORWARDED_EVENTS.contains(&event), "missing event: {event}");
     }

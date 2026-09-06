@@ -8,7 +8,7 @@ import {
   ColorInput,
   TextInput,
   PropertySection,
-} from '../../controls/PropertyInputs';
+} from '../../index';
 import Checkbox from '@components/main/common/checkbox/Checkbox';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
@@ -30,7 +30,10 @@ import {
 } from '@hooks/pickers/useBatchElementBinding';
 import BatchGeometrySection from '../geometry/BatchGeometrySection';
 import { editGestureController } from '@src/renderer/editor/runtime/gesture/editGestureController';
-import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
+import {
+  ACTION_BUTTON_CHROME_CLASS,
+  AXIS_FIELD_WIDTH,
+} from '@utils/cardRecipes';
 import type {
   EditorPaintPropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
@@ -43,6 +46,7 @@ import BatchShadowSection from './BatchShadowSection';
 import BatchTypographySection, {
   type BatchTypographyKeyData,
 } from './BatchTypographySection';
+import SelectionRotationInput from '../geometry/SelectionRotationInput';
 
 export { BATCH_STYLE_SOUND_PAGE_KEY } from './BatchSoundSection';
 
@@ -76,6 +80,12 @@ interface BatchStyleTabContentProps {
   afterSizeContent?: React.ReactNode;
   // getMixedValue 함수
   getMixedValue: <T>(
+    getter: (pos: KeyPosition) => T | undefined,
+    defaultValue: T,
+  ) => { isMixed: boolean; value: T };
+  // 크기 전용 - 스타일 필드와 조절 대상이 다르다 (스프라이트는 스타일이 없지만
+  // 크기는 조절된다). 표시와 조절이 갈리면 대표값에 가린 채 덮인다
+  getMixedValueSize: <T>(
     getter: (pos: KeyPosition) => T | undefined,
     defaultValue: T,
   ) => { isMixed: boolean; value: T };
@@ -148,6 +158,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   imageSuppressesDefaultBorder = true,
   afterSizeContent,
   getMixedValue,
+  getMixedValueSize,
   getSelectedKeysData,
   handleBatchAlign,
   handleBatchDistribute,
@@ -261,7 +272,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
         {/* 크기 */}
         <PropertyRow label={t('propertiesPanel.size') || '크기'}>
           <NumberInput
-            value={getMixedValue((pos) => pos.width, 60).value}
+            value={getMixedValueSize((pos) => pos.width, 60).value}
             onChange={(value) => handleBatchResize('width', value)}
             onPreview={(value) => handleBatchResizePreview('width', value)}
             onCancel={() => editGestureController.cancel()}
@@ -271,10 +282,10 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             max={9999}
             allowDecimal
             decimalScale={1}
-            isMixed={getMixedValue((pos) => pos.width, 60).isMixed}
+            isMixed={getMixedValueSize((pos) => pos.width, 60).isMixed}
           />
           <NumberInput
-            value={getMixedValue((pos) => pos.height, 60).value}
+            value={getMixedValueSize((pos) => pos.height, 60).value}
             onChange={(value) => handleBatchResize('height', value)}
             onPreview={(value) => handleBatchResizePreview('height', value)}
             onCancel={() => editGestureController.cancel()}
@@ -284,9 +295,13 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             max={9999}
             allowDecimal
             decimalScale={1}
-            isMixed={getMixedValue((pos) => pos.height, 60).isMixed}
+            isMixed={getMixedValueSize((pos) => pos.height, 60).isMixed}
           />
         </PropertyRow>
+
+        <SelectionRotationInput
+          label={t('propertiesPanel.rotation') || '회전'}
+        />
       </PropertySection>
 
       {afterSizeContent ? (
@@ -551,7 +566,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
           <button
             ref={batchImageButtonRef}
             type="button"
-            className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
+            className={`${ACTION_BUTTON_CHROME_CLASS} ${
               showBatchImagePicker ? 'shadow-focus-ring' : ''
             } text-fg text-body`}
             onClick={onToggleBatchImagePicker}

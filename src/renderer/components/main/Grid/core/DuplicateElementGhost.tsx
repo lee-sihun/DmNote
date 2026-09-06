@@ -19,10 +19,14 @@ import {
   elementShadowToCss,
   resolveElementShadow,
 } from '@src/types/key/shadows';
+import type { ReactiveSpritePosition } from '@src/types/key/sprites';
+import DuplicateGhostHost from '../layers/DuplicateGhostHost';
+import SpriteDuplicateGhost from '../layers/SpriteDuplicateGhost';
 
 interface DuplicateElementGhostProps {
   duplicate: DuplicateState | null;
   cursor: { x: number; y: number } | null;
+  zoom: number;
 }
 
 const GhostBorderRing = ({ suppressDefault }: { suppressDefault: boolean }) => {
@@ -43,50 +47,57 @@ const GhostBorderRing = ({ suppressDefault }: { suppressDefault: boolean }) => {
 const DuplicateElementGhost = ({
   duplicate,
   cursor,
+  zoom,
 }: DuplicateElementGhostProps) => {
   if (!duplicate || !cursor) return null;
 
-  if (duplicate.elementType === 'graph') {
-    const width = duplicate.position?.width || 200;
-    const height = duplicate.position?.height || 100;
-    const offsetX = cursor.x - width / 2;
-    const offsetY = cursor.y - height / 2;
+  if (duplicate.elementType === 'sprite') {
     return (
-      <div
-        className="absolute pointer-events-none select-none"
-        style={{
-          width: `${width}px`,
-          height: `${height}px`,
-          transform: `translate3d(${offsetX}px, ${offsetY}px, 0)`,
+      <SpriteDuplicateGhost
+        position={duplicate.position as ReactiveSpritePosition}
+        cursor={cursor}
+        zoom={zoom}
+      />
+    );
+  }
+
+  if (duplicate.elementType === 'graph') {
+    return (
+      <DuplicateGhostHost
+        width={duplicate.position?.width || 200}
+        height={duplicate.position?.height || 100}
+        cursor={cursor}
+        rotation={duplicate.position?.rotation ?? 0}
+        surfaceStyle={{
           background: DEFAULT_ELEMENT_BG,
           border: 'none',
           borderRadius: `${DEFAULT_ELEMENT_RADIUS}px`,
           overflow: 'hidden',
-          opacity: 0.5,
-          zIndex: 'var(--z-canvas-drag-preview)',
         }}
       >
         <GhostBorderRing suppressDefault={false} />
-      </div>
+      </DuplicateGhostHost>
     );
   }
 
+  // sprite는 위에서 분기 완료 - 남은 타입은 키형 공통 필드를 공유한다
   const {
-    position: {
-      width = 60,
-      height = 60,
-      inactiveImage,
-      activeImage,
-      imageFit,
-      idleImageFit,
-      imageMode,
-      idleImageTransform,
-      className,
-      shadow,
-      activeShadow,
-    },
-    keyName,
-  } = duplicate;
+    width = 60,
+    height = 60,
+    inactiveImage,
+    activeImage,
+    imageFit,
+    idleImageFit,
+    imageMode,
+    idleImageTransform,
+    className,
+    shadow,
+    activeShadow,
+  } = duplicate.position as Exclude<
+    DuplicateState['position'],
+    ReactiveSpritePosition
+  >;
+  const { keyName } = duplicate;
   const previewImage =
     resolveImageSource(inactiveImage) || resolveImageSource(activeImage) || '';
   const ghostImageReplaces =
@@ -104,23 +115,20 @@ const DuplicateElementGhost = ({
       suppressDefault: ghostImageReplaces,
     }),
   );
-  const offsetX = cursor.x - width / 2;
-  const offsetY = cursor.y - height / 2;
 
   return (
-    <div
-      className={`absolute pointer-events-none select-none ${className || ''}`}
-      style={{
-        width: `${width}px`,
-        height: `${height}px`,
-        transform: `translate3d(${offsetX}px, ${offsetY}px, 0)`,
+    <DuplicateGhostHost
+      width={width}
+      height={height}
+      cursor={cursor}
+      rotation={duplicate.position?.rotation ?? 0}
+      className={className}
+      surfaceStyle={{
         backgroundColor,
         borderRadius: `${DEFAULT_ELEMENT_RADIUS}px`,
         border: 'none',
         boxShadow: previewShadow,
         overflow: ghostImageReplaces ? 'hidden' : 'visible',
-        opacity: 0.5,
-        zIndex: 'var(--z-canvas-drag-preview)',
       }}
     >
       <GhostBorderRing suppressDefault={ghostImageReplaces} />
@@ -155,7 +163,7 @@ const DuplicateElementGhost = ({
           {keyName || ''}
         </div>
       )}
-    </div>
+    </DuplicateGhostHost>
   );
 };
 

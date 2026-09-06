@@ -55,7 +55,7 @@ export const registerPluginInstancesReapplier = (
   };
 };
 
-const cancelPendingPluginInstanceSaves = (pluginId: string): void => {
+export const cancelPendingPluginInstanceSaves = (pluginId: string): void => {
   reappliers.get(pluginId)?.forEach((handlers) => {
     handlers.cancelPendingSave();
   });

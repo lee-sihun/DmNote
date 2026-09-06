@@ -5,6 +5,7 @@ import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
@@ -71,14 +72,21 @@ vi.mock(
           await meta?.prepare?.();
           // 그룹 멤버를 base에서 재파생하는 generator를 위해 현재 스토어로
           // canonical base를 구성한다 (기존 setElementGroups 경로는 base 미사용)
-          const [keyStore, statStore, graphStore, knobStore, groupStore] =
-            await Promise.all([
-              import('@stores/data/useKeyStore'),
-              import('@stores/data/useStatItemStore'),
-              import('@stores/data/useGraphItemStore'),
-              import('@stores/data/useKnobItemStore'),
-              import('@stores/data/useLayerGroupStore'),
-            ]);
+          const [
+            keyStore,
+            statStore,
+            graphStore,
+            knobStore,
+            spriteStore,
+            groupStore,
+          ] = await Promise.all([
+            import('@stores/data/useKeyStore'),
+            import('@stores/data/useStatItemStore'),
+            import('@stores/data/useGraphItemStore'),
+            import('@stores/data/useKnobItemStore'),
+            import('@stores/data/useSpriteStore'),
+            import('@stores/data/useLayerGroupStore'),
+          ]);
           const base = {
             schemaVersion: 1,
             keys: keyStore.useKeyStore.getState().keyMappings,
@@ -86,6 +94,7 @@ vi.mock(
             statPositions: statStore.useStatItemStore.getState().positions,
             graphPositions: graphStore.useGraphItemStore.getState().positions,
             knobPositions: knobStore.useKnobItemStore.getState().positions,
+            spritePositions: spriteStore.useSpriteStore.getState().positions,
             layerGroups: groupStore.useLayerGroupStore.getState().layerGroups,
           };
           const mutation =
@@ -121,6 +130,7 @@ vi.mock(
       statPositions: {},
       graphPositions: {},
       knobPositions: {},
+      spritePositions: {},
       layerGroups: {},
     }),
   }),
@@ -228,6 +238,7 @@ const seedStores = () => {
   useStatItemStore.setState({ positions: {} });
   useGraphItemStore.setState({ positions: {} });
   useKnobItemStore.setState({ positions: {} });
+  useSpriteStore.setState({ positions: {} });
   useLayerGroupStore.setState({ layerGroups: {} });
   usePluginDisplayElementStore.setState({ elements: [pluginElement()] });
 };
@@ -439,6 +450,7 @@ describe('setMixedLayerGroupHidden', () => {
     useStatItemStore.setState({ positions: {} });
     useGraphItemStore.setState({ positions: {} });
     useKnobItemStore.setState({ positions: {} });
+    useSpriteStore.setState({ positions: {} });
     useLayerGroupStore.setState({
       layerGroups: { '4key': [{ id: GROUP_ID, name: 'Group 1' }] },
     });
@@ -495,6 +507,80 @@ describe('setMixedLayerGroupHidden', () => {
     expect(useKeyStore.getState().canonicalPositions['4key'][0].hidden).toBe(
       true,
     );
+    expect(usePluginDisplayElementStore.getState().elements[0].hidden).toBe(
+      true,
+    );
+    expect(mocks.setLayerGroupHidden).not.toHaveBeenCalled();
+  });
+
+  it('sprite+plugin 그룹 토글은 sprite를 patchElement 목록에 싣고 스토어에도 숨긴다', async () => {
+    const SPRITE_ID = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+    useSpriteStore.setState({
+      positions: {
+        '4key': [
+          {
+            activation: 'whileHeld',
+            pressDurationMs: 300,
+            id: SPRITE_ID,
+            dx: 0,
+            dy: 0,
+            width: 200,
+            height: 120,
+            rotation: 0,
+            hidden: false,
+            zIndex: null,
+            layerName: null,
+            groupId: GROUP_ID,
+            className: null,
+            useInlineStyles: null,
+            baseImage: null,
+            pivot: { x: 0.5, y: 0.5 },
+            idleTransform: { x: 0, y: 0, rotation: 0, scale: 1 },
+            poses: [],
+            transitionMs: 90,
+            transitionEasing: 'linear',
+            referenceNaturalSize: null,
+          },
+        ],
+      },
+    });
+    useLayerGroupStore.setState({
+      layerGroups: { '4key': [{ id: GROUP_ID, name: 'Group 1' }] },
+    });
+    usePluginDisplayElementStore.setState({
+      elements: [pluginElement({ groupId: GROUP_ID })],
+    });
+
+    await expect(
+      setMixedLayerGroupHidden('4key', GROUP_ID, true),
+    ).resolves.toBe(true);
+
+    expect(mocks.gestureCommit).toHaveBeenCalledTimes(1);
+    const request = mocks.gestureCommit.mock.calls[0]?.[0] as unknown as {
+      editorOps: unknown[];
+      pluginChanges: Array<{
+        pluginId: string;
+        instances: Array<{ instanceId?: string; hidden?: boolean }>;
+      }>;
+    };
+    expect(request.editorOps).toEqual([
+      {
+        kind: 'patchElement',
+        elementType: 'sprite',
+        id: SPRITE_ID,
+        patch: { property: 'hidden', value: true },
+      },
+    ]);
+    expect(request.pluginChanges).toEqual([
+      {
+        pluginId: 'plugin-a',
+        instances: [
+          expect.objectContaining({ instanceId: INSTANCE_ID, hidden: true }),
+        ],
+      },
+    ]);
+    // eager: sprite 스토어에도 즉시 숨김 반영
+    expect(useSpriteStore.getState().positions['4key'][0].hidden).toBe(true);
     expect(usePluginDisplayElementStore.getState().elements[0].hidden).toBe(
       true,
     );

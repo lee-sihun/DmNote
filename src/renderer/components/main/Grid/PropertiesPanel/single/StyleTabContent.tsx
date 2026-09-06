@@ -200,6 +200,16 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         onLocalHeightChange={onLocalHeightChange}
         onGeometryPreview={onGeometryPreview}
         onGeometryCommit={onGeometryCommit}
+        onRotationPreview={
+          onStylePropertyPreview
+            ? (value) => onStylePropertyPreview({ property: 'rotation', value })
+            : undefined
+        }
+        onRotationCommit={
+          onStylePropertyCommit
+            ? (value) => onStylePropertyCommit({ property: 'rotation', value })
+            : undefined
+        }
         t={t}
       />
 

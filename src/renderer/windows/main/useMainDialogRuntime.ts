@@ -60,7 +60,7 @@ export interface MainDialogRuntime {
   ) => void;
   showConfirm: (
     message: string,
-    onConfirm: () => void,
+    onConfirm: () => void | Promise<void>,
     options?: {
       onCancel?: () => void;
       confirmText?: string;
@@ -68,7 +68,7 @@ export interface MainDialogRuntime {
       danger?: boolean;
     },
   ) => void;
-  handleAlertConfirm: () => void;
+  handleAlertConfirm: () => Promise<void>;
   handleAlertCancel: () => void;
   showCustomDialog: (
     html: string,
@@ -87,7 +87,7 @@ export interface MainDialogRuntime {
   closeColorPicker: () => void;
   handleGlobalColorChange: (newColor: string) => void;
   handleGlobalColorChangeComplete: (newColor: string) => void;
-  confirmCallbackRef: React.RefObject<(() => void) | null>;
+  confirmCallbackRef: React.RefObject<(() => void | Promise<void>) | null>;
   cancelCallbackRef: React.RefObject<(() => void) | null>;
   customDialogCallbackRef: React.RefObject<CustomDialogCallbacks>;
 }
@@ -95,7 +95,7 @@ export interface MainDialogRuntime {
 export const useMainDialogRuntime = ({
   t,
 }: UseMainDialogRuntimeOptions): MainDialogRuntime => {
-  const confirmCallbackRef = useRef<(() => void) | null>(null);
+  const confirmCallbackRef = useRef<(() => void | Promise<void>) | null>(null);
   const cancelCallbackRef = useRef<(() => void) | null>(null);
   const [alertState, setAlertState] = useState<AlertState>(() => ({
     isOpen: false,
@@ -161,7 +161,7 @@ export const useMainDialogRuntime = ({
 
   const showConfirm = (
     message: string,
-    onConfirm: () => void,
+    onConfirm: () => void | Promise<void>,
     options?: {
       onCancel?: () => void;
       confirmText?: string;
@@ -197,11 +197,16 @@ export const useMainDialogRuntime = ({
     cancelCallbackRef.current = null;
   };
 
-  // 닫은 뒤 콜백 실행 — 콜백이 동기적으로 새 다이얼로그를 열어도 닫히지 않게
-  const handleAlertConfirm = () => {
+  // 닫은 뒤 콜백 실행, 콜백이 연 새 다이얼로그는 유지
+  const handleAlertConfirm = async () => {
     const callback = confirmCallbackRef.current;
     closeAlert();
-    callback?.();
+    try {
+      await callback?.();
+    } catch (error) {
+      console.error('Failed to complete confirmed action', error);
+      showAlert(t('common.actionFailed'));
+    }
   };
 
   const handleAlertCancel = () => {

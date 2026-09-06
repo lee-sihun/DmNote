@@ -1,4 +1,5 @@
 import { panelWindowApi } from '@api/modules/window/panelWindowApi';
+import { registerHistoryEditorFlushDocument } from '@src/renderer/editor/runtime/lifecycle/historyEditorFlushLock';
 import { initializeMotionPreferences } from '@utils/animation/motionPreferences';
 
 import {
@@ -33,9 +34,12 @@ export class PanelChildWindowError extends Error {
 
 let current: PanelChildWindow | null = null;
 let opening: Promise<PanelChildWindow> | null = null;
+let unregisterHistoryDocument: (() => void) | null = null;
 
-export const getPanelChildWindow = (): PanelChildWindow | null =>
-  current && !current.window.closed ? current : null;
+export const getPanelChildWindow = (): PanelChildWindow | null => {
+  if (current?.window.closed) resetPanelChildWindow();
+  return current;
+};
 
 // 자식 문서의 기본 골격. about:blank라 charset·color-scheme·base가 없다.
 // dev reload로 opener가 바뀌면 같은 이름의 기존 창이 돌아올 수 있어 이전 흔적을 걷어낸다
@@ -113,6 +117,15 @@ const createPanelChildWindow = async (): Promise<PanelChildWindow> => {
     throw new PanelChildWindowError('panel window closed while preparing');
   }
   current = { window: child, document: doc, styles };
+  const unregister = registerHistoryEditorFlushDocument(doc);
+  const onPageHide = () => {
+    if (current?.document === doc) resetPanelChildWindow();
+  };
+  doc.defaultView?.addEventListener('pagehide', onPageHide);
+  unregisterHistoryDocument = () => {
+    doc.defaultView?.removeEventListener('pagehide', onPageHide);
+    unregister();
+  };
   return current;
 };
 
@@ -136,6 +149,8 @@ export const openPanelChildWindow = (): Promise<PanelChildWindow> => {
 
 // 테스트·재시작 경로용 - 참조만 버린다 (창은 백엔드가 소유)
 export const resetPanelChildWindow = (): void => {
+  unregisterHistoryDocument?.();
+  unregisterHistoryDocument = null;
   current?.styles.dispose();
   current = null;
 };

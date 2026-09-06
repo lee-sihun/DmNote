@@ -234,4 +234,123 @@ describe('calculateResizePreviewPlan', () => {
     expect(mocks.calculateSnapPoints).not.toHaveBeenCalled();
     expect(mocks.calculateSizeSnap).not.toHaveBeenCalled();
   });
+
+  it('잡은 핸들이 움직이는 축만 크기 일치를 요청한다', () => {
+    calculateResizePreviewPlan({
+      elementId: 'element-a',
+      newBounds: {
+        x: 10,
+        y: 10,
+        width: 100,
+        height: 100,
+        handle: { id: 'e', dx: 1, dy: 0 },
+      },
+      otherElements: [],
+      settings: { ...settings, sizeMatchGuidesEnabled: true },
+      policy: 'native',
+    });
+
+    expect(mocks.calculateSizeSnap).toHaveBeenCalledWith(
+      100,
+      100,
+      [],
+      'element-a',
+      { matchWidth: true, matchHeight: false },
+    );
+  });
+
+  it('비율 고정은 기준 축 스냅만 받고 반대 축을 같은 배율로 놓는다', () => {
+    mocks.calculateSizeSnap.mockReturnValue({
+      snappedWidth: 104,
+      snappedHeight: 100,
+      sizeMatchGuides: [],
+      didSnapWidth: true,
+      didSnapHeight: false,
+    });
+    const start = { x: 0, y: 0, width: 100, height: 100 };
+
+    const plan = calculateResizePreviewPlan({
+      elementId: 'element-a',
+      newBounds: {
+        ...start,
+        handle: { id: 'se', dx: 1, dy: 1 },
+        aspect: { start, primary: 'width', range: { min: 0.1, max: 10 } },
+      },
+      otherElements: [],
+      settings: { ...settings, sizeMatchGuidesEnabled: true },
+      policy: 'native',
+    });
+
+    // 모서리라도 기준 축(폭)만 크기 일치를 받는다
+    expect(mocks.calculateSizeSnap).toHaveBeenCalledWith(
+      100,
+      100,
+      [],
+      'element-a',
+      { matchWidth: true, matchHeight: false },
+    );
+    expect(plan.bounds).toEqual({ x: 0, y: 0, width: 104, height: 104 });
+    expect(plan.guideUpdate.kind).toBe('set');
+  });
+
+  it('비율 고정 배율이 범위에 잘리면 스냅과 가이드를 버린다', () => {
+    mocks.calculateSizeSnap.mockReturnValue({
+      snappedWidth: 104,
+      snappedHeight: 100,
+      sizeMatchGuides: [],
+      didSnapWidth: true,
+      didSnapHeight: false,
+    });
+    const start = { x: 0, y: 0, width: 100, height: 100 };
+
+    const plan = calculateResizePreviewPlan({
+      elementId: 'element-a',
+      newBounds: {
+        ...start,
+        handle: { id: 'e', dx: 1, dy: 0 },
+        aspect: { start, primary: 'width', range: { min: 0.5, max: 1.02 } },
+      },
+      otherElements: [],
+      settings: { ...settings, sizeMatchGuidesEnabled: true },
+      policy: 'native',
+    });
+
+    // 104 → 배율 1.04 는 상한 밖 → 102x102, 세로는 중앙 고정
+    expect(plan.bounds).toEqual({ x: 0, y: -1, width: 102, height: 102 });
+    expect(plan.guideUpdate).toEqual({ kind: 'clear' });
+  });
+
+  it('잡지 않은 축의 정렬 스냅은 적용하지도 가이드에 그리지도 않는다', () => {
+    mocks.calculateSnapPoints.mockReturnValue({
+      ...emptySnapResult,
+      snappedX: 0,
+      snappedY: 8,
+      didSnapX: true,
+      didSnapY: true,
+      guides: [
+        { type: 'vertical', position: 0, alignType: 'left' },
+        { type: 'horizontal', position: 8, alignType: 'top' },
+      ],
+    });
+
+    const plan = calculateResizePreviewPlan({
+      elementId: 'element-a',
+      newBounds: {
+        x: 3,
+        y: 10,
+        width: 100,
+        height: 100,
+        handle: { id: 's', dx: 0, dy: 1 },
+      },
+      otherElements: [],
+      settings,
+      policy: 'native',
+    });
+
+    expect(plan.bounds).toEqual({ x: 3, y: 10, width: 100, height: 98 });
+    expect(plan.guideUpdate).toMatchObject({
+      kind: 'set',
+      activeGuides: [{ type: 'horizontal', position: 8, alignType: 'top' }],
+    });
+  });
 });

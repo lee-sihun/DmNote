@@ -452,6 +452,7 @@ impl AppState {
         )
         .window_features(features)
         .title("DM Note - Panel")
+        .window_classname(PANEL_WINDOW_CLASS)
         // 메인·오버레이와 같은 프레임리스 크롬 - 드래그 영역은 패널 상단 스트립이 담당
         .decorations(false)
         // Windows는 DWM이 실루엣을 소유하므로(windows_window_corners) 모서리 바깥을 비출

@@ -66,6 +66,14 @@ export interface SnapResult {
   didSpacingSnapY: boolean;
 }
 
+/** 크기 일치 스냅을 받을 축 - 잡은 핸들이 움직이는 축만 켠다 */
+export interface SizeSnapAxes {
+  /** 너비 일치 허용 - 잡은 핸들이 가로로 움직일 때만 */
+  matchWidth?: boolean;
+  /** 높이 일치 허용 - 잡은 핸들이 세로로 움직일 때만 */
+  matchHeight?: boolean;
+}
+
 export interface SizeSnapResult {
   snappedWidth: number;
   snappedHeight: number;

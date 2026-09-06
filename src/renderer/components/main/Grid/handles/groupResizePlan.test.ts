@@ -57,8 +57,8 @@ const calculate = (
     snapSize: 1,
     startGroupBounds: { x: 100, y: 200, width: 100, height: 80 },
     startElementBounds: elementBounds,
-    maxShrinkX: 90,
-    maxShrinkY: 70,
+    minGroupWidth: 10,
+    minGroupHeight: 10,
     smartSnap: { type: 'unchanged' },
     ...overrides,
   });

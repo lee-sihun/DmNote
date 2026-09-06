@@ -175,6 +175,24 @@ describe('useLayerActions visibility routing', () => {
     });
   };
 
+  it('미선택 스프라이트 행 우클릭은 그 행을 선택한다', async () => {
+    const item: LayerItem = {
+      type: 'sprite',
+      id: STABLE_ID,
+      index: 0,
+      name: '스프라이트 1',
+      zIndex: 0,
+      hidden: false,
+    };
+
+    await act(async () => actions.handleContextMenu(click, item, 0));
+
+    // 종류 분기 누락 시 clearSelection만 남아 Delete가 조용히 무시된다
+    expect(useGridSelectionStore.getState().selectedElements).toEqual([
+      { type: 'sprite', id: STABLE_ID, index: 0 },
+    ]);
+  });
+
   it('stable native는 index가 틀려도 ID와 literal hidden으로 semantic op를 호출한다', async () => {
     const item: LayerItem = {
       type: 'key',
@@ -241,6 +259,21 @@ describe('useLayerActions visibility routing', () => {
       { fullId: 'plugin-a:one', hidden: false },
     ]);
     expect(mocks.reportSkipped).not.toHaveBeenCalled();
+  });
+
+  it('플러그인 이름 변경은 직접 메뉴 액션으로도 시작하지 않는다', async () => {
+    const item: LayerItem = {
+      type: 'plugin',
+      id: 'plugin-a:one',
+      name: 'plugin',
+      zIndex: 0,
+      hidden: false,
+    };
+    await act(async () => actions.handleContextMenu(click, item, 0));
+    await act(async () => actions.handleContextMenuSelect('rename'));
+
+    expect(actions.renamingItemId).toBeNull();
+    expect(mocks.patchLayerName).not.toHaveBeenCalled();
   });
 
   it('main stable group은 allHidden에서 계산한 absolute literal만 semantic helper에 넘긴다', async () => {

@@ -17,6 +17,7 @@ const arraysOf = (
   stat: [],
   graph: [],
   knob: [],
+  sprite: [],
 });
 
 describe('id 기반 선택 재조정', () => {

@@ -194,6 +194,7 @@ impl AppStore {
             enforce_touched_fields: false,
         };
         let change = if let Some(changes) = request.changes.as_mut() {
+            changes.merge_omitted_sprite_fields(&guard.data.sprite_positions);
             native_element_id::prepare_commit_patch_element_ids(&guard.data, changes)?;
             let touched_fields = changes.included_fields();
             self.commit_editor_patch_locked(

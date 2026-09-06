@@ -17,6 +17,8 @@ pub struct OverlayResizeArgs {
     #[serde(default)]
     pub anchor: Option<String>,
     #[serde(default)]
+    pub content_left_offset: Option<f64>,
+    #[serde(default)]
     pub content_top_offset: Option<f64>,
     #[serde(default)]
     pub fixed_position_delta_x: Option<f64>,
@@ -152,6 +154,7 @@ pub async fn overlay_resize(
             payload.width,
             payload.height,
             payload.anchor,
+            payload.content_left_offset,
             payload.content_top_offset,
             payload.fixed_position_delta_x,
             payload.fixed_position_delta_y,

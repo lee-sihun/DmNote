@@ -20,17 +20,19 @@ use crate::{
     errors::{CmdResult, CommandError},
     models::{
         default_bar_count, default_missing_note_gradient_multipliers, normalize_key_mappings,
-        scrub_removed_text_outline_fields, AppStoreData, CustomCss, CustomCssPatch, CustomJs,
-        CustomJsPatch, EditorCommitOrigin, EditorField, FontSettings, FontType, GradientSpec,
-        GraphPositions, KeyMappings, KeyPosition, KeyPositions, KeySlot, KnobPositions,
-        LayerGroups, NoteSettings, NoteSettingsPatch, SettingsPatchInput, StatPositions, TabCss,
-        TabCssOverrides, TabNoteSettings, POSITION_COLLECTION_FIELDS, SHADOW_BLUR_MAX,
-        SHADOW_BLUR_MIN, SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
+        rewrite_coupled_sprite_image_reference, scrub_removed_text_outline_fields, AppStoreData,
+        CustomCss, CustomCssPatch, CustomJs, CustomJsPatch, EditorCommitOrigin, EditorField,
+        FontSettings, FontType, GradientSpec, GraphPositions, KeyMappings, KeyPosition,
+        KeyPositions, KeySlot, KnobPositions, LayerGroups, NoteSettings, NoteSettingsPatch,
+        SettingsPatchInput, SpritePositions, StatPositions, TabCss, TabCssOverrides,
+        TabNoteSettings, POSITION_COLLECTION_FIELDS, SHADOW_BLUR_MAX, SHADOW_BLUR_MIN,
+        SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
     },
     services::settings::apply_patch_to_store,
     state::{
         assets::image_asset::{import_image_bytes, import_image_file},
         editor::validate_history_restore_metadata,
+        migration::{fill_missing_sprite_image_metrics, migrate_legacy_sprite_wire},
         tab_metadata::{
             legacy_tab_order, normalize_bar_count, normalize_tab_order,
             reconcile_custom_tab_metadata,
@@ -56,7 +58,7 @@ use imported_assets::{
 #[cfg(test)]
 use imported_assets::{
     merge_tab_preset_fonts, restore_position_image_reference, restore_preset_local_fonts_in_dir,
-    restore_preset_local_sounds_in_dir,
+    restore_preset_local_images_in_dir, restore_preset_local_sounds_in_dir,
 };
 #[cfg(test)]
 use validation::invalid_position_style_detail;
@@ -154,6 +156,7 @@ fn preset_load_from_path(
     let mut stat_positions = preset.stat_positions.unwrap_or_default();
     let mut graph_positions = preset.graph_positions.unwrap_or_default();
     let mut knob_positions = preset.knob_positions.unwrap_or_default();
+    let mut sprite_positions = preset.sprite_positions.unwrap_or_default();
     migrate_imported_font_weights(
         &mut positions,
         &mut stat_positions,
@@ -221,6 +224,7 @@ fn preset_load_from_path(
         &mut stat_positions,
         &mut graph_positions,
         &mut knob_positions,
+        &mut sprite_positions,
         preset.embedded_local_images.as_deref(),
     )?;
     restore_preset_local_sounds(
@@ -288,6 +292,7 @@ fn preset_load_from_path(
                 EditorField::StatPositions,
                 EditorField::GraphPositions,
                 EditorField::KnobPositions,
+                EditorField::SpritePositions,
                 EditorField::LayerGroups,
             ],
             admission,
@@ -303,6 +308,7 @@ fn preset_load_from_path(
                 store.stat_positions = stat_positions;
                 store.graph_positions = graph_positions;
                 store.knob_positions = knob_positions;
+                store.sprite_positions = sprite_positions;
                 store.custom_tabs = custom_tabs;
                 store.tab_order = tab_order;
                 store.bar_count = bar_count;
@@ -360,6 +366,7 @@ fn preset_load_from_path(
         let stat_positions = transaction.change.document.stat_positions;
         let graph_positions = transaction.change.document.graph_positions;
         let knob_positions = transaction.change.document.knob_positions;
+        let sprite_positions = transaction.change.document.sprite_positions;
         let layer_groups = transaction.change.document.layer_groups;
 
         if let Err(error) = state.emit_settings_changed(&diff, app) {
@@ -376,6 +383,7 @@ fn preset_load_from_path(
                 stat_positions,
                 graph_positions,
                 knob_positions,
+                sprite_positions,
                 custom_tabs,
                 tab_order,
                 bar_count,
@@ -438,6 +446,7 @@ fn preset_load_tab_from_path(
         stat_positions,
         graph_positions,
         knob_positions,
+        sprite_positions,
         selected_key_type,
         tab_note_overrides,
         layer_groups,
@@ -471,23 +480,14 @@ fn preset_load_tab_from_path(
         src_key_positions.insert(current_tab_id.clone(), v.clone());
     }
 
-    let imported_stat_positions = stat_positions.unwrap_or_default();
-    let mut src_stat_positions: StatPositions = HashMap::new();
-    if let Some(v) = imported_stat_positions.get(&source_tab_id) {
-        src_stat_positions.insert(current_tab_id.clone(), v.clone());
-    }
-
-    let imported_graph_positions = graph_positions.unwrap_or_default();
-    let mut src_graph_positions: GraphPositions = HashMap::new();
-    if let Some(v) = imported_graph_positions.get(&source_tab_id) {
-        src_graph_positions.insert(current_tab_id.clone(), v.clone());
-    }
-
-    let imported_knob_positions = knob_positions.unwrap_or_default();
-    let mut src_knob_positions: KnobPositions = HashMap::new();
-    if let Some(v) = imported_knob_positions.get(&source_tab_id) {
-        src_knob_positions.insert(current_tab_id.clone(), v.clone());
-    }
+    let mut src_stat_positions =
+        select_tab_preset_elements(stat_positions.as_ref(), &source_tab_id, &current_tab_id);
+    let mut src_graph_positions =
+        select_tab_preset_elements(graph_positions.as_ref(), &source_tab_id, &current_tab_id);
+    let mut src_knob_positions =
+        select_tab_preset_elements(knob_positions.as_ref(), &source_tab_id, &current_tab_id);
+    let mut src_sprite_positions =
+        select_tab_preset_elements(sprite_positions.as_ref(), &source_tab_id, &current_tab_id);
 
     migrate_imported_font_weights(
         &mut src_key_positions,
@@ -509,6 +509,7 @@ fn preset_load_tab_from_path(
         &mut src_stat_positions,
         &mut src_graph_positions,
         &mut src_knob_positions,
+        &mut src_sprite_positions,
         embedded_local_images.as_deref(),
     )?;
     restore_preset_local_sounds(
@@ -524,6 +525,7 @@ fn preset_load_tab_from_path(
     let imported_stat_positions = src_stat_positions.remove(&current_tab_id);
     let imported_graph_positions = src_graph_positions.remove(&current_tab_id);
     let imported_knob_positions = src_knob_positions.remove(&current_tab_id);
+    let imported_sprite_positions = src_sprite_positions.remove(&current_tab_id);
     let imported_override = imported_tab_note_overrides.get(&source_tab_id).cloned();
     let imported_groups =
         layer_groups.map(|groups| groups.get(&source_tab_id).cloned().unwrap_or_default());
@@ -566,6 +568,7 @@ fn preset_load_tab_from_path(
                 EditorField::StatPositions,
                 EditorField::GraphPositions,
                 EditorField::KnobPositions,
+                EditorField::SpritePositions,
                 EditorField::LayerGroups,
             ],
             admission,
@@ -575,6 +578,7 @@ fn preset_load_tab_from_path(
                 let stat_positions_written = imported_stat_positions.is_some();
                 let graph_positions_written = imported_graph_positions.is_some();
                 let knob_positions_written = imported_knob_positions.is_some();
+                let sprite_positions_written = imported_sprite_positions.is_some();
                 merge_tab_preset_key_pair(store, &current_tab_id, src_keys, imported_key_positions);
                 if let Some(positions) = imported_stat_positions {
                     store
@@ -591,6 +595,11 @@ fn preset_load_tab_from_path(
                         .knob_positions
                         .insert(current_tab_id.clone(), positions);
                 }
+                if let Some(positions) = imported_sprite_positions {
+                    store
+                        .sprite_positions
+                        .insert(current_tab_id.clone(), positions);
+                }
                 rekey_tab_preset_elements(
                     store,
                     &current_tab_id,
@@ -598,6 +607,7 @@ fn preset_load_tab_from_path(
                     stat_positions_written,
                     graph_positions_written,
                     knob_positions_written,
+                    sprite_positions_written,
                 );
                 apply_tab_note_override(
                     store,
@@ -662,6 +672,7 @@ fn preset_load_tab_from_path(
         let full_stat_positions = transaction.change.document.stat_positions;
         let full_graph_positions = transaction.change.document.graph_positions;
         let full_knob_positions = transaction.change.document.knob_positions;
+        let full_sprite_positions = transaction.change.document.sprite_positions;
         let full_layer_groups = transaction.change.document.layer_groups;
 
         if let Some(diff) = settings_diff.as_ref() {
@@ -676,6 +687,7 @@ fn preset_load_tab_from_path(
         emit_best_effort(app, "statPositions:changed", &full_stat_positions);
         emit_best_effort(app, "graphPositions:changed", &full_graph_positions);
         emit_best_effort(app, "knobPositions:changed", &full_knob_positions);
+        emit_best_effort(app, "spritePositions:changed", &full_sprite_positions);
         emit_best_effort(app, "tabNote:changed_all", &full_tab_note_overrides);
 
         // OBS 브릿지: 탭 프리셋 로드 시 전체 스냅샷 재전송
@@ -806,6 +818,24 @@ fn normalize_imported_tab_css_overrides(
     overrides
 }
 
+/// 탭 프리셋의 요소 컬렉션 하나를 대상 탭 키로 옮긴다. 컬렉션이 있는데 원본 탭 항목이
+/// 없으면 "요소 없음"이라 빈 목록을 넣어 기존 요소를 지운다 - 없으면 남는다.
+/// 컬렉션 자체가 없는 옛 프리셋만 기존 요소를 그대로 둔다
+fn select_tab_preset_elements<T: Clone>(
+    collection: Option<&HashMap<String, Vec<T>>>,
+    source_tab_id: &str,
+    current_tab_id: &str,
+) -> HashMap<String, Vec<T>> {
+    let mut selected = HashMap::new();
+    if let Some(collection) = collection {
+        selected.insert(
+            current_tab_id.to_string(),
+            collection.get(source_tab_id).cloned().unwrap_or_default(),
+        );
+    }
+    selected
+}
+
 fn choose_tab_preset_source_tab(
     keys: &KeyMappings,
     selected_key_type: Option<&str>,
@@ -866,6 +896,7 @@ fn rekey_tab_preset_elements(
     stat_positions_written: bool,
     graph_positions_written: bool,
     knob_positions_written: bool,
+    sprite_positions_written: bool,
 ) {
     crate::state::native_element_id::rekey_mode_element_ids_for_collections(
         store,
@@ -874,6 +905,7 @@ fn rekey_tab_preset_elements(
         stat_positions_written,
         graph_positions_written,
         knob_positions_written,
+        sprite_positions_written,
     );
     // 프리셋이 위치를 주지 않은 컬렉션은 기존 요소가 값 그대로 남는다 -
     // 신원을 회전시키지 않고 정렬이 덧붙인 빈 항목만 채운다
@@ -884,6 +916,7 @@ fn rekey_tab_preset_elements(
         !stat_positions_written,
         !graph_positions_written,
         !knob_positions_written,
+        !sprite_positions_written,
     );
 }
 

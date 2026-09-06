@@ -284,11 +284,11 @@ describe('Settings 플러그인 생명주기 controller', () => {
     expect(harness.setPluginToDelete).toHaveBeenCalledWith(null);
   });
 
-  it('데이터 포함 제거는 remove 정산 뒤 prefix를 지우고 실패여도 모달 상태를 닫는다', async () => {
+  it('데이터 포함 제거는 remove 정산 뒤 prefix를 지우고, remove 실패 시 데이터는 남기되 모달 상태는 닫는다', async () => {
     const order: string[] = [];
     mocks.remove.mockImplementation(async () => {
       order.push('remove');
-      return { success: false };
+      return { success: true };
     });
     mocks.clearByPrefix.mockImplementation(async () => {
       order.push('clear');
@@ -301,6 +301,20 @@ describe('Settings 플러그인 생명주기 controller', () => {
 
     expect(order).toEqual(['remove', 'clear']);
     expect(mocks.clearByPrefix).toHaveBeenCalledWith('alpha/');
+
+    // 플러그인이 남아 있는데 저장 데이터만 지우면 안 된다
+    order.length = 0;
+    mocks.clearByPrefix.mockClear();
+    harness.setPendingPluginId.mockClear();
+    mocks.remove.mockImplementation(async () => {
+      order.push('remove');
+      return { success: false };
+    });
+
+    await harness.removePluginWithData(alpha.id);
+
+    expect(order).toEqual(['remove']);
+    expect(mocks.clearByPrefix).not.toHaveBeenCalled();
     expect(harness.showAlert).toHaveBeenCalledWith(
       'settings.jsPluginRemoveFailed',
     );

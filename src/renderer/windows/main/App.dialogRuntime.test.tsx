@@ -46,6 +46,9 @@ vi.mock('@contexts/useTranslation', () => ({
   useTranslation: () => ({ t: mocks.t }),
 }));
 vi.mock('@components/main/TitleBar', () => ({ default: () => null }));
+vi.mock('@components/main/EditorSaveNotice', () => ({
+  default: () => null,
+}));
 vi.mock('@hooks/app/useCustomCssInjection', () => ({
   useCustomCssInjection: vi.fn(),
 }));

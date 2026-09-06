@@ -1,10 +1,12 @@
 use super::{
     compact_canonical_rgba, key_mappings_contain_multi, normalize_key_mappings, normalize_key_slot,
-    note_border_representative_hex, scrub_removed_text_outline_fields, AppStoreData, FadePosition,
-    GradientSpec, GraphPosition, GraphStatType, GraphType, ImageTransform, KeyCounterAlign,
-    KeyCounterAlignMode, KeyCounterColor, KeyCounterPlacement, KeyCounterSettings, KeyMappings,
-    KeyPosition, KeySlot, KnobPosition, NoteAlignment, NoteColor, NoteSettings, SlotMatch,
-    StatPosition, StatType, MAX_SLOT_KEYS, POSITION_COLLECTION_FIELDS,
+    note_border_representative_hex, rewrite_coupled_sprite_image_reference,
+    scrub_removed_text_outline_fields, AppStoreData, FadePosition, GradientSpec, GraphPosition,
+    GraphStatType, GraphType, ImageTransform, KeyCounterAlign, KeyCounterAlignMode,
+    KeyCounterColor, KeyCounterPlacement, KeyCounterSettings, KeyMappings, KeyPosition, KeySlot,
+    KnobPosition, NoteAlignment, NoteColor, NoteSettings, ReactiveSpritePosition, SlotMatch,
+    SpriteAnchor, SpritePose, SpriteReferenceNaturalSize, SpriteTransform, StatPosition, StatType,
+    MAX_SLOT_KEYS, POSITION_COLLECTION_FIELDS,
 };
 use serde::Deserialize;
 
@@ -21,6 +23,128 @@ struct NoteBorderStopColorFixture {
 struct ValidNoteBorderStopColor {
     input: String,
     representative: String,
+}
+
+#[test]
+fn element_rotation_constants_and_default_match_shared_fixture() {
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Range {
+        min: f64,
+        max: f64,
+    }
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Fixture {
+        rotation: Range,
+        default: f64,
+    }
+    let fixture: Fixture = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/element-rotation-parity.json"
+    ))
+    .unwrap();
+    assert_eq!(super::ELEMENT_ROTATION_MIN, fixture.rotation.min);
+    assert_eq!(super::ELEMENT_ROTATION_MAX, fixture.rotation.max);
+    assert_eq!(super::default_element_rotation(), fixture.default);
+    assert_eq!(KeyPosition::default().rotation, fixture.default);
+    assert_eq!(ReactiveSpritePosition::default().rotation, fixture.default);
+}
+
+#[test]
+fn rotated_position_coordinates_survive_exact_json_round_trip() {
+    fn check<T: serde::Serialize + serde::de::DeserializeOwned>(
+        position: T,
+        field: &str,
+        decimal: &str,
+    ) {
+        let expected: f64 = decimal.parse().unwrap();
+        let mut payload = serde_json::to_value(position).unwrap();
+        payload[field] = serde_json::json!(expected);
+        let wire = serde_json::to_string(&payload).unwrap();
+        let assert_exact = |position: &T| {
+            let encoded = serde_json::to_value(position).unwrap();
+            assert_eq!(
+                encoded[field].as_f64().unwrap().to_bits(),
+                expected.to_bits()
+            );
+        };
+
+        let direct: T = serde_json::from_str(&wire).unwrap();
+        assert_exact(&direct);
+        let ipc_payload: serde_json::Value = serde_json::from_str(&wire).unwrap();
+        let decoded: T = serde_json::from_value(ipc_payload).unwrap();
+        assert_exact(&decoded);
+        let stored = serde_json::to_string(&decoded).unwrap();
+        let restored: T = serde_json::from_str(&stored).unwrap();
+        assert_exact(&restored);
+    }
+
+    check(KeyPosition::default(), "dy", "209.77425768631718");
+    check(
+        ReactiveSpritePosition::default(),
+        "dx",
+        "114.55722993194729",
+    );
+}
+
+#[test]
+fn element_rotation_defaults_and_round_trips_flattened_positions() {
+    fn check<T: serde::de::DeserializeOwned + serde::Serialize>(mut value: serde_json::Value) {
+        value.as_object_mut().unwrap().remove("rotation");
+        let legacy: T = serde_json::from_value(value.clone()).unwrap();
+        let serialized = serde_json::to_value(legacy).unwrap();
+        assert_eq!(serialized["rotation"], 0.0);
+        assert!(serialized.get("position").is_none());
+        for rotation in [-180.0, -45.5, 0.0, 45.5, 180.0] {
+            value["rotation"] = serde_json::json!(rotation);
+            let decoded: T = serde_json::from_value(value.clone()).unwrap();
+            let wire = serde_json::to_value(decoded).unwrap();
+            assert_eq!(wire["rotation"], rotation);
+            let restored: T = serde_json::from_value(wire.clone()).unwrap();
+            assert_eq!(serde_json::to_value(restored).unwrap(), wire);
+        }
+        for invalid in [
+            serde_json::Value::Null,
+            serde_json::json!("45"),
+            serde_json::json!(true),
+        ] {
+            value["rotation"] = invalid;
+            assert!(serde_json::from_value::<T>(value.clone()).is_err());
+        }
+    }
+
+    let position = KeyPosition::default();
+    check::<KeyPosition>(serde_json::to_value(&position).unwrap());
+    check::<ReactiveSpritePosition>(
+        serde_json::to_value(ReactiveSpritePosition::default()).unwrap(),
+    );
+    check::<StatPosition>(
+        serde_json::to_value(StatPosition {
+            stat_type: StatType::Kps,
+            position: position.clone(),
+        })
+        .unwrap(),
+    );
+    check::<GraphPosition>(
+        serde_json::to_value(GraphPosition {
+            stat_type: GraphStatType::Kps,
+            graph_type: GraphType::Line,
+            graph_speed: 100,
+            graph_color: "#123456".to_string(),
+            show_avg_line: true,
+            position: position.clone(),
+        })
+        .unwrap(),
+    );
+    check::<KnobPosition>(
+        serde_json::to_value(KnobPosition {
+            axis_id: "axis".to_string(),
+            sensitivity: 1.0,
+            reverse: false,
+            position,
+        })
+        .unwrap(),
+    );
 }
 
 #[test]
@@ -42,6 +166,129 @@ fn legacy_string_key_mappings_round_trip_without_loss() {
     let mappings: KeyMappings = serde_json::from_value(raw.clone()).unwrap();
 
     assert_eq!(serde_json::to_value(mappings).unwrap(), raw);
+}
+
+#[test]
+fn sprite_pose_optional_fields_round_trip_with_canonical_pivot_null() {
+    let pose = SpritePose {
+        name: Some("왼팔".to_string()),
+        ..SpritePose::default()
+    };
+
+    let serialized = serde_json::to_value(&pose).unwrap();
+    assert_eq!(serialized["name"], "왼팔");
+    assert!(serialized.get("matchMode").is_none());
+
+    let restored: SpritePose = serde_json::from_value(serialized).unwrap();
+    assert_eq!(restored.name.as_deref(), Some("왼팔"));
+
+    let unnamed = serde_json::to_value(SpritePose::default()).unwrap();
+    assert!(unnamed.get("name").is_none());
+    assert_eq!(unnamed["pivot"], serde_json::Value::Null);
+}
+
+#[test]
+fn sprite_pose_trigger_normalization_reports_changes_once() {
+    let mut pose = SpritePose {
+        triggers: vec!["b".to_string(), "a".to_string(), "b".to_string()],
+        ..SpritePose::default()
+    };
+
+    assert!(pose.normalize_triggers());
+    assert_eq!(pose.triggers, ["a", "b"]);
+    assert!(!pose.normalize_triggers());
+}
+
+#[test]
+fn coupled_image_rewrite_keeps_null_reference_source_without_base_image() {
+    let mut sprite = ReactiveSpritePosition {
+        reference_natural_size: Some(SpriteReferenceNaturalSize {
+            source: None,
+            width: 100,
+            height: 100,
+        }),
+        ..ReactiveSpritePosition::default()
+    };
+
+    rewrite_coupled_sprite_image_reference(&mut sprite, |image_ref| {
+        assert_eq!(image_ref, &None);
+    });
+
+    assert_eq!(sprite.reference_natural_size.unwrap().source, None);
+}
+
+#[test]
+fn sprite_fields_follow_single_model_wire_contract() {
+    let mut raw = serde_json::to_value(ReactiveSpritePosition::default()).unwrap();
+    let sprite = raw.as_object_mut().unwrap();
+    sprite.insert("imageFit".to_string(), serde_json::json!("contain"));
+    sprite.remove("imagePlacement");
+    sprite.remove("referenceNaturalSize");
+    sprite.insert(
+        "imageRect".to_string(),
+        serde_json::json!({ "x": 10, "y": 20, "width": 40, "height": 50 }),
+    );
+    sprite.insert(
+        "poses".to_string(),
+        serde_json::json!([{
+            "poseId": "pose-a",
+            "triggers": [],
+            "transform": SpriteTransform::default(),
+            "imageOverride": null,
+            "contactPoint": { "x": 0.5, "y": 1.0 },
+            "imagePivot": { "x": 0.25, "y": 0.75 }
+        }]),
+    );
+
+    let defaulted: ReactiveSpritePosition = serde_json::from_value(raw).unwrap();
+    assert_eq!((defaulted.width, defaulted.height), (200.0, 200.0));
+    assert_eq!(defaulted.pivot, SpriteAnchor { x: 0.5, y: 0.5 });
+    assert_eq!(defaulted.reference_natural_size, None);
+    assert_eq!(defaulted.poses[0].image_override_metrics, None);
+
+    let serialized = serde_json::to_value(&defaulted).unwrap();
+    for field in ["imageFit", "imagePlacement", "imageRect"] {
+        assert!(serialized.get(field).is_none());
+    }
+    for field in ["contactPoint", "imagePivot"] {
+        assert!(serialized["poses"][0].get(field).is_none());
+    }
+    assert!(serialized["referenceNaturalSize"].is_null());
+    assert!(serialized["poses"][0]["imageOverrideMetrics"].is_null());
+    let null_round_trip: ReactiveSpritePosition =
+        serde_json::from_value(serialized.clone()).unwrap();
+    assert_eq!(null_round_trip.reference_natural_size, None);
+    assert_eq!(null_round_trip.poses[0].image_override_metrics, None);
+
+    let mut valued_raw = serde_json::to_value(ReactiveSpritePosition::default()).unwrap();
+    let valued_object = valued_raw.as_object_mut().unwrap();
+    valued_object.insert(
+        "referenceNaturalSize".to_string(),
+        serde_json::json!({ "source": null, "width": 1920, "height": 1080 }),
+    );
+    valued_object.insert(
+        "poses".to_string(),
+        serde_json::json!([{
+            "poseId": "pose-a",
+            "triggers": [],
+            "transform": SpriteTransform::default(),
+            "imageOverride": "/images/pose.png",
+            "imageOverrideMetrics": {
+                "source": "/images/pose.png",
+                "width": 640,
+                "height": 480
+            }
+        }]),
+    );
+    let valued: ReactiveSpritePosition = serde_json::from_value(valued_raw).unwrap();
+    assert_eq!(valued.reference_natural_size.unwrap().source, None);
+    assert_eq!(
+        valued.poses[0]
+            .image_override_metrics
+            .as_ref()
+            .map(|metrics| metrics.source.as_str()),
+        Some("/images/pose.png")
+    );
 }
 
 #[test]
@@ -177,7 +424,7 @@ fn position_wrappers_preserve_legacy_missing_field_defaults_and_round_trip() {
 fn position_serialization_field_order_and_related_defaults_are_stable() {
     let position = KeyPosition::default();
     assert!(serde_json::to_string(&position).unwrap().starts_with(
-        r#"{"dx":0.0,"dy":0.0,"width":60.0,"height":60.0,"hidden":false,"activeImage":null"#
+        r#"{"dx":0.0,"dy":0.0,"width":60.0,"height":60.0,"rotation":0.0,"hidden":false,"activeImage":null"#
     ));
     assert!(serde_json::to_string(&StatPosition {
         stat_type: StatType::Kps,

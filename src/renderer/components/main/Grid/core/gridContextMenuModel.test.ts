@@ -19,6 +19,7 @@ const source = (
   statPositions: [],
   graphPositions: [],
   knobPositions: [],
+  spritePositions: [],
   pluginElements: [],
   modeGroups: [{ id: 'group-a' }, { id: 'group-b' }],
   ...overrides,
@@ -175,6 +176,9 @@ describe('gridContextMenuModel', () => {
   it('native 안정 ID와 그리드 추가 메뉴 ID를 fail-closed로 분류한다', () => {
     const nativeId = '11111111-1111-4111-8111-111111111111';
     expect(isStableNativeSelection({ type: 'key', id: nativeId })).toBe(true);
+    expect(isStableNativeSelection({ type: 'sprite', id: nativeId })).toBe(
+      true,
+    );
     expect(isStableNativeSelection({ type: 'plugin', id: nativeId })).toBe(
       false,
     );
@@ -185,6 +189,7 @@ describe('gridContextMenuModel', () => {
     expect(gridAddTypeForMenuItem('addStat')).toBe('stat');
     expect(gridAddTypeForMenuItem('addGraph')).toBe('graph');
     expect(gridAddTypeForMenuItem('addKnob')).toBe('knob');
+    expect(gridAddTypeForMenuItem('addSprite')).toBe('sprite');
     expect(gridAddTypeForMenuItem('addPlugin')).toBeNull();
   });
 });

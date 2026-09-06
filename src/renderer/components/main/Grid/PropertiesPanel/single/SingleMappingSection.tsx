@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { ACTION_BUTTON_CHROME_CLASS } from '@utils/cardRecipes';
 import type { KeySlot } from '@src/types/key/keys';
 import type { KeySlotUiMode } from '@utils/keySlot';
 import {
@@ -149,7 +150,7 @@ const SingleMappingSection = ({
         <button
           ref={slotEditButtonRef}
           onClick={() => setSlotPickerOpen((prev) => !prev)}
-          className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
+          className={`${ACTION_BUTTON_CHROME_CLASS} ${
             slotPickerOpen ? 'shadow-focus-ring' : ''
           } text-fg text-body`}
         >

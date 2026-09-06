@@ -133,13 +133,14 @@ describe('빈 바닥 메뉴 플러그인 묶음', () => {
       'addStat',
       'addGraph',
       'addKnob',
+      'addSprite',
       'separator-1',
       PLUGIN_GROUP_ID,
       'tabGroup',
       'resetGroup',
     ]);
-    expect(captured.grid[5].label).toBe('contextMenu.plugins');
-    expect(captured.grid[5].children).toHaveLength(4);
+    expect(captured.grid[6].label).toBe('contextMenu.plugins');
+    expect(captured.grid[6].children).toHaveLength(4);
   });
 
   it('position을 무시하고 등록 순서와 fullId를 그대로 넘긴다', () => {
@@ -189,8 +190,8 @@ describe('빈 바닥 메뉴 플러그인 묶음', () => {
 
     const group = captured.grid.find((entry) => entry.id === PLUGIN_GROUP_ID);
     expect(group?.children?.map((child) => child.id)).toEqual(['demo:sane']);
-    // 추가 4개 + 구분선 1개 + 묶음 3개
-    expect(captured.grid).toHaveLength(8);
+    // 추가 5개 + 구분선 1개 + 묶음 3개
+    expect(captured.grid).toHaveLength(9);
     expect(error).toHaveBeenCalled();
   });
 

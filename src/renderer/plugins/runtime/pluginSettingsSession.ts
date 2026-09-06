@@ -53,6 +53,7 @@ const settleOnce = async (
     } catch (error) {
       console.error('[Plugin Settings] Failed to apply settings:', error);
       payload.resolve(false);
+      throw error;
     }
     return;
   }

@@ -144,6 +144,9 @@ export const applySemanticElementPatch = (
         if (op.patch.property === 'noteGlowSize') {
           return { ...position, noteGlowSize: op.patch.value };
         }
+        if (op.patch.property === 'rotation') {
+          return { ...position, rotation: op.patch.value };
+        }
         if (op.patch.property === 'noteOffsetX') {
           // null 보존 - 백엔드가 이 필드를 null로 직렬화하므로 undefined로
           // 바꾸면 의미가 같은데도 getChangedEditorFields가 변경으로 잡는다

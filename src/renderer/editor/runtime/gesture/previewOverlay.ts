@@ -13,6 +13,9 @@ import type { PreviewEnvelope, PreviewDomain } from '@src/types/preview';
 
 interface PreviewSession {
   mode: string;
+  // 같은 창에서는 편집 게스처가 하나뿐이라 로컬 세션도 하나만 활성
+  // optional은 개발 중 이전 모듈이 남긴 세션도 로컬로 회수하기 위한 호환
+  local?: boolean;
   // 도메인 → target index → 누적 patch (같은 필드는 덮어쓰기)
   domainPatches: Map<PreviewDomain, Map<number, Record<string, unknown>>>;
   // 로컬 세션은 ID를 신원으로 보관해 canonical reorder에도 같은 요소를 따라간다
@@ -65,11 +68,15 @@ export const composePreviewPositions = <T extends { id: string }>(
       if (nextMode === null) nextMode = [...modePositions];
       nextMode[index] = { ...current, ...patch };
     }
+    const indexById = new Map<string, number>();
+    if (idPatches?.size) {
+      (nextMode ?? modePositions).forEach(({ id }, index) => {
+        if (!indexById.has(id)) indexById.set(id, index);
+      });
+    }
     for (const [id, patch] of idPatches ?? []) {
-      const index = (nextMode ?? modePositions).findIndex(
-        (position) => position.id === id,
-      );
-      if (index < 0) continue;
+      const index = indexById.get(id);
+      if (index === undefined) continue;
       const current = (nextMode ?? modePositions)[index];
       if (!current) continue;
       if (nextMode === null) nextMode = [...modePositions];
@@ -134,6 +141,20 @@ const mergeLocalIdPatch = (
   }
 };
 
+const removeLocalSessionsExcept = (sessionId: string | null): string[] => {
+  const replaced: string[] = [];
+  for (const [candidateId, session] of sessions) {
+    if (session.local === false || candidateId === sessionId) continue;
+    sessions.delete(candidateId);
+    addTombstone(candidateId);
+    replaced.push(candidateId);
+  }
+  return replaced;
+};
+
+const replacePreviousLocalSession = (sessionId: string): string[] =>
+  removeLocalSessionsExcept(sessionId);
+
 export const previewOverlay = {
   /** 로컬(발신) 세션 patch 반영 */
   applyLocalPatch(
@@ -142,12 +163,14 @@ export const previewOverlay = {
     targets: number[],
     patch: Record<string, unknown>,
     domain: PreviewDomain = 'keyPosition',
-  ): void {
-    if (tombstones.has(sessionId)) return;
+  ): string[] {
+    if (tombstones.has(sessionId)) return [];
+    const replaced = replacePreviousLocalSession(sessionId);
     let session = sessions.get(sessionId);
     if (!session) {
       session = {
         mode,
+        local: true,
         domainPatches: new Map(),
         localIdPatches: new Map(),
         lastSeq: 0,
@@ -156,6 +179,7 @@ export const previewOverlay = {
     }
     mergeTargetPatch(session, domain, targets, patch);
     refreshRenderedState();
+    return replaced;
   },
 
   applyLocalPatchByIds(
@@ -164,20 +188,39 @@ export const previewOverlay = {
     targets: readonly string[],
     patch: Record<string, unknown>,
     domain: PreviewDomain = 'keyPosition',
-  ): void {
-    if (tombstones.has(sessionId)) return;
+  ): string[] {
+    return this.applyLocalPatchesByIds(
+      sessionId,
+      mode,
+      targets.map((id) => ({ id, patch })),
+      domain,
+    );
+  },
+
+  applyLocalPatchesByIds(
+    sessionId: string,
+    mode: string,
+    entries: readonly { id: string; patch: Record<string, unknown> }[],
+    domain: PreviewDomain = 'keyPosition',
+  ): string[] {
+    if (tombstones.has(sessionId)) return [];
+    const replaced = replacePreviousLocalSession(sessionId);
     let session = sessions.get(sessionId);
     if (!session) {
       session = {
         mode,
+        local: true,
         domainPatches: new Map(),
         localIdPatches: new Map(),
         lastSeq: 0,
       };
       sessions.set(sessionId, session);
     }
-    mergeLocalIdPatch(session, domain, targets, patch);
+    for (const { id, patch } of entries) {
+      mergeLocalIdPatch(session, domain, [id], patch);
+    }
     refreshRenderedState();
+    return replaced;
   },
 
   /** 원격 envelope 반영 (자기 발신 echo는 호출 전에 걸러짐) */
@@ -196,6 +239,7 @@ export const previewOverlay = {
     } else {
       session = {
         mode: envelope.mode,
+        local: false,
         domainPatches: new Map(),
         localIdPatches: new Map(),
         lastSeq: 0,
@@ -210,6 +254,13 @@ export const previewOverlay = {
       envelope.patch,
     );
     refreshRenderedState();
+  },
+
+  /** 활성 컨트롤러와 연결되지 않은 로컬 세션 회수 */
+  discardLocalSessionsExcept(sessionId: string | null): string[] {
+    const discarded = removeLocalSessionsExcept(sessionId);
+    if (discarded.length > 0) refreshRenderedState();
+    return discarded;
   },
 
   /**
@@ -236,3 +287,16 @@ export const previewOverlay = {
     refreshRenderedState();
   },
 };
+
+// 개발 중 모듈 교체에서도 이전 합성기와 프리뷰를 남기지 않음
+const hotModule = (
+  import.meta as ImportMeta & {
+    hot?: { dispose: (callback: () => void) => void };
+  }
+).hot;
+if (hotModule) {
+  hotModule.dispose(() => {
+    previewOverlay.clearAll();
+    registerRenderedPositionsComposer(null);
+  });
+}

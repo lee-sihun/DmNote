@@ -4,7 +4,7 @@ export type SupportedLocale = 'ko' | 'en' | 'zh-cn' | 'zh-Hant' | 'ru';
 
 export interface I18nContextValue {
   locale: SupportedLocale;
-  setLocale: (locale: SupportedLocale) => void;
+  setLocale: (locale: SupportedLocale) => Promise<void>;
   t: (key: string, params?: Record<string, string | number>) => string;
 }
 

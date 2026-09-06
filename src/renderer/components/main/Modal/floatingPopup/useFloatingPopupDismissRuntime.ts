@@ -63,11 +63,11 @@ export const useFloatingPopupAutoDismissRuntime = ({
           return;
         }
 
-        // 온캔버스 그라데이션 핸들 조작도 팝업 편집의 연장 — 닫힘 예외
-        const isInsideGradientOverlay =
+        // 온캔버스 편집 오버레이(그라데이션 축·자세 기즈모)는 닫힘 예외
+        const isInsideCanvasEditor =
           isElementNode(target) &&
-          !!target.closest('[data-dmn-gradient-overlay="true"]');
-        if (isInsideGradientOverlay) return;
+          !!target.closest('[data-dmn-canvas-editor-overlay="true"]');
+        if (isInsideCanvasEditor) return;
         // 위에 쌓인 팝업(자식 피커 등)은 body 포털이라 floating 내부로 인식되지 않음
         if (isInsideHigherPopupLayer(refs.floating.current, target)) return;
         onClose();
@@ -176,11 +176,12 @@ export const useFloatingPopupPersistentDismissRuntime = ({
         return;
       }
 
-      // 온캔버스 그라데이션 핸들 조작도 팝업 편집의 연장 — 닫힘 예외
-      const isInsideGradientOverlay =
+      // 온캔버스 편집 오버레이(그라데이션 축·자세 기즈모) 조작도 팝업 편집의
+      // 연장이라 닫힘 예외 - 캔버스에 있을 뿐 팝업 밖 클릭이 아니다
+      const isInsideCanvasEditor =
         isElementNode(target) &&
-        !!target.closest('[data-dmn-gradient-overlay="true"]');
-      if (isInsideGradientOverlay) {
+        !!target.closest('[data-dmn-canvas-editor-overlay="true"]');
+      if (isInsideCanvasEditor) {
         pointerCapturedInside = false;
         return;
       }

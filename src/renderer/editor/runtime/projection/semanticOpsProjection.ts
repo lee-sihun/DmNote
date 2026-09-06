@@ -3,6 +3,7 @@ import {
   projectLayerGroupRename,
   projectStableElementGroups,
 } from '@utils/layerGroupUtils';
+import { projectSpriteResize } from '@utils/sprite/resizeProjection';
 import { applySemanticElementPatch } from './semanticElementPatchProjection';
 import { currentPluginGroupMembers } from '../intent/pluginGroupMembers';
 import type {
@@ -20,6 +21,7 @@ export const SEMANTIC_POSITION_FIELDS = {
   stat: 'statPositions',
   graph: 'graphPositions',
   knob: 'knobPositions',
+  sprite: 'spritePositions',
 } as const satisfies Record<EditorElementTypeV1, EditorField>;
 
 type SemanticPositionField =
@@ -64,6 +66,7 @@ export const fieldsForSemanticOp = (op: EditorOpV1): EditorField[] => {
     return [SEMANTIC_POSITION_FIELDS[op.elementType]];
   }
   if (op.kind === 'setKeySlot') return ['keys'];
+  if (op.kind === 'resizeSprite') return ['spritePositions'];
   const positionField = SEMANTIC_POSITION_FIELDS[op.elementType];
   if (op.kind === 'setBounds') return [positionField];
   return op.elementType === 'key' ? ['keys', 'keyPositions'] : [positionField];
@@ -105,7 +108,9 @@ export const applySemanticOps = (
         for (const [elementType, field] of Object.entries(
           SEMANTIC_POSITION_FIELDS,
         ) as Array<[EditorElementTypeV1, SemanticPositionField]>) {
-          for (const [mode, positions] of Object.entries(next[field])) {
+          const positionsByMode: Record<string, readonly { id: string }[]> =
+            next[field];
+          for (const [mode, positions] of Object.entries(positionsByMode)) {
             const index = positions.findIndex(
               (position) => position.id === element.position.id,
             );
@@ -246,6 +251,7 @@ export const applySemanticOps = (
           statPositions: next.statPositions,
           graphPositions: next.graphPositions,
           knobPositions: next.knobPositions,
+          spritePositions: next.spritePositions,
           layerGroups: next.layerGroups,
           pluginElements: currentPluginGroupMembers(),
         });
@@ -253,6 +259,7 @@ export const applySemanticOps = (
         next.statPositions = normalized.statPositions;
         next.graphPositions = normalized.graphPositions;
         next.knobPositions = normalized.knobPositions;
+        next.spritePositions = normalized.spritePositions;
         next.layerGroups = normalized.layerGroups;
       }
       return;
@@ -267,6 +274,7 @@ export const applySemanticOps = (
         statPositions: next.statPositions,
         graphPositions: next.graphPositions,
         knobPositions: next.knobPositions,
+        spritePositions: next.spritePositions,
         layerGroups: next.layerGroups,
         pluginElements: currentPluginGroupMembers(),
       });
@@ -275,6 +283,7 @@ export const applySemanticOps = (
       next.statPositions = projected.statPositions;
       next.graphPositions = projected.graphPositions;
       next.knobPositions = projected.knobPositions;
+      next.spritePositions = projected.spritePositions;
       next.layerGroups = projected.layerGroups;
       return;
     }
@@ -304,6 +313,24 @@ export const applySemanticOps = (
             slotIndex === index ? clone(op.slot) : slot,
           ),
         };
+        break;
+      }
+      return;
+    }
+    if (op.kind === 'resizeSprite') {
+      if (result?.status === 'noChange') return;
+      const positionsByMode = next.spritePositions;
+      for (const [mode, positions] of Object.entries(positionsByMode)) {
+        const index = positions.findIndex((position) => position.id === op.id);
+        if (index < 0) continue;
+        // 결과 bounds(서버 확정)가 있으면 그것으로 projection - 배율 수학은
+        // resizeProjection 하나가 양측 계약을 소유한다
+        const bounds = result?.bounds ?? op.bounds;
+        positionsByMode[mode] = positions.map((position, positionIndex) =>
+          positionIndex === index
+            ? projectSpriteResize(position, bounds)
+            : position,
+        );
         break;
       }
       return;
@@ -340,6 +367,7 @@ export const applySemanticOps = (
         statPositions: next.statPositions,
         graphPositions: next.graphPositions,
         knobPositions: next.knobPositions,
+        spritePositions: next.spritePositions,
         layerGroups: next.layerGroups,
         pluginElements: currentPluginGroupMembers(),
       });
@@ -347,6 +375,7 @@ export const applySemanticOps = (
       next.statPositions = normalized.statPositions;
       next.graphPositions = normalized.graphPositions;
       next.knobPositions = normalized.knobPositions;
+      next.spritePositions = normalized.spritePositions;
       next.layerGroups = normalized.layerGroups;
       break;
     }

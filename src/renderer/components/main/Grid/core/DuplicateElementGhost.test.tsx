@@ -1,10 +1,22 @@
 // @vitest-environment jsdom
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DuplicateState } from '@hooks/Grid/contextMenu/useGridCanvasActions';
 import DuplicateElementGhost from './DuplicateElementGhost';
+
+// 스프라이트 고스트는 전용 컴포넌트 계약(SpriteDuplicateGhost.test)이 따로 잡는다
+vi.mock('../layers/SpriteDuplicateGhost', async () => {
+  const { createElement } = await import('react');
+  return {
+    default: (props: Record<string, unknown>) =>
+      createElement('div', {
+        'data-sprite-ghost': String(props.zoom),
+        'data-cursor': JSON.stringify(props.cursor),
+      }),
+  };
+});
 
 const duplicate = (
   value: Partial<DuplicateState> & Pick<DuplicateState, 'elementType'>,
@@ -37,10 +49,22 @@ describe('DuplicateElementGhost', () => {
   ) => {
     act(() => {
       root.render(
-        <DuplicateElementGhost duplicate={duplicateState} cursor={cursor} />,
+        <DuplicateElementGhost
+          duplicate={duplicateState}
+          cursor={cursor}
+          zoom={2}
+        />,
       );
     });
   };
+
+  it('스프라이트 복제는 전용 고스트에 커서와 배율을 넘긴다', () => {
+    renderGhost(duplicate({ elementType: 'sprite' }), { x: 12, y: 34 });
+
+    const ghost = host.querySelector('[data-sprite-ghost]') as HTMLElement;
+    expect(ghost.getAttribute('data-sprite-ghost')).toBe('2');
+    expect(ghost.getAttribute('data-cursor')).toBe('{"x":12,"y":34}');
+  });
 
   it('복제 상태나 커서가 없으면 고스트를 그리지 않는다', () => {
     renderGhost(null, { x: 10, y: 20 });

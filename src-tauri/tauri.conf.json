@@ -16,6 +16,7 @@
         "label": "main",
         "create": false,
         "title": "DM Note - Settings",
+        "windowClassname": "DmNoteMainWindow",
         "width": 902,
         "height": 488,
         "resizable": false,

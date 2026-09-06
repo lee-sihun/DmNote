@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 pub(crate) use crate::models::BUILTIN_TAB_IDS;
 use crate::models::{
     CustomCss, CustomJs, CustomTab, FontSettings, GraphPositions, KeyMappings, KeyPositions,
-    KnobPositions, LayerGroups, NoteSettings, StatPositions, TabCssOverrides, TabNoteOverrides,
+    KnobPositions, LayerGroups, NoteSettings, SpritePositions, StatPositions, TabCssOverrides,
+    TabNoteOverrides,
 };
 use crate::state::assets::local_asset_path::{file_url_to_path, FileUrlPath};
 
@@ -29,6 +30,7 @@ pub struct PresetSnapshot {
     pub stat_positions: StatPositions,
     pub graph_positions: GraphPositions,
     pub knob_positions: KnobPositions,
+    pub sprite_positions: SpritePositions,
     pub custom_tabs: Vec<CustomTab>,
     pub tab_order: Vec<String>,
     pub bar_count: u8,
@@ -45,6 +47,8 @@ pub(crate) struct PresetFile {
     pub graph_positions: Option<GraphPositions>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub knob_positions: Option<KnobPositions>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sprite_positions: Option<SpritePositions>,
     pub background_color: Option<String>,
     pub note_settings: Option<NoteSettings>,
     pub note_effect: Option<bool>,

@@ -1,6 +1,20 @@
 import { useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { subscribe } from '@api/modules/shared';
+import {
+  accumulatedTransformLinear,
+  cornersMatchRect,
+  hitRectsFromMeasurements,
+  isIdentityLinear,
+  transformedBoxCorners,
+  type MeasuredHitBox,
+  type TransformStyleReader,
+} from '@utils/overlay/hitRegionShape';
+import { borderBoxSize } from '@utils/dom/borderBoxSize';
+import {
+  sampleHitAnimations,
+  type HitAnimationSamples,
+} from '@utils/overlay/hitRegionAnimations';
 
 export interface HitRegionRect {
   x: number;
@@ -266,7 +280,12 @@ const containsHitNode = (node: Node): boolean => {
 
 const mutationAffectsHitNodes = (records: MutationRecord[]): boolean =>
   records.some((record) => {
-    if (record.type === 'attributes') return true;
+    if (record.type === 'attributes') {
+      return (
+        record.attributeName === 'data-overlay-hit' ||
+        containsHitNode(record.target)
+      );
+    }
     return (
       Array.from(record.addedNodes).some(containsHitNode) ||
       Array.from(record.removedNodes).some(containsHitNode)
@@ -274,18 +293,58 @@ const mutationAffectsHitNodes = (records: MutationRecord[]): boolean =>
   });
 
 const measureHitRects = (nodes: HTMLElement[]): HitRegionRect[] => {
-  const rects: HitRegionRect[] = [];
+  const boxes: MeasuredHitBox[] = [];
+  // 키들이 같은 조상을 공유하므로 한 번의 측정 안에서 스타일은 요소당 한 번만 읽는다
+  const styles = new Map<Element, ReturnType<TransformStyleReader>>();
+  const readStyle: TransformStyleReader = (element) => {
+    const cached = styles.get(element);
+    if (cached) return cached;
+    const style = getComputedStyle(element);
+    const read = {
+      transform: style.transform,
+      rotate: style.rotate,
+      scale: style.scale,
+      zoom: style.zoom,
+      offsetPath: style.offsetPath,
+    };
+    styles.set(element, read);
+    return read;
+  };
   nodes.forEach((node) => {
     const rect = node.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return;
-    rects.push({
+    const aabb = {
       x: rect.left,
       y: rect.top,
       width: rect.width,
       height: rect.height,
+    };
+    // 회전·배율이 걸린 요소는 AABB가 빈 모서리까지 잡는다. 문서 루트까지 누적한
+    // 변환으로 화면 꼭짓점을 복원해 띠로 쪼개면 히트 창 계약(사각형 목록)을 그대로
+    // 쓰면서 모양을 따른다. 복원할 수 없는 변환(3D·zoom)은 AABB로 남긴다
+    const linear = accumulatedTransformLinear(node, readStyle);
+    if (!linear || isIdentityLinear(linear)) {
+      boxes.push({ aabb, corners: null });
+      return;
+    }
+    const size = borderBoxSize(node, getComputedStyle(node));
+    if (size.width <= 0 || size.height <= 0) {
+      boxes.push({ aabb, corners: null });
+      return;
+    }
+    const corners = transformedBoxCorners(
+      { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
+      size.width,
+      size.height,
+      linear,
+    );
+    // 복원한 꼭짓점이 실측 AABB와 어긋나면 읽지 못한 변환(원근·z 이동)이 있다는 뜻
+    boxes.push({
+      aabb,
+      corners: cornersMatchRect(corners, aabb) ? corners : null,
     });
   });
-  return rects;
+  return hitRectsFromMeasurements(boxes);
 };
 
 /**
@@ -336,23 +395,94 @@ export const useOverlayHitRegions = (generation: unknown) => {
     if (IS_OBS) return;
     let cancelled = false;
     let raf = 0;
+    let animationRaf = 0;
+    let animationTargetsDirty = true;
+    const animationTargets = new Set<Element>();
+    let animationSamples: HitAnimationSamples = new Map();
     const observer = new ResizeObserver(() => scheduleMeasure());
+    const observedNodes = new Set<HTMLElement>();
     const mutationObserver = new MutationObserver((records) => {
-      if (mutationAffectsHitNodes(records)) scheduleMeasure();
+      if (!mutationAffectsHitNodes(records)) return;
+      if (records.some((record) => record.type === 'childList')) {
+        animationTargetsDirty = true;
+      }
+      scheduleMeasure();
     });
 
     // rAF 1회로 coalesce - 페인트 확정 후 실측.
     // 노드 집합을 매번 다시 모아 커스텀 JS·플러그인이 키를 추가·제거한 경우도 덮는다
     const scheduleMeasure = () => {
-      cancelAnimationFrame(raf);
+      if (raf !== 0) return;
       raf = requestAnimationFrame(() => {
+        raf = 0;
         if (cancelled) return;
         const nodes = hitNodes();
-        observer.disconnect();
-        nodes.forEach((node) => observer.observe(node));
+        const nextNodes = new Set(nodes);
+        for (const node of observedNodes) {
+          if (nextNodes.has(node)) continue;
+          observer.unobserve(node);
+          observedNodes.delete(node);
+          animationTargetsDirty = true;
+        }
+        for (const node of nodes) {
+          if (observedNodes.has(node)) continue;
+          try {
+            observer.observe(node, { box: 'border-box' });
+          } catch {
+            observer.observe(node);
+          }
+          observedNodes.add(node);
+          animationTargetsDirty = true;
+        }
+        if (animationTargetsDirty) {
+          animationTargets.clear();
+          for (const node of nodes) {
+            let target: Element | null = node;
+            while (target && !animationTargets.has(target)) {
+              animationTargets.add(target);
+              target = target.parentElement;
+            }
+          }
+          animationTargetsDirty = false;
+        }
         syncHitRegions(measureHitRects(nodes));
       });
     };
+
+    // WAAPI 시작에는 DOM 이벤트가 없으므로 재생 목록은 매 프레임 확인
+    // 실제 기하 측정은 히트 루트·조상의 기하 애니메이션이 바뀔 때만 실행
+    const watchAnimations = () => {
+      if (cancelled) return;
+      if (animationTargets.size > 0) {
+        const { samples, changed } = sampleHitAnimations(
+          document.getAnimations(),
+          animationTargets,
+          animationSamples,
+        );
+        animationSamples = samples;
+        if (changed) scheduleMeasure();
+      }
+      animationRaf = requestAnimationFrame(watchAnimations);
+    };
+    if (typeof document.getAnimations === 'function') {
+      animationRaf = requestAnimationFrame(watchAnimations);
+    }
+
+    // 목록 조회를 지원하지 않는 웹뷰도 종료·취소 시 최종 배치는 반영
+    const animationEvents = [
+      'animationend',
+      'animationcancel',
+      'transitionend',
+      'transitioncancel',
+    ];
+    const handleAnimation = (event: Event) => {
+      if (event.target instanceof Element && containsHitNode(event.target)) {
+        scheduleMeasure();
+      }
+    };
+    animationEvents.forEach((event) =>
+      document.addEventListener(event, handleAnimation),
+    );
 
     scheduleRef.current = scheduleMeasure;
     requestMeasure = scheduleMeasure;
@@ -362,7 +492,7 @@ export const useOverlayHitRegions = (generation: unknown) => {
     window.addEventListener('resize', scheduleMeasure);
     mutationObserver.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ['data-overlay-hit'],
+      attributeFilter: ['data-overlay-hit', 'style', 'class', 'data-state'],
       childList: true,
       subtree: true,
     });
@@ -371,8 +501,12 @@ export const useOverlayHitRegions = (generation: unknown) => {
     return () => {
       cancelled = true;
       cancelAnimationFrame(raf);
+      cancelAnimationFrame(animationRaf);
       observer.disconnect();
       mutationObserver.disconnect();
+      animationEvents.forEach((event) =>
+        document.removeEventListener(event, handleAnimation),
+      );
       unwatchScale();
       window.removeEventListener('resize', scheduleMeasure);
       requestMeasure = () => {};

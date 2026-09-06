@@ -21,6 +21,8 @@ interface CapturedNumberInput {
   min?: number;
   max?: number;
   prefix?: string;
+  value?: number;
+  isMixed?: boolean;
   onChange?: (value: number) => void;
   onPreview?: (value: number) => void;
   onBlur?: () => void;
@@ -98,7 +100,9 @@ describe('배치 스타일 숫자 필드 취소', () => {
   let handleBatchResize: Mock;
   let handleBatchResizePreview: Mock;
 
-  const renderPanel = () => {
+  const renderPanel = (
+    overrides: Partial<React.ComponentProps<typeof BatchStyleTabContent>> = {},
+  ) => {
     const positions = [flatPosition(), flatPosition(), flatPosition()];
     act(() => {
       root.render(
@@ -115,6 +119,7 @@ describe('배치 스타일 숫자 필드 취소', () => {
             selectedCount={3}
             shadowActiveState
             getMixedValue={mixedGetter(positions)}
+            getMixedValueSize={mixedGetter(positions)}
             getKeyOnlyMixedValue={mixedGetter(positions)}
             getSelectedKeysData={() => []}
             handleBatchAlign={handleBatchAlign}
@@ -129,6 +134,7 @@ describe('배치 스타일 숫자 필드 취소', () => {
             panelElement={null}
             useCustomCSS={false}
             t={(key) => key}
+            {...overrides}
           />
         </PanelNavProvider>,
       );
@@ -153,6 +159,32 @@ describe('배치 스타일 숫자 필드 취소', () => {
     host.remove();
     vi.useRealTimers();
     vi.restoreAllMocks();
+  });
+
+  // 크기 조절 대상에는 스프라이트가 들어가지만 스타일 대상에는 없다.
+  // 크기 입력이 스타일 getter로 되돌아가면 스프라이트 값이 대표값에 가린다
+  it('크기 입력은 스타일 getter가 아니라 크기 getter를 읽는다', () => {
+    renderPanel({
+      getMixedValue: (<T,>(_getter: unknown, _fallback: T) => ({
+        isMixed: false,
+        value: 60 as unknown as T,
+      })) as React.ComponentProps<typeof BatchStyleTabContent>['getMixedValue'],
+      getMixedValueSize: (<T,>(_getter: unknown, _fallback: T) => ({
+        isMixed: true,
+        value: 200 as unknown as T,
+      })) as React.ComponentProps<
+        typeof BatchStyleTabContent
+      >['getMixedValueSize'],
+    });
+
+    for (const prefix of ['W', 'H']) {
+      const field = captured.numberInputs.find(
+        (props) => props.prefix === prefix,
+      );
+      expect(field).toBeTruthy();
+      expect(field?.isMixed).toBe(true);
+      expect(field?.value).toBe(200);
+    }
   });
 
   it('간격 취소는 예약만 되고 아직 안 나간 커밋을 걷는다', () => {

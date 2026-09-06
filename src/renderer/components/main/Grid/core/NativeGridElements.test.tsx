@@ -6,6 +6,7 @@ import type {
   CanonicalGraphItemPosition,
   CanonicalKeyPosition,
   CanonicalKnobItemPosition,
+  CanonicalReactiveSpritePosition,
   CanonicalStatItemPosition,
 } from '@src/types/editor';
 import NativeGridElements from './NativeGridElements';
@@ -75,6 +76,7 @@ async function createElementRenderer(kind: string) {
 vi.mock('@components/shared/key/Key', () => createElementRenderer('key-like'));
 vi.mock('../layers/GraphItem', () => createElementRenderer('graph'));
 vi.mock('../layers/KnobItem', () => createElementRenderer('knob'));
+vi.mock('../layers/SpriteItem', () => createElementRenderer('sprite'));
 
 const keyPosition = (
   id: string,
@@ -87,6 +89,7 @@ const KEY_ID = '00000000-0000-4000-8000-000000000101';
 const STAT_ID = '00000000-0000-4000-8000-000000000102';
 const GRAPH_ID = '00000000-0000-4000-8000-000000000103';
 const KNOB_ID = '00000000-0000-4000-8000-000000000104';
+const SPRITE_ID = '00000000-0000-4000-8000-000000000105';
 
 describe('NativeGridElements', () => {
   let host: HTMLDivElement;
@@ -141,6 +144,12 @@ describe('NativeGridElements', () => {
               reverse: false,
             } as CanonicalKnobItemPosition,
           ]}
+          spritePositions={[
+            {
+              ...keyPosition(SPRITE_ID, 80),
+              poses: [],
+            } as unknown as CanonicalReactiveSpritePosition,
+          ]}
           pluginElements={[]}
           selectedElements={[{ type: 'graph', id: GRAPH_ID, index: 0 }]}
           activeTool="select"
@@ -194,7 +203,7 @@ describe('NativeGridElements', () => {
     host.remove();
   });
 
-  it('키·통계·그래프·노브를 기존 순서와 표시 모델로 렌더한다', () => {
+  it('키·통계·그래프·노브·스프라이트를 기존 순서와 표시 모델로 렌더한다', () => {
     renderScene();
 
     const elements = [...host.querySelectorAll('[data-native-kind]')];
@@ -203,10 +212,39 @@ describe('NativeGridElements', () => {
       'Total',
       'graph',
       'knob',
+      'sprite',
     ]);
     expect(
       elements.map((element) => element.getAttribute('data-selected')),
-    ).toEqual(['false', 'false', 'true', 'false']);
+    ).toEqual(['false', 'false', 'true', 'false', 'false']);
+  });
+
+  it('스프라이트도 같은 공통 핸들러로 위치 커밋·삭제·메뉴를 라우팅한다', () => {
+    renderScene();
+    const sprite = host.querySelector(`[data-element-id="${SPRITE_ID}"]`)!;
+
+    dispatchMouse(sprite, 'mousedown');
+    expect(operationMocks.commitPosition).toHaveBeenCalledWith(
+      'sprite',
+      SPRITE_ID,
+      12,
+      34,
+    );
+
+    dispatchMouse(sprite, 'contextmenu', { clientX: 3, clientY: 4 });
+    expect(callbacks.openContext).toHaveBeenCalledWith(
+      'sprite',
+      0,
+      3,
+      4,
+      sprite,
+    );
+
+    dispatchMouse(sprite, 'mouseup', { button: 1 });
+    expect(operationMocks.deleteElement).toHaveBeenCalledWith(
+      'sprite',
+      SPRITE_ID,
+    );
   });
 
   it('선택·범위 선택·위치 커밋·컨텍스트 메뉴 동작을 유형별로 라우팅한다', () => {
@@ -268,6 +306,7 @@ describe('NativeGridElements', () => {
       `stat:${STAT_ID}`,
       `graph:${GRAPH_ID}`,
       `knob:${KNOB_ID}`,
+      `sprite:${SPRITE_ID}`,
     ]);
   });
 });

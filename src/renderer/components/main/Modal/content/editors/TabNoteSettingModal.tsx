@@ -9,8 +9,8 @@ import type {
   NoteSettings,
   TabNoteSettings,
 } from '@src/types/settings/noteSettings';
-import { useTranslation } from '@contexts/useTranslation';
 import { noteTabApi } from '@api/modules/editor/noteTabApi';
+import { useTranslation } from '@contexts/useTranslation';
 
 interface TabNoteSettingModalProps {
   isOpen: boolean;
@@ -18,13 +18,25 @@ interface TabNoteSettingModalProps {
 }
 
 const TabNoteSettingModal = ({ isOpen, onClose }: TabNoteSettingModalProps) => {
-  const { t: _t } = useTranslation();
+  const { t } = useTranslation();
   const globalSettings = useSettingsStore((s) => s.noteSettings);
   const noteEffect = useSettingsStore((s) => s.noteEffect);
   const selectedKeyType = useKeyStore((s) => s.selectedKeyType);
   const [tabOverride, setTabOverride] = useState<TabNoteSettings | null>(null);
   const [loading, setLoading] = useState(true);
+  const [editingTabId, setEditingTabId] = useState(selectedKeyType);
+  const [wasOpen, setWasOpen] = useState(isOpen);
+  const [saveErrorMessage, setSaveErrorMessage] = useState<string | null>(null);
   const loadGenerationRef = useRef(0);
+
+  if (isOpen !== wasOpen) {
+    setWasOpen(isOpen);
+    if (isOpen) {
+      setEditingTabId(selectedKeyType);
+      setLoading(true);
+      setSaveErrorMessage(null);
+    }
+  }
 
   // 모달 열릴 때 현재 탭의 오버라이드 로드
   useEffect(() => {
@@ -35,7 +47,7 @@ const TabNoteSettingModal = ({ isOpen, onClose }: TabNoteSettingModalProps) => {
 
     setLoading(true);
     window.api.noteTab
-      .get(selectedKeyType)
+      .get(editingTabId)
       .then((res) => {
         if (!isCurrentGeneration()) return;
         setTabOverride(res.settings ?? null);
@@ -56,25 +68,30 @@ const TabNoteSettingModal = ({ isOpen, onClose }: TabNoteSettingModalProps) => {
         loadGenerationRef.current += 1;
       }
     };
-  }, [isOpen, selectedKeyType]);
+  }, [isOpen, editingTabId]);
 
   const handleSave = async (normalized: NoteSettings) => {
-    try {
-      // 전역 설정과 비교하여 다른 값만 오버라이드로 저장
-      const override: TabNoteSettings = {};
-      const keys = Object.keys(normalized) as (keyof NoteSettings)[];
-      for (const key of keys) {
-        if (normalized[key] !== globalSettings[key]) {
-          (override as Record<string, NoteSettings[keyof NoteSettings]>)[key] =
-            normalized[key];
-        }
-      }
-      // 모든 값이 전역과 동일하면 오버라이드 제거
-      const hasOverride = Object.keys(override).length > 0;
-      await noteTabApi.set(selectedKeyType, hasOverride ? override : null);
-    } catch (error) {
-      console.error('Failed to save tab note settings', error);
+    const { keyMappings, customTabs } = useKeyStore.getState();
+    if (
+      !Object.prototype.hasOwnProperty.call(keyMappings, editingTabId) &&
+      !customTabs.some((tab) => tab.id === editingTabId)
+    ) {
+      setSaveErrorMessage(t('common.editTargetMissing'));
+      throw new Error('Tab note settings target no longer exists');
     }
+    setSaveErrorMessage(null);
+    // 전역 설정과 비교하여 다른 값만 오버라이드로 저장
+    const override: TabNoteSettings = {};
+    const keys = Object.keys(normalized) as (keyof NoteSettings)[];
+    for (const key of keys) {
+      if (normalized[key] !== globalSettings[key]) {
+        (override as Record<string, NoteSettings[keyof NoteSettings]>)[key] =
+          normalized[key];
+      }
+    }
+    // 모든 값이 전역과 동일하면 오버라이드 제거
+    const hasOverride = Object.keys(override).length > 0;
+    await noteTabApi.set(editingTabId, hasOverride ? override : null);
   };
 
   // 퇴장 모션이 도는 동안 DOM을 유지한다
@@ -96,6 +113,7 @@ const TabNoteSettingModal = ({ isOpen, onClose }: TabNoteSettingModalProps) => {
       settings={mergedSettings}
       onClose={onClose}
       onSave={handleSave}
+      saveErrorMessage={saveErrorMessage}
     />
   );
 };

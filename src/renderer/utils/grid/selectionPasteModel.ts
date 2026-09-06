@@ -3,6 +3,7 @@ import type {
   CanonicalGraphItemPosition,
   CanonicalKeyPosition,
   CanonicalKnobItemPosition,
+  CanonicalReactiveSpritePosition,
   CanonicalStatItemPosition,
   EditorInsertFrozenElementsOpV1,
 } from '@src/types/editor';
@@ -35,6 +36,7 @@ interface FrozenPasteModelOptions {
   statsToAdd: Array<{ position: CanonicalStatItemPosition }>;
   graphsToAdd: Array<{ position: CanonicalGraphItemPosition }>;
   knobsToAdd: Array<{ position: CanonicalKnobItemPosition }>;
+  spritesToAdd: Array<{ position: CanonicalReactiveSpritePosition }>;
   frozenPluginElements: PluginDisplayElementInternal[];
   pluginIdsToAdd: string[];
   frozenNewGroups: Array<{ id: string; name: string; collapsed: boolean }>;
@@ -53,6 +55,7 @@ export const createFrozenPasteModel = ({
   statsToAdd,
   graphsToAdd,
   knobsToAdd,
+  spritesToAdd,
   frozenPluginElements,
   pluginIdsToAdd,
   frozenNewGroups,
@@ -78,6 +81,7 @@ export const createFrozenPasteModel = ({
     statPositions: CanonicalEditorDocumentV1['statPositions'];
     graphPositions: CanonicalEditorDocumentV1['graphPositions'];
     knobPositions: CanonicalEditorDocumentV1['knobPositions'];
+    spritePositions: CanonicalEditorDocumentV1['spritePositions'];
     layerGroups: Record<string, Array<{ id: string; name: string }>>;
   }
 
@@ -113,6 +117,7 @@ export const createFrozenPasteModel = ({
         'statPositions',
         'graphPositions',
         'knobPositions',
+        'spritePositions',
       ] as const;
       for (const field of fields) {
         for (const [ownMode, list] of Object.entries(view[field])) {
@@ -130,6 +135,7 @@ export const createFrozenPasteModel = ({
     const nextStatPositions = { ...view.statPositions };
     const nextGraphPositions = { ...view.graphPositions };
     const nextKnobPositions = { ...view.knobPositions };
+    const nextSpritePositions = { ...view.spritePositions };
 
     const appendedNativeIds = new Set<string>();
     let realizedFrozenNativeParts = 0;
@@ -206,6 +212,11 @@ export const createFrozenPasteModel = ({
       knobsToAdd,
       'knobPositions',
     );
+    const spriteNext = appendSimple(
+      nextSpritePositions,
+      spritesToAdd,
+      'spritePositions',
+    );
 
     // 신규 그룹 append (id 기준 멱등)
     let layerGroups = view.layerGroups;
@@ -268,6 +279,7 @@ export const createFrozenPasteModel = ({
       statNext as never,
       graphNext as never,
       knobNext as never,
+      spriteNext as never,
       combinedProjection,
     );
     const newIdSet = new Set<string>([
@@ -300,6 +312,10 @@ export const createFrozenPasteModel = ({
         item: entry.position.id,
         zIndex: entry.position.zIndex,
       })),
+      ...spritesToAdd.map((entry) => ({
+        item: entry.position.id,
+        zIndex: entry.position.zIndex ?? undefined,
+      })),
       ...frozenPluginElements.map((element) => ({
         item: element.fullId,
         zIndex: element.zIndex,
@@ -331,6 +347,7 @@ export const createFrozenPasteModel = ({
       statNext as never,
       graphNext as never,
       knobNext as never,
+      spriteNext as never,
     );
     const zByFullId = new Map(
       zPatch.pluginUpdates.map((update) => [update.fullId, update.zIndex]),
@@ -367,6 +384,7 @@ export const createFrozenPasteModel = ({
       ...statsToAdd.map((entry) => entry.position.id),
       ...graphsToAdd.map((entry) => entry.position.id),
       ...knobsToAdd.map((entry) => entry.position.id),
+      ...spritesToAdd.map((entry) => entry.position.id),
     ]);
     const finalById = <T extends { id: string }>(record: Record<string, T[]>) =>
       new Map((record[mode] ?? []).map((position) => [position.id, position]));
@@ -374,6 +392,7 @@ export const createFrozenPasteModel = ({
     const finalStats = finalById(plan.zPatch.statPositions);
     const finalGraphs = finalById(plan.zPatch.graphPositions);
     const finalKnobs = finalById(plan.zPatch.knobPositions);
+    const finalSprites = finalById(plan.zPatch.spritePositions);
     const elements: EditorInsertFrozenElementsOpV1['elements'] = [
       ...keysToAdd.map((entry) => ({
         elementType: 'key' as const,
@@ -392,10 +411,14 @@ export const createFrozenPasteModel = ({
         elementType: 'knob' as const,
         position: finalKnobs.get(entry.position.id) ?? entry.position,
       })),
+      ...spritesToAdd.map((entry) => ({
+        elementType: 'sprite' as const,
+        position: finalSprites.get(entry.position.id) ?? entry.position,
+      })),
     ];
     const zUpdates: EditorInsertFrozenElementsOpV1['zUpdates'] = [];
     const collectZUpdates = (
-      elementType: 'key' | 'stat' | 'graph' | 'knob',
+      elementType: 'key' | 'stat' | 'graph' | 'knob' | 'sprite',
       current: Array<{ id: string }>,
       final: Map<string, { id: string; zIndex?: number }>,
     ) => {
@@ -413,7 +436,8 @@ export const createFrozenPasteModel = ({
       collectZUpdates('key', view.keyPositions[mode] ?? [], finalKeys) &&
       collectZUpdates('stat', view.statPositions[mode] ?? [], finalStats) &&
       collectZUpdates('graph', view.graphPositions[mode] ?? [], finalGraphs) &&
-      collectZUpdates('knob', view.knobPositions[mode] ?? [], finalKnobs);
+      collectZUpdates('knob', view.knobPositions[mode] ?? [], finalKnobs) &&
+      collectZUpdates('sprite', view.spritePositions[mode] ?? [], finalSprites);
     if (!stable) {
       throw new ElementIntentAbort('paste source document is not canonical');
     }

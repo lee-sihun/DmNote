@@ -283,6 +283,7 @@ mod tests {
         "TOO_MANY_LAYER_GROUPS",
         "TOO_MANY_MODES",
         "TOO_MANY_PLUGIN_INSTANCES",
+        "TOO_MANY_SPRITE_POSE_TRIGGERS",
         "TOO_MANY_RENDER_ITEMS",
         "TOO_MANY_SLOTS_PER_MEMBER",
     ];

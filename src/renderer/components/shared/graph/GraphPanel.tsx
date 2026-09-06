@@ -13,12 +13,15 @@ import {
   normalizeGraphHistory,
   useAnimatedGraphHistory,
 } from './useAnimatedGraphHistory';
+import { elementRotationTransform } from '@utils/element/rotation';
 
 const BAR_ANIMATION_DURATION_MS = 150;
 const LINE_ANIMATION_DURATION_MS = 150;
 
 interface GraphPanelProps {
   dx?: number;
+  // 요소 회전(도) - 논리 상자 중심 기준
+  rotation?: number;
   dy?: number;
   width?: number;
   height?: number;
@@ -135,6 +138,7 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
     {
       dx = 0,
       dy = 0,
+      rotation = 0,
       width = 200,
       height = 100,
       zIndex = 0,
@@ -174,13 +178,14 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
     const shouldPromoteTransformLayer =
       !interactive || promoteTransformLayer === true;
     const resolvedGraphType = graphType === 'bar' ? 'bar' : 'line';
-    const transform = withOffsetVars
+    const translate = withOffsetVars
       ? interactive
         ? `translate(calc(${dx}px + var(--key-offset-x, 0px)), calc(${dy}px + var(--key-offset-y, 0px)))`
         : `translate3d(calc(${dx}px + var(--key-offset-x, 0px)), calc(${dy}px + var(--key-offset-y, 0px)), 0)`
       : interactive
       ? `translate(${dx}px, ${dy}px)`
       : `translate3d(${dx}px, ${dy}px, 0)`;
+    const transform = `${translate}${elementRotationTransform(rotation)}`;
 
     const normalizedHistory = useMemo(
       () => normalizeGraphHistory(history),

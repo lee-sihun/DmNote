@@ -9,8 +9,8 @@ use crate::{
     defaults::default_keys,
     errors::EditorCommitError,
     models::{
-        CustomTab, EditorCommitRequest, EditorDocumentV1, EDITOR_COMMIT_SCHEMA_VERSION_V2,
-        EDITOR_OPS_VERSION, EDITOR_SCHEMA_VERSION,
+        CustomTab, EditorCommitRequest, EditorDocumentV1, GestureCommitRequest,
+        EDITOR_COMMIT_SCHEMA_VERSION_V2, EDITOR_OPS_VERSION, EDITOR_SCHEMA_VERSION,
     },
     state::tab_metadata::normalize_tab_order,
 };
@@ -787,15 +787,63 @@ pub(crate) fn validate_history_restore_metadata(
 pub(crate) fn request_fingerprint(
     request: &EditorCommitRequest,
 ) -> Result<RequestFingerprint, EditorCommitError> {
-    canonical_request_fingerprint(&FingerprintPayload {
-        base_revision: request.base_revision,
-        multi_key: request.multi_key,
-        gesture_id: request.gesture_id.as_deref(),
-        gesture_ids: &request.gesture_ids,
-        changes: &request.changes,
-        ops_version: &request.ops_version,
-        ops: &request.ops,
-    })
+    canonical_request_fingerprint_with_presence(
+        &FingerprintPayload {
+            base_revision: request.base_revision,
+            multi_key: request.multi_key,
+            gesture_id: request.gesture_id.as_deref(),
+            gesture_ids: &request.gesture_ids,
+            changes: &request.changes,
+            ops_version: &request.ops_version,
+            ops: &request.ops,
+        },
+        request
+            .changes
+            .as_ref()
+            .and_then(|changes| changes.sprite_positions_presence.as_ref()),
+    )
+}
+
+pub(crate) fn gesture_request_fingerprint(
+    request: &GestureCommitRequest,
+) -> Result<RequestFingerprint, EditorCommitError> {
+    canonical_request_fingerprint_with_presence(
+        request,
+        request
+            .editor_changes
+            .as_ref()
+            .and_then(|changes| changes.sprite_positions_presence.as_ref()),
+    )
+}
+
+fn canonical_request_fingerprint_with_presence(
+    payload: &impl Serialize,
+    presence: Option<&crate::models::editor::SpritePositionsPatchPresence>,
+) -> Result<RequestFingerprint, EditorCommitError> {
+    let mut value = serde_json::to_value(payload).map_err(|error| {
+        EditorCommitError::validation(
+            "INVALID_REQUEST_PAYLOAD",
+            format!("failed to serialize editor request: {error}"),
+        )
+    })?;
+    if let Some(presence) = presence {
+        let object = value.as_object_mut().ok_or_else(|| {
+            EditorCommitError::validation(
+                "INVALID_REQUEST_PAYLOAD",
+                "editor request fingerprint payload must be an object",
+            )
+        })?;
+        object.insert(
+            "__spritePositionsPresence".to_string(),
+            serde_json::to_value(presence).map_err(|error| {
+                EditorCommitError::validation(
+                    "INVALID_REQUEST_PAYLOAD",
+                    format!("failed to serialize sprite patch presence: {error}"),
+                )
+            })?,
+        );
+    }
+    canonical_request_fingerprint(&value)
 }
 
 pub(crate) fn canonical_request_fingerprint(

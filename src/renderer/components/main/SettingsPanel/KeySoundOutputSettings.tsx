@@ -13,14 +13,16 @@ import {
 interface KeySoundOutputSettingsProps {
   onMouseEnter: () => void;
   onMouseLeave: () => void;
+  onSaveFailed?: () => void;
 }
 
 const KeySoundOutputSettings = ({
   onMouseEnter,
   onMouseLeave,
+  onSaveFailed,
 }: KeySoundOutputSettingsProps) => {
   const { t } = useTranslation();
-  const { state, devices, enqueue } = useKeySoundOutput();
+  const { state, devices, enqueue } = useKeySoundOutput({ onSaveFailed });
   const viewModel = createKeySoundOutputViewModel(state, devices);
 
   const handleOutputChange = (value: string) => {

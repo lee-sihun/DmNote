@@ -7,6 +7,7 @@ import type {
 } from '@src/types/plugin/api';
 import { subscribe } from '../shared';
 import { assertCanonicalEditorDocument } from '@src/types/editor';
+import { beginEditorWriteBarrier } from '@src/renderer/editor/runtime/lifecycle/editorWriteBarrier';
 
 import type {
   BootstrapPayload,
@@ -30,8 +31,17 @@ export async function runAfterEditorFlush<T>(
   load: EditorCoordinatorLoader = loadEditorCoordinator,
 ): Promise<T> {
   try {
-    const { editorCoordinator } = await load();
-    await editorCoordinator.flush();
+    const drainWrites = beginEditorWriteBarrier();
+    let writesCommitted: boolean;
+    try {
+      const { editorCoordinator } = await load();
+      await editorCoordinator.flush();
+    } finally {
+      writesCommitted = await drainWrites();
+    }
+    if (!writesCommitted) {
+      throw new Error('pending window writes failed to drain');
+    }
   } catch (error) {
     console.error(`[Editor] ${action} canceled because saving failed`, error);
     throw error;
@@ -40,15 +50,9 @@ export async function runAfterEditorFlush<T>(
 }
 
 export const acknowledgeLifecycleAfterEditorFlush = (handshakeId: string) =>
-  runAfterEditorFlush('app lifecycle', async () => {
-    const editorBarrier = await import(
-      '@src/renderer/editor/runtime/lifecycle/editorWriteBarrier'
-    );
-    if (!(await editorBarrier.drainEditorWrites())) {
-      throw new Error('pending window writes failed to drain');
-    }
-    return invoke<void>('app_quit_after_editor_flush', { handshakeId });
-  });
+  runAfterEditorFlush('app lifecycle', () =>
+    invoke<void>('app_quit_after_editor_flush', { handshakeId }),
+  );
 
 export const cancelLifecycleEditorFlush = (handshakeId: string) =>
   invoke<void>('app_cancel_editor_flush', { handshakeId });
@@ -56,6 +60,8 @@ export const cancelLifecycleEditorFlush = (handshakeId: string) =>
 export const appApi = {
   bootstrap: async (): Promise<CanonicalBootstrapPayload> => {
     const payload = await invoke<BootstrapPayload>('app_bootstrap');
+    // 구버전 payload 호환: 스프라이트 미포함이면 빈 컬렉션
+    payload.spritePositions ??= {};
     assertCanonicalEditorDocument(
       {
         schemaVersion: 1,
@@ -64,6 +70,7 @@ export const appApi = {
         statPositions: payload.statPositions,
         graphPositions: payload.graphPositions,
         knobPositions: payload.knobPositions,
+        spritePositions: payload.spritePositions,
         layerGroups: payload.layerGroups,
       },
       'app_bootstrap editor document',

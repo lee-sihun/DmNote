@@ -4,6 +4,7 @@ import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useFontStore, syncFontCSS } from '@stores/useFontStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import {
@@ -178,7 +179,7 @@ export function useAppBootstrap() {
     };
 
     let conflictDialogOpen = false;
-    let lastShownPermanentEditorError: unknown = null;
+    let lastShownEditorError: unknown = null;
 
     const scheduleEditorCoordinatorRecovery = () => {
       if (disposed || editorCoordinatorRetryTimer !== null) return;
@@ -261,22 +262,31 @@ export function useAppBootstrap() {
     };
 
     const handleEditorFailure = (state: EditorCoordinatorState) => {
+      const transient = state.failureKind === 'transient';
       if (
         disposed ||
         isOverlayWindow ||
-        state.failureKind !== 'permanent' ||
+        (state.failureKind !== 'permanent' && (!transient || state.dirty)) ||
         !state.error ||
-        state.error === lastShownPermanentEditorError
+        state.error === lastShownEditorError
       ) {
         return;
       }
 
-      lastShownPermanentEditorError = state.error;
+      lastShownEditorError = state.error;
       console.error(
-        '저장할 수 없는 편집 내용을 마지막 저장 상태로 되돌렸습니다',
+        transient
+          ? '편집 저장 중 문제가 생겼습니다'
+          : '저장할 수 없는 편집 내용을 마지막 저장 상태로 되돌렸습니다',
         state.error,
       );
-      const message = isEditorCapacityFailure(state.error)
+      const message = transient
+        ? getEditorCopy(
+            'editorSave.transientFailure',
+            '편집 저장 중 문제가 생겼습니다.\n현재 값을 확인하고 다시 시도해 주세요.',
+            'There was a problem saving your edit.\nCheck the current value and try again.',
+          )
+        : isEditorCapacityFailure(state.error)
         ? getEditorCopy(
             'editorSave.capacityFailure',
             '저장 한도를 넘어 변경을 되돌렸습니다.\n일부 요소를 줄이고 다시 시도해 주세요.',
@@ -493,6 +503,10 @@ export function useAppBootstrap() {
           ...state,
           positions: bootstrap.knobPositions ?? {},
         }));
+        useSpriteStore.setState((state) => ({
+          ...state,
+          positions: bootstrap.spritePositions ?? {},
+        }));
         useLayerGroupStore
           .getState()
           .setLayerGroups(bootstrap.layerGroups ?? {});
@@ -579,10 +593,10 @@ export function useAppBootstrap() {
         action: 'quit' | 'restart' | 'history';
       }>('app:close-requested', ({ handshakeId, action }) => {
         if (disposed) return;
-        if (action === 'history') {
-          acquireHistoryEditorFlushLock(handshakeId);
-        }
         void (async () => {
+          if (action === 'history') {
+            acquireHistoryEditorFlushLock(handshakeId);
+          }
           const committed = await flushFocusedEditor();
           if (!committed) {
             throw new Error('pending focused editor failed to commit');
@@ -594,11 +608,34 @@ export function useAppBootstrap() {
             await cancelLifecycleEditorFlush(handshakeId).catch(
               () => undefined,
             );
-            if (action === 'history') return;
-            const overlay = await window.api.overlay.get().catch(() => null);
-            await windowApi.showMain();
-            if (overlay?.visible) {
-              await overlayApi.setVisible(true);
+            if (action !== 'history') {
+              const overlay = await window.api.overlay.get().catch(() => null);
+              await windowApi.showMain();
+              if (overlay?.visible) {
+                await overlayApi.setVisible(true);
+              }
+            }
+            const state = editorCoordinator.getState();
+            if (
+              !disposed &&
+              !isOverlayWindow &&
+              (!state.error || state.error !== lastShownEditorError) &&
+              !state.conflict
+            ) {
+              await window.api.ui.dialog.alert(
+                action === 'history'
+                  ? getEditorCopy(
+                      'editorSave.historyCancelled',
+                      '저장에 실패해 실행 취소·다시 실행을 중단했습니다.\n변경 내용을 확인하고 다시 시도해 주세요.',
+                      "Couldn't save your changes, so undo or redo was canceled.\nCheck your changes and try again.",
+                    )
+                  : getEditorCopy(
+                      'editorSave.lifecycleCancelled',
+                      '저장에 실패해 종료·재시작을 중단했습니다.\n변경 내용을 확인하고 다시 시도해 주세요.',
+                      "Couldn't save your changes, so quitting or restarting was canceled.\nCheck your changes and try again.",
+                    ),
+                { confirmText: getEditorCopy('common.ok', '확인', 'OK') },
+              );
             }
           })().catch((showError) => {
             console.error('종료 취소 후 창 복원 실패', showError);

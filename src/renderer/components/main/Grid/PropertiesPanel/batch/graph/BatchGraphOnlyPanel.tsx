@@ -63,6 +63,8 @@ interface BatchGraphOnlyPanelProps {
     options?: { gestureId?: string },
   ) => void;
   handleGraphBatchSharedSetting: (updates: Partial<GraphItemPosition>) => void;
+  /** 크기 표시 전용 - resize 대상 집합(스프라이트 포함)에서 파생된다 */
+  getMixedValueGeometry: MixedValueGetter<KeyPosition>;
   getMixedValueGraphs: MixedValueGetter<GraphItemPosition>;
   getMixedValueGraphsAsKey: MixedValueGetter<KeyPosition>;
   getSelectedGraphsData: () => KeyData[];
@@ -99,6 +101,7 @@ const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
   handleBatchResizePreview,
   onElementPropertyCommit,
   handleGraphBatchSharedSetting,
+  getMixedValueGeometry,
   getMixedValueGraphs,
   getMixedValueGraphsAsKey,
   getSelectedGraphsData,
@@ -192,6 +195,7 @@ const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
                 />
               }
               getMixedValue={getMixedValueGraphsAsKey}
+              getMixedValueSize={getMixedValueGeometry}
               getSelectedKeysData={getSelectedGraphsData}
               handleBatchAlign={handleBatchAlign}
               handleBatchDistribute={handleBatchDistribute}

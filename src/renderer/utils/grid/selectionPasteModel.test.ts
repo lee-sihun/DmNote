@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest';
 import type {
   CanonicalEditorDocumentV1,
   CanonicalKeyPosition,
+  CanonicalReactiveSpritePosition,
 } from '@src/types/editor';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import { createFrozenPasteModel } from './selectionPasteModel';
 
 const EXISTING_ID = '00000000-0000-4000-8000-000000000401';
 const PASTED_ID = '00000000-0000-4000-8000-000000000402';
+const PASTED_SPRITE_ID = '00000000-0000-4000-8000-000000000403';
 
 const position = (
   id: string,
@@ -22,6 +24,7 @@ const emptyView = () => ({
   statPositions: {} as CanonicalEditorDocumentV1['statPositions'],
   graphPositions: {} as CanonicalEditorDocumentV1['graphPositions'],
   knobPositions: {} as CanonicalEditorDocumentV1['knobPositions'],
+  spritePositions: {} as CanonicalEditorDocumentV1['spritePositions'],
   layerGroups: {} as Record<string, Array<{ id: string; name: string }>>,
 });
 
@@ -36,13 +39,26 @@ describe('createFrozenPasteModel', () => {
     zIndex: 1,
   } as PluginDisplayElementInternal;
 
-  const createModel = () =>
+  const pastedSprite = {
+    id: PASTED_SPRITE_ID,
+    dx: 40,
+    dy: 0,
+    width: 200,
+    height: 200,
+    zIndex: 3,
+    poses: [],
+  } as unknown as CanonicalReactiveSpritePosition;
+
+  const createModel = (
+    spritesToAdd: Array<{ position: CanonicalReactiveSpritePosition }> = [],
+  ) =>
     createFrozenPasteModel({
       selectedKeyType: '4key',
       keysToAdd: [{ keyCode: 'KeyB', position: pastedPosition }],
       statsToAdd: [],
       graphsToAdd: [],
       knobsToAdd: [],
+      spritesToAdd,
       frozenPluginElements: [pastedPlugin],
       pluginIdsToAdd: ['plugin'],
       frozenNewGroups: [],
@@ -68,6 +84,7 @@ describe('createFrozenPasteModel', () => {
       statPositions: first.zPatch.statPositions,
       graphPositions: first.zPatch.graphPositions,
       knobPositions: first.zPatch.knobPositions,
+      spritePositions: first.zPatch.spritePositions,
       layerGroups: first.layerGroups,
     };
     const second = model.computePaste(realizedView, first.desiredProjection);
@@ -102,5 +119,33 @@ describe('createFrozenPasteModel', () => {
     expect(result.op?.zUpdates).toEqual([
       { elementType: 'key', id: EXISTING_ID, zIndex: 0 },
     ]);
+  });
+
+  it('스프라이트 payload도 같은 계획으로 append하고 insert op에 싣는다', () => {
+    const model = createModel([{ position: pastedSprite }]);
+    const view = emptyView();
+    const plan = model.computePaste(view, []);
+
+    expect(plan.appended).toBe(true);
+    expect(plan.zPatch.spritePositions['4key']?.map((p) => p.id)).toEqual([
+      PASTED_SPRITE_ID,
+    ]);
+
+    const result = model.buildFrozenInsertOp(view, plan);
+    expect(result.op?.elements.map((element) => element.elementType)).toEqual([
+      'key',
+      'sprite',
+    ]);
+
+    // 같은 id·같은 payload 재적용은 멱등 skip
+    const realizedView = {
+      ...view,
+      keys: plan.keys,
+      keyPositions: plan.zPatch.keyPositions,
+      spritePositions: plan.zPatch.spritePositions,
+    };
+    expect(
+      model.computePaste(realizedView, plan.desiredProjection).nativeBatchState,
+    ).toBe('realized');
   });
 });

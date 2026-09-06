@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useOptimisticAsyncBooleanCommit } from './useOptimisticAsyncBooleanCommit';
+import { drainPendingOptimisticCommits } from './pendingOptimisticCommits';
 
 interface AsyncToggleHarnessProps {
   onCommit: (value: boolean) => Promise<void>;
@@ -173,6 +174,22 @@ describe('useOptimisticAsyncBooleanCommit', () => {
     expect(onCommit).toHaveBeenCalledOnce();
     expect(onCommit).toHaveBeenCalledWith(true);
     expect(getToggle()?.getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('호스트 프레임이 멈춰도 전역 정산이 예약된 토글을 한 번 저장한다', async () => {
+    const onCommit = vi.fn(async () => undefined);
+    act(() => root.render(<AsyncToggleHarness onCommit={onCommit} />));
+    act(() => getToggle()?.click());
+    expect(onCommit).not.toHaveBeenCalled();
+
+    await act(async () => {
+      expect(drainPendingOptimisticCommits()).toBe(true);
+    });
+
+    expect(onCommit).toHaveBeenCalledExactlyOnceWith(true);
+    expect(animationFrames.size).toBe(0);
+    await flushScheduledCommit();
+    expect(onCommit).toHaveBeenCalledOnce();
   });
 
   it('paint 전 unmount는 예약을 취소하고 최신 의도를 한 번 커밋한다', async () => {

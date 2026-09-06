@@ -27,6 +27,7 @@ import {
   enqueueEditorCompatibilityWrite,
 } from '../lifecycle/editorCompatibilityQueue';
 import { registerStoredPluginGroupRefsProvider } from '../intent/pluginGroupMembers';
+import { projectSpriteResize } from '@utils/sprite/resizeProjection';
 
 import type {
   EditorCommitError,
@@ -76,6 +77,7 @@ const makeDocument = (key = 'A'): CanonicalEditorDocumentV1 => ({
   statPositions: {},
   graphPositions: {},
   knobPositions: {},
+  spritePositions: {},
   layerGroups: {},
 });
 
@@ -134,7 +136,7 @@ class FakeTransport implements EditorCoordinatorTransport {
           ? {
               opResults: request.ops.map(
                 (op): EditorOpResultV1 =>
-                  op.kind === 'setBounds'
+                  op.kind === 'setBounds' || op.kind === 'resizeSprite'
                     ? {
                         status:
                           changedFields.length > 0 ? 'applied' : 'noChange',
@@ -343,6 +345,7 @@ const applyOpsForTest = (
         statPositions: next.statPositions,
         graphPositions: next.graphPositions,
         knobPositions: next.knobPositions,
+        spritePositions: next.spritePositions,
         layerGroups: next.layerGroups,
         pluginElements: [],
       });
@@ -363,6 +366,26 @@ const applyOpsForTest = (
         layerGroups: next.layerGroups,
       });
       if (groups) next.layerGroups = groups;
+      return;
+    }
+    if (op.kind === 'resizeSprite') {
+      const spriteRecord = next.spritePositions as Record<
+        string,
+        Array<Record<string, unknown>>
+      >;
+      Object.entries(spriteRecord).some(([mode, positions]) => {
+        const index = positions.findIndex((position) => position.id === op.id);
+        if (index < 0) return false;
+        spriteRecord[mode] = positions.map((position, positionIndex) =>
+          positionIndex === index
+            ? (projectSpriteResize(position as never, op.bounds) as Record<
+                string,
+                unknown
+              >)
+            : position,
+        );
+        return true;
+      });
       return;
     }
     const record = next[fields[op.elementType]] as Record<
@@ -1554,7 +1577,7 @@ describe('EditorSaveCoordinator', () => {
       async (context) => {
         expect(context).toMatchObject({
           // 프론트만 승격되는 사고를 잡는 anchor - 상수 참조로 바꾸지 말 것
-          editorOpsVersion: 2,
+          editorOpsVersion: 4,
           editorOps: [expect.objectContaining({ id })],
         });
         return {
@@ -3323,6 +3346,126 @@ describe('commitSemanticOpsInternal', () => {
     elementType: 'key',
     id,
     patch: { property: 'hidden', value: hidden },
+  });
+
+  const RESIZE_SPRITE_ID = '00000000-0000-4000-8000-0000000000c1';
+  const withResizableSprite = (): CanonicalEditorDocumentV1 => {
+    const document = makeDocument();
+    document.spritePositions = {
+      '4key': [
+        {
+          id: RESIZE_SPRITE_ID,
+          dx: 10,
+          dy: 20,
+          width: 200,
+          height: 100,
+          hidden: false,
+          zIndex: null,
+          className: null,
+          useInlineStyles: null,
+          baseImage: null,
+          pivot: { x: 0.5, y: 0.5 },
+          idleTransform: { x: 12, y: -6, rotation: 15, scale: 1.5 },
+          poses: [
+            {
+              poseId: '00000000-0000-4000-8000-0000000000c2',
+              triggers: [DEFAULT_KEY_ID],
+              transform: { x: -30, y: 44, rotation: -90, scale: 0.5 },
+              imageOverride: null,
+              imageOverrideMetrics: null,
+            },
+          ],
+          activation: 'whileHeld',
+          pressDurationMs: 300,
+          transitionMs: 90,
+          transitionEasing: 'linear',
+          referenceNaturalSize: null,
+        } as never,
+      ],
+    };
+    return document;
+  };
+
+  const resizeSpriteOp = (): EditorOpV1 => ({
+    kind: 'resizeSprite',
+    id: RESIZE_SPRITE_ID,
+    bounds: { dx: 5, dy: 8, width: 400, height: 50 },
+  });
+
+  it('resizeSprite는 bounds 교체와 콘텐츠 스케일을 함께 적용하고 재전송은 noChange다', async () => {
+    const harness = createHarness(withResizableSprite());
+    await harness.coordinator.start();
+
+    const applied = await harness.coordinator.commitSemanticOpsInternal([
+      resizeSpriteOp(),
+    ]);
+    expect(applied.opResults).toEqual([
+      { status: 'applied', bounds: { dx: 5, dy: 8, width: 400, height: 50 } },
+    ]);
+    // sx=2, sy=0.5
+    const sprite = applied.document.spritePositions['4key'][0];
+    expect(sprite).toMatchObject({ dx: 5, dy: 8, width: 400, height: 50 });
+    expect(sprite.idleTransform).toEqual({
+      x: 24,
+      y: -3,
+      rotation: 15,
+      scale: 1.5,
+    });
+    expect(sprite.poses[0].transform).toEqual({
+      x: -60,
+      y: 22,
+      rotation: -90,
+      scale: 0.5,
+    });
+    expect(sprite.pivot).toEqual({ x: 0.5, y: 0.5 });
+
+    const noChange = await harness.coordinator.commitSemanticOpsInternal([
+      resizeSpriteOp(),
+    ]);
+    expect(noChange.opResults).toEqual([
+      { status: 'noChange', bounds: { dx: 5, dy: 8, width: 400, height: 50 } },
+    ]);
+    expect(noChange.document).toEqual(applied.document);
+    harness.coordinator.stop();
+  });
+
+  it('resizeSprite conflict 재시도는 최신 base 콘텐츠에 배율을 재적용한다', async () => {
+    const harness = createHarness(withResizableSprite());
+    await harness.coordinator.start();
+
+    harness.transport.commitMock.mockImplementationOnce(async () => {
+      // 외부 writer가 같은 스프라이트의 자세를 먼저 편집 (last-writer-wins 계약)
+      const external = structuredClone(harness.transport.canonical.document);
+      external.spritePositions['4key'][0].poses[0].transform = {
+        x: 100,
+        y: 44,
+        rotation: -90,
+        scale: 0.5,
+      };
+      harness.transport.canonical.document = external;
+      harness.transport.canonical.revision += 1;
+      throw revisionConflict();
+    });
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      resizeSpriteOp(),
+    ]);
+
+    // 재시도가 외부 편집이 반영된 base에서 배율을 다시 계산한다: 100*2=200 → clamp 없음
+    const sprite = outcome.document.spritePositions['4key'][0];
+    expect(sprite).toMatchObject({ dx: 5, dy: 8, width: 400, height: 50 });
+    expect(sprite.poses[0].transform).toEqual({
+      x: 200,
+      y: 22,
+      rotation: -90,
+      scale: 0.5,
+    });
+    // canonical과 낙관 로컬이 같은 결과로 수렴
+    expect(
+      harness.transport.canonical.document.spritePositions['4key'][0],
+    ).toEqual(sprite);
+    expect(harness.getLocal().spritePositions['4key'][0]).toEqual(sprite);
+    harness.coordinator.stop();
   });
 
   it('fixed invalid ops는 Promise로 거절하고 transport start 전에 중단한다', async () => {

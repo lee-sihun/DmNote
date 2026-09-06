@@ -142,6 +142,12 @@ pub(super) fn collect_local_image_paths(
         paths.collect(app_data_dir, position.active_image.as_ref());
         paths.collect(app_data_dir, position.inactive_image.as_ref());
     }
+    for sprite in data.sprite_positions.values().flatten() {
+        paths.collect(app_data_dir, sprite.base_image.as_ref());
+        for pose in &sprite.poses {
+            paths.collect(app_data_dir, pose.image_override.as_ref());
+        }
+    }
 
     collect_plugin_managed_asset_paths(app_data_dir, data, "images", &mut paths);
 

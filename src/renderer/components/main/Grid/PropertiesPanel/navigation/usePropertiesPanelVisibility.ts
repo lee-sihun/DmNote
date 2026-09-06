@@ -13,7 +13,7 @@ interface UsePropertiesPanelVisibilityOptions {
   selectedElements: readonly unknown[];
   selectedKeyElementsLength: number;
   selectedKeyLikeElementsLength: number;
-  selectedBatchStyleElementsLength: number;
+  selectedBatchGeometryElementsLength: number;
   selectedPluginElementsLength: number;
   pluginSettingsPanel: object | null;
   closePage: () => void;
@@ -34,7 +34,7 @@ export const usePropertiesPanelVisibility = ({
   selectedElements,
   selectedKeyElementsLength,
   selectedKeyLikeElementsLength,
-  selectedBatchStyleElementsLength,
+  selectedBatchGeometryElementsLength,
   selectedPluginElementsLength,
   pluginSettingsPanel,
   closePage,
@@ -142,7 +142,7 @@ export const usePropertiesPanelVisibility = ({
 
   useEffect(() => {
     if (
-      selectedBatchStyleElementsLength + selectedPluginElementsLength > 1 &&
+      selectedBatchGeometryElementsLength + selectedPluginElementsLength > 1 &&
       !isPanelVisible &&
       !manuallyClosedRef.current
     ) {
@@ -150,7 +150,7 @@ export const usePropertiesPanelVisibility = ({
       setIsPanelVisible(true);
     }
   }, [
-    selectedBatchStyleElementsLength,
+    selectedBatchGeometryElementsLength,
     selectedPluginElementsLength,
     isPanelVisible,
     setIsPanelVisible,

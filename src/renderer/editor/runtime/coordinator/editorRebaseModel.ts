@@ -12,6 +12,7 @@ import type {
   CanonicalEditorDocumentV1,
   EditorDocumentV1,
   EditorElementTypeV1,
+  EditorEventPatchV1,
   EditorField,
   EditorLegacyPatchV1,
   EditorOpV1,
@@ -90,6 +91,19 @@ const frozenOpCasUnit = (
       height: entry.height,
     };
   }
+  if (op.kind === 'resizeSprite') {
+    const entry = findPositionEntryById(document, 'sprite', op.id);
+    if (!entry) return null;
+    // resize가 소유하는 조각 전체 - bounds와 스케일 대상 콘텐츠
+    return {
+      dx: entry.dx,
+      dy: entry.dy,
+      width: entry.width,
+      height: entry.height,
+      idleTransform: entry.idleTransform,
+      poses: entry.poses,
+    };
+  }
   if (op.kind === 'patchElement') {
     return findPositionEntryById(document, op.elementType, op.id);
   }
@@ -139,9 +153,11 @@ export const frozenPatchOwnedFields = (
 export function getChangedEditorFields(
   base: EditorDocumentV1,
   next: EditorDocumentV1,
+  // 플러그인 격리 커밋의 next는 poseId 미발급 상태일 수 있어 방향을 받는다
+  nextSpriteMode: 'canonical' | 'input' = 'canonical',
 ): EditorField[] {
   assertEditorDocument(base, 'base editor document');
-  assertEditorDocument(next, 'next editor document');
+  assertEditorDocument(next, 'next editor document', nextSpriteMode);
 
   return EDITOR_FIELDS.filter(
     (field) => stableStringify(base[field]) !== stableStringify(next[field]),
@@ -149,15 +165,15 @@ export function getChangedEditorFields(
 }
 
 // 버전 인자 없이 patchForFields를 부르므로 항상 v1이다. 이벤트 patch 타입과
-// 맞도록 반환도 v1로 좁힌다
+// 맞도록 반환도 이벤트 patch로 좁힌다
 export function createEditorPatch(
   base: EditorDocumentV1,
   next: EditorDocumentV1,
-): EditorLegacyPatchV1 {
+): EditorEventPatchV1 {
   return patchForFields(
     next,
     getChangedEditorFields(base, next),
-  ) as EditorLegacyPatchV1;
+  ) as EditorEventPatchV1;
 }
 
 export function applyEditorPatch(
@@ -179,17 +195,18 @@ export function applyEditorPatch(
 
 export const applyIsolatedPluginPatch = (
   base: CanonicalEditorDocumentV1,
-  patch: EditorPatchV1,
+  patch: EditorPatchV1 | EditorLegacyPatchV1,
 ): EditorDocumentV1 => {
   assertCanonicalEditorDocument(base, 'isolated plugin base document');
-  assertEditorPatch(patch);
+  // 플러그인 patch는 input 방향 - poseId 생략(백엔드 발급)을 허용한다
+  assertEditorPatch(patch, 'editor patch', 'input');
   const next: EditorDocumentV1 = clone(base);
   EDITOR_FIELDS.forEach((field) => {
     if (patch[field] !== undefined) {
       Object.assign(next, { [field]: clone(patch[field]) });
     }
   });
-  assertEditorDocument(next, 'isolated plugin target document');
+  assertEditorDocument(next, 'isolated plugin target document', 'input');
   return next;
 };
 

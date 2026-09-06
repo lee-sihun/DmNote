@@ -36,6 +36,7 @@ interface KeyRangeSelectionSource {
   statPositions: readonly (NativeRangeElement | null | undefined)[];
   graphPositions: readonly (NativeRangeElement | null | undefined)[];
   knobPositions: readonly (NativeRangeElement | null | undefined)[];
+  spritePositions: readonly (NativeRangeElement | null | undefined)[];
 }
 
 const boundsFor = (
@@ -92,7 +93,7 @@ export const collectElementsInKeyRange = (
   });
 
   const collectNative = (
-    type: 'stat' | 'graph' | 'knob',
+    type: 'stat' | 'graph' | 'knob' | 'sprite',
     positions: readonly (NativeRangeElement | null | undefined)[],
     defaultWidth: number,
     defaultHeight: number,
@@ -113,5 +114,7 @@ export const collectElementsInKeyRange = (
   collectNative('stat', source.statPositions, 60, 60);
   collectNative('graph', source.graphPositions, 200, 100);
   collectNative('knob', source.knobPositions, 80, 80);
+  // 범위 내 스프라이트 요소도 선택
+  collectNative('sprite', source.spritePositions, 200, 200);
   return selected;
 };

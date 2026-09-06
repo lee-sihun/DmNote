@@ -8,6 +8,7 @@ import {
   useKeyStore,
 } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { invalidateSelectionForChangedIndexedElementArrays } from '@stores/grid/useGridSelectionStore';
@@ -26,7 +27,14 @@ const hasChanged = (current: unknown, next: unknown) =>
 let previewSubscribed = false;
 let previewSubscriptionInFlight: Promise<void> | null = null;
 
+// 프리뷰 봉투는 편집 UI가 있는 창(main·panel)끼리의 실시간 피드백 전용.
+// 오버레이·OBS는 방송 화면이라 스크럽 중 덜덜거림 없이 커밋 시점만 반영한다
+const PREVIEW_WINDOW_TYPES = new Set(['main', 'panel']);
+
 const ensurePreviewSubscription = (): Promise<void> => {
+  if (!PREVIEW_WINDOW_TYPES.has(window.__dmn_window_type ?? '')) {
+    return Promise.resolve();
+  }
   if (previewSubscribed) return Promise.resolve();
   if (previewSubscriptionInFlight) return previewSubscriptionInFlight;
 
@@ -58,6 +66,7 @@ export const captureEditorDocument = (): CanonicalEditorDocumentV1 => {
     statPositions: useStatItemStore.getState().positions,
     graphPositions: useGraphItemStore.getState().positions,
     knobPositions: useKnobItemStore.getState().positions,
+    spritePositions: useSpriteStore.getState().positions,
     layerGroups: useLayerGroupStore.getState().layerGroups,
   };
 };
@@ -75,6 +84,7 @@ export const applyEditorDocument = (
         stat: useStatItemStore.getState().positions[mode] ?? [],
         graph: useGraphItemStore.getState().positions[mode] ?? [],
         knob: useKnobItemStore.getState().positions[mode] ?? [],
+        sprite: useSpriteStore.getState().positions[mode] ?? [],
       },
       {
         keyMappings: document.keys[mode] ?? [],
@@ -82,6 +92,7 @@ export const applyEditorDocument = (
         stat: document.statPositions[mode] ?? [],
         graph: document.graphPositions[mode] ?? [],
         knob: document.knobPositions[mode] ?? [],
+        sprite: document.spritePositions[mode] ?? [],
       },
     );
     const keyChanges: Partial<
@@ -116,6 +127,11 @@ export const applyEditorDocument = (
       hasChanged(useKnobItemStore.getState().positions, document.knobPositions)
     ) {
       useKnobItemStore.setState({ positions: document.knobPositions });
+    }
+    if (
+      hasChanged(useSpriteStore.getState().positions, document.spritePositions)
+    ) {
+      useSpriteStore.setState({ positions: document.spritePositions });
     }
     if (
       hasChanged(

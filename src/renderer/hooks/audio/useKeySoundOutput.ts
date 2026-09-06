@@ -16,7 +16,14 @@ export interface KeySoundOutputController {
   enqueue: (backend: KeySoundOutputBackend) => void;
 }
 
-export const useKeySoundOutput = (): KeySoundOutputController => {
+interface UseKeySoundOutputOptions {
+  // 백엔드 저장 실패 안내 - 권위 상태 재조회와 별개로 사용자에게 알린다
+  onSaveFailed?: () => void;
+}
+
+export const useKeySoundOutput = ({
+  onSaveFailed,
+}: UseKeySoundOutputOptions = {}): KeySoundOutputController => {
   const [state, setStateRaw] = useState<KeySoundOutputState | null>(
     cachedKeySoundOutput,
   );
@@ -79,6 +86,7 @@ export const useKeySoundOutput = (): KeySoundOutputController => {
           if (!pendingRef.current) setState(result);
         } catch (error) {
           console.error('Failed to set key sound output backend', error);
+          onSaveFailed?.();
           if (!pendingRef.current) {
             try {
               const authoritative = await keySoundOutputApi.getState();

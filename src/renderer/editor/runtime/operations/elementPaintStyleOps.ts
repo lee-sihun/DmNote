@@ -54,6 +54,8 @@ const paintPropertyIntents = (
     Map<string, Record<string, unknown>>
   >();
   for (const { elementType, id } of targets) {
+    // 스프라이트는 페인트 속성이 없다
+    if (elementType === 'sprite') continue;
     const collection =
       elementType === 'key'
         ? document.keyPositions
@@ -237,7 +239,7 @@ const shadowPropertyIntents = (
     Map<string, Record<string, unknown>>
   >();
   for (const { elementType, id } of targets) {
-    if (elementType === 'graph') continue;
+    if (elementType === 'graph' || elementType === 'sprite') continue;
     const collection =
       elementType === 'key'
         ? document.keyPositions

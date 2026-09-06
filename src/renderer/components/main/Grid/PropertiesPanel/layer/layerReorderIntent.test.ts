@@ -48,6 +48,7 @@ const documentWith = (
     statPositions: {},
     graphPositions: {},
     knobPositions: {},
+    spritePositions: {},
     layerGroups: groups.length > 0 ? { '4key': groups } : {},
   } as never);
 

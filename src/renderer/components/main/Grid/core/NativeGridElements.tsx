@@ -2,6 +2,7 @@ import { useState, type MouseEvent } from 'react';
 import DraggableKey from '@components/shared/key/Key';
 import GraphItem from '../layers/GraphItem';
 import KnobItem from '../layers/KnobItem';
+import SpriteItem from '../layers/SpriteItem';
 import { commitElementPosition } from '@hooks/Grid/elementPositionCommit';
 import { useStableHandlerSlots } from '@hooks/shared/useStableHandlerSlots';
 import { deleteElementById } from '@src/renderer/editor/runtime/operations/elementOps';
@@ -11,6 +12,7 @@ import type {
   CanonicalGraphItemPosition,
   CanonicalKeyPosition,
   CanonicalKnobItemPosition,
+  CanonicalReactiveSpritePosition,
   CanonicalStatItemPosition,
 } from '@src/types/editor';
 import type { KeySlot } from '@src/types/key/keys';
@@ -35,6 +37,7 @@ interface NativeGridElementsProps {
   statPositions: readonly CanonicalStatItemPosition[];
   graphPositions: readonly CanonicalGraphItemPosition[];
   knobPositions: readonly CanonicalKnobItemPosition[];
+  spritePositions: readonly CanonicalReactiveSpritePosition[];
   pluginElements: readonly PluginDisplayElementInternal[];
   selectedElements: SelectedElement[];
   activeTool: string;
@@ -69,6 +72,7 @@ const NativeGridElements = ({
   statPositions,
   graphPositions,
   knobPositions,
+  spritePositions,
   pluginElements,
   selectedElements,
   activeTool,
@@ -168,6 +172,7 @@ const NativeGridElements = ({
               statPositions,
               graphPositions,
               knobPositions,
+              spritePositions,
             }),
           );
         },
@@ -270,12 +275,36 @@ const NativeGridElements = ({
     />
   ));
 
+  const spriteElements = spritePositions.map((position, index) => (
+    <SpriteItem
+      key={position.id}
+      index={index}
+      elementId={position.id}
+      position={position}
+      zIndex={position.zIndex ?? index}
+      isSelected={selectedElements.some(
+        (element) => element.type === 'sprite' && element.id === position.id,
+      )}
+      selectedElements={selectedElements}
+      activeTool={activeTool}
+      zoom={zoom}
+      panX={panX}
+      panY={panY}
+      isViewportTransforming={isViewportTransforming}
+      {...stableHandlers(
+        position.id,
+        createCommonHandlers('sprite', index, position.id),
+      )}
+    />
+  ));
+
   return (
     <>
       {keyElements}
       {statElements}
       {graphElements}
       {knobElements}
+      {spriteElements}
     </>
   );
 };

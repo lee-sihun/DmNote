@@ -6,7 +6,8 @@ export type PreviewDomain =
   | 'keyPosition'
   | 'statPosition'
   | 'graphPosition'
-  | 'knobPosition';
+  | 'knobPosition'
+  | 'spritePosition';
 
 export type PreviewEnvelopeKind = 'patch' | 'cancel';
 

@@ -6,9 +6,14 @@ use crate::{
     defaults::default_keys,
     errors::EditorCommitError,
     models::{
-        AppStoreData, EditorBoundsV1, EditorDocumentV1, EditorElementTypeV1, EditorField,
-        ElementShadowSpec, GraphPosition, KeyCounters, KeyMappings, KeyPosition, KeySlot,
-        KnobPosition, StatPosition, EDITOR_SCHEMA_VERSION,
+        is_renderable_image_ref, AppStoreData, EditorBoundsV1, EditorDocumentV1,
+        EditorElementTypeV1, EditorField, ElementShadowSpec, GraphPosition, KeyCounters,
+        KeyMappings, KeyPosition, KeySlot, KnobPosition, ReactiveSpritePosition, SpriteTransform,
+        StatPosition, EDITOR_SCHEMA_VERSION, MAX_SPRITE_POSES, MAX_SPRITE_POSE_TRIGGERS,
+        SPRITE_IMAGE_DIMENSION_MAX, SPRITE_IMAGE_DIMENSION_MIN, SPRITE_PRESS_DURATION_MS_MAX,
+        SPRITE_PRESS_DURATION_MS_MIN, SPRITE_TRANSFORM_OFFSET_MAX, SPRITE_TRANSFORM_OFFSET_MIN,
+        SPRITE_TRANSFORM_ROTATION_MAX, SPRITE_TRANSFORM_ROTATION_MIN, SPRITE_TRANSFORM_SCALE_MAX,
+        SPRITE_TRANSFORM_SCALE_MIN, SPRITE_TRANSITION_MS_MAX,
     },
 };
 
@@ -25,7 +30,7 @@ use limits::validate_metric_limits;
 pub(crate) use limits::{validate_editor_op_bounds, validate_editor_op_target_type};
 
 pub(crate) use request::{
-    canonical_request_fingerprint, decode_editor_commit_request, decode_exact_frozen_insert,
+    decode_editor_commit_request, decode_exact_frozen_insert, gesture_request_fingerprint,
     next_revision, request_fingerprint, request_payload_size, validate_history_restore_metadata,
     validate_request_envelope, validate_revision, RequestFingerprint,
 };
@@ -35,7 +40,8 @@ pub(crate) use violations::{
 
 #[cfg(test)]
 use violations::{
-    is_grandfathered, InvalidValueSignature, ValidationViolation, ViolationKey, ViolationOwner,
+    allowed_modes, collect_sprite_violations, collect_violations, is_grandfathered,
+    InvalidValueSignature, NativeIdAliases, ValidationViolation, ViolationKey, ViolationOwner,
     ViolationPropertyPath,
 };
 
@@ -59,8 +65,8 @@ const MAX_KEY_LABEL_BYTES: usize = 1_024;
 // plugin group_id 검증(state/plugin.rs)도 이 상한을 공유 - 레이어 그룹 id 참조라 동일 규칙
 pub(crate) const MAX_GROUP_ID_BYTES: usize = 256;
 const MAX_GROUP_NAME_BYTES: usize = 1_024;
-const MAX_ABS_COORDINATE: f64 = 32_768.0;
-const MAX_DIMENSION: f64 = 32_768.0;
+pub(crate) const MAX_ABS_COORDINATE: f64 = 32_768.0;
+pub(crate) const MAX_DIMENSION: f64 = 32_768.0;
 use crate::models::{
     SHADOW_BLUR_MAX as MAX_SHADOW_BLUR, SHADOW_BLUR_MIN as MIN_SHADOW_BLUR,
     SHADOW_OFFSET_MAX as MAX_SHADOW_OFFSET, SHADOW_OFFSET_MIN as MIN_SHADOW_OFFSET,

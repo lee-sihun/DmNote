@@ -5,6 +5,7 @@
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import {
@@ -21,12 +22,14 @@ import {
 } from './batchGeometryPlan';
 import {
   ElementIntentAbort,
-  applyPropertyIntentsEagerly,
   combineReceipts,
   type ElementIntentReceipt,
 } from '../intent/elementIntent';
 import {
+  applyBoundsIntentsEagerly,
+  buildNativeBoundsIntents,
   commitBatchGeometryByIds,
+  elementBoundsOp,
   type BatchGeometryDescriptor,
 } from '../operations/elementOps';
 import { runMixedGestureElementIntent } from '../intent/mixedElementIntent';
@@ -55,7 +58,8 @@ const validNativeGeometryTargets = (
   descriptor.targets.length <= MAX_BATCH_GEOMETRY_TARGETS &&
   descriptor.targets.every(
     ({ type, id }) =>
-      ['key', 'stat', 'graph', 'knob'].includes(type) && isNativeElementId(id),
+      ['key', 'stat', 'graph', 'knob', 'sprite'].includes(type) &&
+      isNativeElementId(id),
   ) &&
   new Set(descriptor.targets.map(({ id }) => id)).size ===
     descriptor.targets.length;
@@ -72,7 +76,9 @@ const readStorePositions = (type: NativeElementType): PositionSlice =>
     ? useStatItemStore.getState().positions
     : type === 'graph'
     ? useGraphItemStore.getState().positions
-    : useKnobItemStore.getState().positions) as unknown as PositionSlice;
+    : type === 'knob'
+    ? useKnobItemStore.getState().positions
+    : useSpriteStore.getState().positions) as unknown as PositionSlice;
 
 const readDocumentPositions =
   (base: CanonicalEditorDocumentV1) =>
@@ -83,7 +89,9 @@ const readDocumentPositions =
       ? base.statPositions
       : type === 'graph'
       ? base.graphPositions
-      : base.knobPositions) as unknown as PositionSlice;
+      : type === 'knob'
+      ? base.knobPositions
+      : base.spritePositions) as unknown as PositionSlice;
 
 // native 대상 bounds 수집 - 지정 모드에서의 소실·비유한 값은 전체 거절
 const readNativeLayoutElements = (
@@ -175,12 +183,9 @@ const planMixedBatchGeometry = (
   for (const { key, bounds } of plan.bounds) {
     const native = targetByKey.get(key);
     if (native) {
-      nativeOps.push({
-        kind: 'setBounds',
-        elementType: native.type,
-        id: native.id,
-        bounds,
-      });
+      // 스프라이트는 resizeSprite - 이 경로는 치수 불변 연산만 통과하므로
+      // 배율 1이지만 정산 경로 전체와 op 종류를 통일한다
+      nativeOps.push(elementBoundsOp(native.type, native.id, bounds));
       continue;
     }
     if (key.startsWith(PLUGIN_KEY_PREFIX)) {
@@ -361,21 +366,21 @@ export const commitMixedBatchGeometry = (
         rotatePluginInstancesEditSession(pluginId, gestureId),
       );
 
-      // eager: native 기하 필드 CAS + 플러그인 position CAS
-      const nativeIntents = new Map<
-        NativeElementType,
-        Map<string, Record<string, unknown>>
-      >();
-      for (const { key, patch } of initialPlanned.updates) {
-        const target = targetByKey.get(key);
-        if (!target) continue;
-        const byId = nativeIntents.get(target.type) ?? new Map();
-        byId.set(target.id, patch);
-        nativeIntents.set(target.type, byId);
-      }
+      // eager: native 기하 필드 CAS + 플러그인 position CAS.
+      // 스프라이트는 full bounds projection이 콘텐츠까지 소유한다
+      const spriteBoundsById = new Map(
+        initialPlanned.nativeOps.flatMap((op) =>
+          op.kind === 'resizeSprite' ? [[op.id, op.bounds] as const] : [],
+        ),
+      );
+      const nativeIntents = buildNativeBoundsIntents(
+        initialPlanned.updates,
+        (key) => targetByKey.get(key),
+        (target) => spriteBoundsById.get(target.id),
+      );
       const nativeReceipt =
         nativeIntents.size > 0
-          ? applyPropertyIntentsEagerly(nativeIntents)
+          ? applyBoundsIntentsEagerly(nativeIntents)
           : null;
       let pluginReceipt: ElementIntentReceipt | null = null;
       try {

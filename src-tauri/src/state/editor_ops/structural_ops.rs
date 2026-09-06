@@ -7,16 +7,30 @@ pub(super) struct ElementLocation {
     pub(super) index: usize,
 }
 
+// key 계열 위치와 스프라이트가 공유하는 공통 필드의 가변 참조 묶음
+pub(super) struct ElementCommonMut<'a> {
+    pub(super) dx: &'a mut f64,
+    pub(super) dy: &'a mut f64,
+    pub(super) width: &'a mut f64,
+    pub(super) height: &'a mut f64,
+    pub(super) hidden: &'a mut bool,
+    pub(super) z_index: &'a mut Option<i32>,
+    pub(super) layer_name: &'a mut Option<String>,
+    pub(super) group_id: &'a mut Option<String>,
+    pub(super) class_name: &'a mut Option<String>,
+    pub(super) use_inline_styles: &'a mut Option<bool>,
+}
+
 fn insert_location(
     locations: &mut HashMap<String, ElementLocation>,
     element_type: EditorElementTypeV1,
     mode: &str,
     index: usize,
-    position: &KeyPosition,
+    id: &str,
 ) -> Result<(), EditorCommitError> {
     if locations
         .insert(
-            position.id.clone(),
+            id.to_string(),
             ElementLocation {
                 element_type,
                 mode: mode.to_string(),
@@ -27,7 +41,7 @@ fn insert_location(
     {
         return Err(EditorCommitError::validation(
             DUPLICATE_ELEMENT_ID,
-            format!("native element ID {} is not globally unique", position.id),
+            format!("native element ID {id} is not globally unique"),
         ));
     }
     Ok(())
@@ -51,6 +65,11 @@ pub(super) fn build_element_locator(
             .knob_positions
             .values()
             .map(Vec::len)
+            .sum::<usize>()
+        + document
+            .sprite_positions
+            .values()
+            .map(Vec::len)
             .sum::<usize>();
     let mut locations = HashMap::with_capacity(element_count);
 
@@ -61,7 +80,7 @@ pub(super) fn build_element_locator(
                 EditorElementTypeV1::Key,
                 mode,
                 index,
-                position,
+                &position.id,
             )?;
         }
     }
@@ -72,7 +91,7 @@ pub(super) fn build_element_locator(
                 EditorElementTypeV1::Stat,
                 mode,
                 index,
-                &position.position,
+                &position.position.id,
             )?;
         }
     }
@@ -83,7 +102,7 @@ pub(super) fn build_element_locator(
                 EditorElementTypeV1::Graph,
                 mode,
                 index,
-                &position.position,
+                &position.position.id,
             )?;
         }
     }
@@ -94,12 +113,108 @@ pub(super) fn build_element_locator(
                 EditorElementTypeV1::Knob,
                 mode,
                 index,
-                &position.position,
+                &position.position.id,
+            )?;
+        }
+    }
+    for (mode, positions) in &document.sprite_positions {
+        for (index, position) in positions.iter().enumerate() {
+            insert_location(
+                &mut locations,
+                EditorElementTypeV1::Sprite,
+                mode,
+                index,
+                &position.id,
             )?;
         }
     }
 
     Ok(locations)
+}
+
+fn key_position_common_mut(position: &mut KeyPosition) -> ElementCommonMut<'_> {
+    ElementCommonMut {
+        dx: &mut position.dx,
+        dy: &mut position.dy,
+        width: &mut position.width,
+        height: &mut position.height,
+        hidden: &mut position.hidden,
+        z_index: &mut position.z_index,
+        layer_name: &mut position.layer_name,
+        group_id: &mut position.group_id,
+        class_name: &mut position.class_name,
+        use_inline_styles: &mut position.use_inline_styles,
+    }
+}
+
+fn sprite_common_mut(position: &mut ReactiveSpritePosition) -> ElementCommonMut<'_> {
+    ElementCommonMut {
+        dx: &mut position.dx,
+        dy: &mut position.dy,
+        width: &mut position.width,
+        height: &mut position.height,
+        hidden: &mut position.hidden,
+        z_index: &mut position.z_index,
+        layer_name: &mut position.layer_name,
+        group_id: &mut position.group_id,
+        class_name: &mut position.class_name,
+        use_inline_styles: &mut position.use_inline_styles,
+    }
+}
+
+pub(super) fn element_common_at_mut<'a>(
+    document: &'a mut EditorDocumentV1,
+    location: &ElementLocation,
+) -> Result<ElementCommonMut<'a>, EditorCommitError> {
+    let common = match location.element_type {
+        EditorElementTypeV1::Key => document
+            .key_positions
+            .get_mut(&location.mode)
+            .and_then(|positions| positions.get_mut(location.index))
+            .map(key_position_common_mut),
+        EditorElementTypeV1::Stat => document
+            .stat_positions
+            .get_mut(&location.mode)
+            .and_then(|positions| positions.get_mut(location.index))
+            .map(|position| key_position_common_mut(&mut position.position)),
+        EditorElementTypeV1::Graph => document
+            .graph_positions
+            .get_mut(&location.mode)
+            .and_then(|positions| positions.get_mut(location.index))
+            .map(|position| key_position_common_mut(&mut position.position)),
+        EditorElementTypeV1::Knob => document
+            .knob_positions
+            .get_mut(&location.mode)
+            .and_then(|positions| positions.get_mut(location.index))
+            .map(|position| key_position_common_mut(&mut position.position)),
+        EditorElementTypeV1::Sprite => document
+            .sprite_positions
+            .get_mut(&location.mode)
+            .and_then(|positions| positions.get_mut(location.index))
+            .map(sprite_common_mut),
+    };
+    common.ok_or_else(|| {
+        EditorCommitError::validation(
+            "ELEMENT_LOCATOR_INVALID",
+            "native element locator no longer matches the editor document",
+        )
+    })
+}
+
+pub(super) fn sprite_at_mut<'a>(
+    document: &'a mut EditorDocumentV1,
+    location: &ElementLocation,
+) -> Result<&'a mut ReactiveSpritePosition, EditorCommitError> {
+    document
+        .sprite_positions
+        .get_mut(&location.mode)
+        .and_then(|positions| positions.get_mut(location.index))
+        .ok_or_else(|| {
+            EditorCommitError::validation(
+                "ELEMENT_LOCATOR_INVALID",
+                "native element locator no longer matches the editor document",
+            )
+        })
 }
 
 pub(super) fn position_at_mut<'a>(
@@ -126,6 +241,7 @@ pub(super) fn position_at_mut<'a>(
             .get_mut(&location.mode)
             .and_then(|positions| positions.get_mut(location.index))
             .map(|position| &mut position.position),
+        EditorElementTypeV1::Sprite => None,
     };
     position.ok_or_else(|| {
         EditorCommitError::validation(
@@ -144,12 +260,32 @@ pub(super) fn bounds_of(position: &KeyPosition) -> EditorBoundsV1 {
     }
 }
 
+pub(super) fn element_bounds(
+    document: &EditorDocumentV1,
+    location: &ElementLocation,
+) -> Option<EditorBoundsV1> {
+    match location.element_type {
+        EditorElementTypeV1::Sprite => document
+            .sprite_positions
+            .get(&location.mode)
+            .and_then(|positions| positions.get(location.index))
+            .map(|position| EditorBoundsV1 {
+                dx: position.dx,
+                dy: position.dy,
+                width: position.width,
+                height: position.height,
+            }),
+        _ => position_at(document, location).map(bounds_of),
+    }
+}
+
 fn frozen_element_type(element: &EditorFrozenElementV1) -> EditorElementTypeV1 {
     match element {
         EditorFrozenElementV1::Key { .. } => EditorElementTypeV1::Key,
         EditorFrozenElementV1::Stat { .. } => EditorElementTypeV1::Stat,
         EditorFrozenElementV1::Graph { .. } => EditorElementTypeV1::Graph,
         EditorFrozenElementV1::Knob { .. } => EditorElementTypeV1::Knob,
+        EditorFrozenElementV1::Sprite { .. } => EditorElementTypeV1::Sprite,
     }
 }
 
@@ -159,6 +295,7 @@ fn frozen_element_group_id(element: &EditorFrozenElementV1) -> Option<&str> {
         EditorFrozenElementV1::Stat { position } => position.position.group_id.as_deref(),
         EditorFrozenElementV1::Graph { position } => position.position.group_id.as_deref(),
         EditorFrozenElementV1::Knob { position } => position.position.group_id.as_deref(),
+        EditorFrozenElementV1::Sprite { position } => position.group_id.as_deref(),
     }
 }
 
@@ -204,6 +341,13 @@ fn frozen_element_matches(
                 .and_then(|positions| positions.get(location.index))
                 == Some(position)
         }
+        EditorFrozenElementV1::Sprite { position } => {
+            document
+                .sprite_positions
+                .get(&location.mode)
+                .and_then(|positions| positions.get(location.index))
+                == Some(position)
+        }
     }
 }
 
@@ -218,8 +362,19 @@ fn z_update_matches(
     update: &EditorZUpdateV1,
 ) -> bool {
     location.element_type == update.element_type
-        && position_at(document, location)
-            .is_some_and(|position| position.z_index.unwrap_or_default() == update.z_index)
+        && element_z_index(document, location)
+            .is_some_and(|z_index| z_index.unwrap_or_default() == update.z_index)
+}
+
+fn element_z_index(document: &EditorDocumentV1, location: &ElementLocation) -> Option<Option<i32>> {
+    match location.element_type {
+        EditorElementTypeV1::Sprite => document
+            .sprite_positions
+            .get(&location.mode)
+            .and_then(|positions| positions.get(location.index))
+            .map(|position| position.z_index),
+        _ => position_at(document, location).map(|position| position.z_index),
+    }
 }
 
 fn position_at<'a>(
@@ -246,6 +401,7 @@ fn position_at<'a>(
             .get(&location.mode)
             .and_then(|positions| positions.get(location.index))
             .map(|position| &position.position),
+        EditorElementTypeV1::Sprite => None,
     }
 }
 
@@ -282,6 +438,11 @@ fn append_frozen_element(
             .entry(mode.to_string())
             .or_default()
             .push(position.clone()),
+        EditorFrozenElementV1::Sprite { position } => document
+            .sprite_positions
+            .entry(mode.to_string())
+            .or_default()
+            .push(position.clone()),
     }
 }
 
@@ -301,8 +462,14 @@ pub(super) fn apply_frozen_insert(
         .iter()
         .cloned()
         .map(|mut element| {
-            element.position_mut().canonicalize_gradient_pairs();
-            element.position_mut().canonicalize_image_mode();
+            if let Some(position) = element.key_position_mut() {
+                position.canonicalize_gradient_pairs();
+                position.canonicalize_image_mode();
+            } else if let EditorFrozenElementV1::Sprite { position } = &mut element {
+                for pose in &mut position.poses {
+                    pose.normalize_triggers();
+                }
+            }
             element
         })
         .collect();
@@ -412,9 +579,9 @@ pub(super) fn apply_frozen_insert(
         let location = locations
             .get(&update.id)
             .expect("z target was validated above");
-        let position = position_at_mut(&mut candidate, location)?;
-        if position.z_index.unwrap_or_default() != update.z_index {
-            position.z_index = Some(update.z_index);
+        let common = element_common_at_mut(&mut candidate, location)?;
+        if common.z_index.unwrap_or_default() != update.z_index {
+            *common.z_index = Some(update.z_index);
         }
     }
     Ok((candidate, EditorOpResultStatusV1::Applied))
@@ -511,9 +678,9 @@ pub(super) fn apply_reorder(
         let location = locations
             .get(&update.id)
             .expect("reorder target was validated above");
-        let position = position_at_mut(&mut candidate, location)?;
-        if position.z_index != Some(update.z_index) {
-            position.z_index = Some(update.z_index);
+        let common = element_common_at_mut(&mut candidate, location)?;
+        if *common.z_index != Some(update.z_index) {
+            *common.z_index = Some(update.z_index);
             changed = true;
         }
     }
@@ -521,9 +688,9 @@ pub(super) fn apply_reorder(
         let location = locations
             .get(&update.id)
             .expect("reorder group target was validated above");
-        let position = position_at_mut(&mut candidate, location)?;
-        if position.group_id != update.group_id {
-            position.group_id.clone_from(&update.group_id);
+        let common = element_common_at_mut(&mut candidate, location)?;
+        if *common.group_id != update.group_id {
+            common.group_id.clone_from(&update.group_id);
             changed = true;
         }
     }
@@ -612,9 +779,9 @@ pub(super) fn apply_set_element_groups(
         let location = locations
             .get(&target.id)
             .expect("group target was validated above");
-        let position = position_at_mut(&mut candidate, location)?;
-        if position.group_id.as_ref() != next_group_id {
-            position.group_id = next_group_id.cloned();
+        let common = element_common_at_mut(&mut candidate, location)?;
+        if common.group_id.as_ref() != next_group_id {
+            *common.group_id = next_group_id.cloned();
         }
     }
     remove_empty_layer_groups(
@@ -660,11 +827,94 @@ pub(super) fn apply_rename_layer_group(
     (candidate, EditorOpResultStatusV1::Applied)
 }
 
-pub(super) fn apply_bounds(position: &mut KeyPosition, bounds: &EditorBoundsV1) {
-    position.dx = bounds.dx;
-    position.dy = bounds.dy;
-    position.width = bounds.width;
-    position.height = bounds.height;
+pub(super) fn apply_bounds(common: ElementCommonMut<'_>, bounds: &EditorBoundsV1) {
+    *common.dx = bounds.dx;
+    *common.dy = bounds.dy;
+    *common.width = bounds.width;
+    *common.height = bounds.height;
+}
+
+#[allow(clippy::neg_cmp_op_on_partial_ord)]
+pub(super) fn sprite_resize_ratio(prev: f64, next: f64) -> f64 {
+    if !(prev > 0.0) || !prev.is_finite() || !(next > 0.0) || !next.is_finite() {
+        return 1.0;
+    }
+    let ratio = next / prev;
+    if ratio.is_finite() {
+        ratio
+    } else {
+        1.0
+    }
+}
+
+pub(super) fn scale_sprite_resize_value(value: f64, ratio: f64) -> f64 {
+    // 배율 1은 클램프 없는 완전 passthrough - 순수 이동이 검증상 유효한
+    // 극소 치수(하한 미만)까지 비트 단위로 보존한다
+    if ratio == 1.0 {
+        return value;
+    }
+    (value * ratio).clamp(SPRITE_TRANSFORM_OFFSET_MIN, SPRITE_TRANSFORM_OFFSET_MAX)
+}
+
+fn scale_sprite_transform_offsets(transform: &mut SpriteTransform, sx: f64, sy: f64) {
+    transform.x = scale_sprite_resize_value(transform.x, sx);
+    transform.y = scale_sprite_resize_value(transform.y, sy);
+}
+
+pub(super) fn apply_sprite_resize(sprite: &mut ReactiveSpritePosition, bounds: &EditorBoundsV1) {
+    let sx = sprite_resize_ratio(sprite.width, bounds.width);
+    let sy = sprite_resize_ratio(sprite.height, bounds.height);
+
+    sprite.dx = bounds.dx;
+    sprite.dy = bounds.dy;
+    sprite.width = bounds.width;
+    sprite.height = bounds.height;
+    scale_sprite_transform_offsets(&mut sprite.idle_transform, sx, sy);
+    for pose in &mut sprite.poses {
+        scale_sprite_transform_offsets(&mut pose.transform, sx, sy);
+    }
+}
+
+pub(super) fn apply_bounds_op<F>(
+    candidate: &mut EditorDocumentV1,
+    locations: &HashMap<String, ElementLocation>,
+    op_index: usize,
+    id: &str,
+    bounds: EditorBoundsV1,
+    mutate: F,
+) -> Result<EditorOpResultV1, EditorCommitError>
+where
+    F: FnOnce(
+        &mut EditorDocumentV1,
+        &ElementLocation,
+        &EditorBoundsV1,
+    ) -> Result<(), EditorCommitError>,
+{
+    let Some(location) = locations.get(id) else {
+        validate_editor_op_bounds(op_index, None, bounds)?;
+        return Ok(EditorOpResultV1 {
+            status: EditorOpResultStatusV1::TargetMissing,
+            bounds: None,
+        });
+    };
+
+    let current_bounds = element_bounds(candidate, location).ok_or_else(|| {
+        EditorCommitError::validation(
+            "ELEMENT_LOCATOR_INVALID",
+            "native element locator no longer matches the editor document",
+        )
+    })?;
+    validate_editor_op_bounds(op_index, Some(current_bounds), bounds)?;
+    let status = if current_bounds == bounds {
+        EditorOpResultStatusV1::NoChange
+    } else {
+        mutate(candidate, location, &bounds)?;
+        EditorOpResultStatusV1::Applied
+    };
+    Ok(EditorOpResultV1 {
+        status,
+        bounds: element_bounds(candidate, location),
+    })
 }
 
 pub(super) fn delete_elements(
@@ -707,6 +957,11 @@ pub(super) fn delete_elements(
             positions.retain(|position| !ids.contains(&position.position.id));
         }
     }
+    if let Some(ids) = delete_ids.get(&EditorElementTypeV1::Sprite) {
+        for positions in document.sprite_positions.values_mut() {
+            positions.retain(|position| !ids.contains(&position.id));
+        }
+    }
 }
 
 pub(super) fn remove_empty_layer_groups(
@@ -732,6 +987,9 @@ pub(super) fn remove_empty_layer_groups(
         }
         for position in document.knob_positions.get(mode).into_iter().flatten() {
             collect(position.position.group_id.as_deref());
+        }
+        for position in document.sprite_positions.get(mode).into_iter().flatten() {
+            collect(position.group_id.as_deref());
         }
         // 플러그인 멤버만 남은 그룹도 생존 - 참조 집합은 커밋 후 상태 기준
         // (gesture는 요청 동봉 plugin_changes, editor 단독은 store decode)

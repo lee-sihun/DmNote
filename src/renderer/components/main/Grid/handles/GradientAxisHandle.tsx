@@ -115,7 +115,7 @@ const GradientAxisOverlay = ({
 
   if (!session || !bounds || !geometry) return null;
 
-  const { cx, cy, halfLine, endX, endY } = geometry;
+  const { cx, cy, halfLine, endX, endY, screenAngle } = geometry;
   // pos(0~1) → 축 위 화면 좌표
   const stopPoint = (pos: number) => gradientAxisStopPoint(geometry, pos);
 
@@ -127,7 +127,7 @@ const GradientAxisOverlay = ({
       className="absolute inset-0 pointer-events-none"
       // 리사이즈 핸들 위, 사이드 패널 아래에 두는 내부 편집 층 - 패널 위로 새지 않게
       style={{ zIndex: 'var(--z-canvas-gradient-editor)' }}
-      data-dmn-gradient-overlay="true"
+      data-dmn-canvas-editor-overlay="true"
     >
       {/* 조작 UI 묶음 - 핸들 드래그나 피커 색 드래그 동안 흐려져
           가려진 대상의 실제 색이 보인다. 값 배지는 묶음 밖이라 선명 유지 */}
@@ -148,7 +148,7 @@ const GradientAxisOverlay = ({
             width: halfLine * 2,
             height: 0,
             borderTop: '1.5px solid var(--ui-selection-border-strong)',
-            transform: `translate(-50%, -50%) rotate(${angle - 90}deg)`,
+            transform: `translate(-50%, -50%) rotate(${screenAngle - 90}deg)`,
             opacity: 0.9,
             pointerEvents: 'none',
           }}
@@ -173,7 +173,7 @@ const GradientAxisOverlay = ({
             top: cy,
             width: halfLine * 2,
             height: AXIS_HIT_THICKNESS,
-            transform: `translate(-50%, -50%) rotate(${angle - 90}deg)`,
+            transform: `translate(-50%, -50%) rotate(${screenAngle - 90}deg)`,
             cursor: isRotating ? 'grabbing' : 'default',
             pointerEvents: 'auto',
             touchAction: 'none',

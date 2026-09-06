@@ -1,4 +1,5 @@
-import React, { startTransition, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { useSingleFlightAction } from '@hooks/useSingleFlightAction';
 import { useLenis } from '@hooks/useLenis';
 import { useTranslation } from '@contexts/useTranslation';
 import { useSettingsStore } from '@stores/useSettingsStore';
@@ -7,6 +8,7 @@ import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import Dropdown from '@components/main/common/dropdown/Dropdown';
 import ReloadButton from '@components/main/common/ReloadButton';
@@ -54,7 +56,7 @@ interface SettingsProps {
   showAlert: (msg: string, confirmText?: string) => void;
   showConfirm: (
     msg: string,
-    onConfirm: () => void,
+    onConfirm: () => void | Promise<void>,
     options?: {
       onCancel?: () => void;
       confirmText?: string;
@@ -90,6 +92,7 @@ const Settings = ({
     useCustomCSS,
     setUseCustomCSS,
     customCSSPath,
+    customCSSContent,
     useCustomJS,
     setUseCustomJS,
     jsPlugins,
@@ -133,6 +136,8 @@ const Settings = ({
   const enqueueResizeAnchor = useOverlayResizeAnchorController({
     overlayResizeAnchor,
     setOverlayResizeAnchor,
+    t,
+    showAlert,
   });
 
   // Lenis smooth scroll 적용 (전역 설정 사용)
@@ -208,6 +213,7 @@ const Settings = ({
     } catch (error) {
       setAlwaysOnTop(!next);
       console.error('Failed to toggle always-on-top', error);
+      showAlert(t('common.saveFailed'));
     }
   };
 
@@ -219,6 +225,7 @@ const Settings = ({
     } catch (error) {
       setOverlayLocked(!next);
       console.error('Failed to toggle overlay lock', error);
+      showAlert(t('common.saveFailed'));
     }
   };
 
@@ -230,6 +237,7 @@ const Settings = ({
     } catch (error) {
       setUseCustomCSS(!next);
       console.error('Failed to toggle custom CSS', error);
+      showAlert(t('common.saveFailed'));
     }
   };
 
@@ -241,6 +249,7 @@ const Settings = ({
     } catch (error) {
       setUseCustomJS(!next);
       console.error('Failed to toggle custom JS', error);
+      showAlert(t('common.saveFailed'));
     }
   };
 
@@ -285,6 +294,7 @@ const Settings = ({
     } catch (error) {
       setNoteEffect(!next);
       console.error('Failed to toggle note effect', error);
+      showAlert(t('common.saveFailed'));
     }
   };
 
@@ -309,12 +319,15 @@ const Settings = ({
     if (isMacOS || angleModeChangeRef.current) return;
     angleModeChangeRef.current = true;
     const apply = async (): Promise<void> => {
-      setAngleMode(val);
+      let saved = false;
       try {
         await settingsApi.update({ angleMode: val });
+        saved = true;
+        setAngleMode(val);
         await appApi.restart();
       } catch (error) {
         console.error('Failed to change angle mode', error);
+        showAlert(t(saved ? 'common.restartFailed' : 'common.saveFailed'));
       } finally {
         angleModeChangeRef.current = false;
       }
@@ -339,6 +352,7 @@ const Settings = ({
     } catch (error) {
       setTrayEnabled(!next);
       console.error('Failed to toggle tray mode', error);
+      showAlert(t('common.saveFailed'));
     }
   };
 
@@ -350,6 +364,7 @@ const Settings = ({
     } catch (error) {
       setAutoUpdateEnabled(!next);
       console.error('Failed to toggle auto update', error);
+      showAlert(t('common.saveFailed'));
     }
   };
 
@@ -367,6 +382,7 @@ const Settings = ({
     } catch (error) {
       setDeveloperModeEnabled(!next);
       console.error('Failed to toggle developer mode', error);
+      showAlert(t('common.saveFailed'));
     }
   };
 
@@ -378,6 +394,7 @@ const Settings = ({
     } catch (error) {
       setKeyCounterEnabled(!next);
       console.error('Failed to toggle key counter', error);
+      showAlert(t('common.saveFailed'));
     }
   };
 
@@ -413,6 +430,7 @@ const Settings = ({
             statPositions: useStatItemStore.getState().positions,
             graphPositions: useGraphItemStore.getState().positions,
             knobPositions: useKnobItemStore.getState().positions,
+            spritePositions: useSpriteStore.getState().positions,
             layerGroups: useLayerGroupStore.getState().layerGroups,
           };
           assertCanonicalEditorDocument(candidate, 'keys_reset_all response');
@@ -445,6 +463,7 @@ const Settings = ({
         }
       } catch (error) {
         console.error('Failed to reset presets', error);
+        showAlert(t('common.actionFailed'));
       } finally {
         resetAllRef.current = false;
       }
@@ -462,12 +481,16 @@ const Settings = ({
     }
   };
 
-  const handleLanguageChange = (val: string): void => {
-    startTransition(() => {
-      setLanguage(val);
-      void i18n.changeLanguage(val as SupportedLocale);
+  const { run: handleLanguageChange, pending: languagePending } =
+    useSingleFlightAction(async (val: string) => {
+      try {
+        await i18n.changeLanguage(val as SupportedLocale);
+        setLanguage(val);
+      } catch (error) {
+        console.error('Failed to change language', error);
+        showAlert(t('common.saveFailed'));
+      }
     });
-  };
 
   return (
     <div className="relative w-full h-full">
@@ -634,6 +657,7 @@ const Settings = ({
             <KeySoundOutputSettings
               onMouseEnter={() => hoverPreview('keySoundOutput')}
               onMouseLeave={() => hoverPreview(null)}
+              onSaveFailed={() => showAlert(t('common.saveFailed'))}
             />
             {/* 기타 설정 */}
             <SettingCard>
@@ -642,6 +666,7 @@ const Settings = ({
                   options={LANGUAGE_OPTIONS}
                   value={language}
                   onChange={handleLanguageChange}
+                  disabled={languagePending}
                   placeholder={t('settings.selectLanguage')}
                   align="right"
                 />
@@ -757,6 +782,7 @@ const Settings = ({
                   <CssPanelContent
                     useCustomCSS={useCustomCSS}
                     customCSSPath={customCSSPath}
+                    customCSSContent={customCSSContent}
                     onToggleCustomCSS={handleToggleCustomCSS}
                     showAlert={(msg: string) => showAlert?.(msg)}
                     onClose={() => setActiveSettingsPanel(null)}

@@ -16,7 +16,7 @@ zip = "0.6"
 [dependencies]
 anyhow = "1.0"
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+serde_json = { version = "1.0", features = ["float_roundtrip"] }
 base64 = "0.22"
 minisign-verify = "0.2.5"
 thiserror = "1.0"
@@ -44,6 +44,7 @@ zip = "0.6"
 sha2 = "0.10"
 quick-xml = "0.38"
 infer = "0.19"
+imagesize = "0.15"
 rodio = { git = "https://github.com/lee-sihun/rodio", rev = "7b771e15", default-features = false, features = ["playback"] }
 symphonia = { version = "0.5", default-features = false, features = ["ogg", "vorbis", "wav", "aiff", "mp3", "isomp4", "aac", "pcm", "adpcm", "flac", "alac"] }
 tokio = { version = "1", features = ["rt", "net", "sync", "time", "macros"] }
@@ -55,6 +56,9 @@ wuff = "0.2.8"
 
 [dev-dependencies]
 libc = "0.2"
+
+[target."cfg(unix)".dependencies]
+tokio = { version = "1", features = ["signal"] }
 
 [target."cfg(windows)".dependencies]
 cpal = { version = "0.17.3", optional = true, default-features = false, features = ["asio"] }

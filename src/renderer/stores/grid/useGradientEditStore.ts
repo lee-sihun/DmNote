@@ -50,6 +50,7 @@ export interface GradientAnchorBounds {
   y: number;
   width: number;
   height: number;
+  rotation?: number;
 }
 
 interface GradientEditState {
@@ -134,6 +135,7 @@ export const useGradientEditStore = create<GradientEditState>((set) => ({
         previous.bounds.y === bounds.y &&
         previous.bounds.width === bounds.width &&
         previous.bounds.height === bounds.height &&
+        previous.bounds.rotation === bounds.rotation &&
         previous.origin?.x === origin?.x &&
         previous.origin?.y === origin?.y
       ) {

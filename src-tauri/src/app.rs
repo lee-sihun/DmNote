@@ -205,6 +205,20 @@ pub fn run() {
             }
             configure_main_window(app.handle());
 
+            #[cfg(unix)]
+            {
+                let handle = app.handle().clone();
+                state::window::unix_termination::install(move || {
+                    if let Some(state) = handle.try_state::<AppState>() {
+                        state.request_frontend_shutdown(handle.clone());
+                    }
+                })
+                .map_err(|error| {
+                    log::error!("failed to install SIGTERM shutdown handler: {error}");
+                    error
+                })?;
+            }
+
             #[cfg(target_os = "macos")]
             {
                 state::window::macos_termination::install(app.handle())

@@ -372,6 +372,7 @@ impl AppState {
         width: f64,
         height: f64,
         anchor: Option<String>,
+        content_left_offset: Option<f64>,
         content_top_offset: Option<f64>,
         fixed_position_delta_x: Option<f64>,
         fixed_position_delta_y: Option<f64>,
@@ -413,70 +414,31 @@ impl AppState {
                 ..current
             }
         };
-        let mut next_content_top_offset = None;
+        // 직전 오프셋 두 개만 읽는다, 리사이즈마다 store 전체를 복제하지 않도록
+        let (last_content_left_offset, last_content_top_offset) = self.store.with_state(|state| {
+            (
+                state.overlay_last_content_left_offset,
+                state.overlay_last_content_top_offset,
+            )
+        });
+        let content_left_change =
+            content_offset_change(content_left_offset, last_content_left_offset);
+        let content_top_change = content_offset_change(content_top_offset, last_content_top_offset);
+        let next_content_left_offset = content_left_change.map(|(offset, _)| offset);
+        let next_content_top_offset = content_top_change.map(|(offset, _)| offset);
 
         // 초기화 중(첫 resize)에는 anchor 기반 position 재계산을 건너뛰고
         // 기동 시 한 번 해석한 배치를 사용
-        if initializing {
-            // 초기화 중이라도 content_top_offset은 저장해야 다음 resize에서 delta 계산이 정확함
-            if let Some(offset) = content_top_offset {
-                if offset.is_finite() {
-                    next_content_top_offset = Some(offset);
-                }
-            }
-        } else {
-            let scale = placement.target_scale;
-            match anchor {
-                OverlayResizeAnchor::BottomLeft => {
-                    placement.position.y += (current.height - height) * scale
-                }
-                OverlayResizeAnchor::TopRight => {
-                    placement.position.x += (current.width - width) * scale
-                }
-                OverlayResizeAnchor::BottomRight => {
-                    placement.position.x += (current.width - width) * scale;
-                    placement.position.y += (current.height - height) * scale;
-                }
-                OverlayResizeAnchor::Center => {
-                    placement.position.x += (current.width - width) * scale / 2.0;
-                    placement.position.y += (current.height - height) * scale / 2.0;
-                }
-                OverlayResizeAnchor::FixedPosition => {}
-                OverlayResizeAnchor::TopLeft => {}
-            }
-
-            if anchor == OverlayResizeAnchor::FixedPosition {
-                if let Some(delta_x) = fixed_position_delta_x.filter(|value| value.is_finite()) {
-                    placement.position.x += delta_x * scale;
-                }
-                if let Some(delta_y) = fixed_position_delta_y.filter(|value| value.is_finite()) {
-                    placement.position.y += delta_y * scale;
-                }
-            }
-
-            if let Some(offset) = content_top_offset {
-                if offset.is_finite() {
-                    let previous = self
-                        .store
-                        .snapshot()
-                        .overlay_last_content_top_offset
-                        .unwrap_or(offset);
-                    let delta = offset - previous;
-                    if delta != 0.0 {
-                        match anchor {
-                            OverlayResizeAnchor::Center => {
-                                placement.position.y -= delta * scale / 2.0
-                            }
-                            OverlayResizeAnchor::BottomLeft | OverlayResizeAnchor::BottomRight => {}
-                            OverlayResizeAnchor::FixedPosition => {
-                                placement.position.y -= delta * scale
-                            }
-                            _ => placement.position.y -= delta * scale,
-                        }
-                    }
-                    next_content_top_offset = Some(offset);
-                }
-            }
+        if !initializing {
+            adjust_overlay_resize_position(
+                &mut placement,
+                current,
+                &anchor,
+                fixed_position_delta_x.filter(|value| value.is_finite()),
+                fixed_position_delta_y.filter(|value| value.is_finite()),
+                content_left_change.map(|(_, delta)| delta),
+                content_top_change.map(|(_, delta)| delta),
+            );
         }
 
         // 크기·위치를 단일 네이티브 트랜잭션으로 적용 - 분리 호출은 창이 두 단계로 움직여 덜컥거림 유발
@@ -490,6 +452,7 @@ impl AppState {
             &self.overlay_bounds_generation,
             &self.overlay_placement_trust,
             applied.clone(),
+            next_content_left_offset,
             next_content_top_offset,
             OverlayPersistenceAuthority::General,
         )?;
@@ -583,6 +546,7 @@ impl AppState {
             &self.overlay_placement_trust,
             applied.clone(),
             None,
+            None,
             OverlayPersistenceAuthority::Reset,
         )?;
         let bounds = applied.public_bounds;
@@ -631,6 +595,7 @@ impl AppState {
             WebviewUrl::App("overlay/index.html".into()),
         )
         .title("DM Note - Overlay")
+        .window_classname(OVERLAY_WINDOW_CLASS)
         .decorations(false)
         .resizable(false)
         .maximizable(false)
@@ -785,6 +750,7 @@ impl AppState {
                 &self.overlay_bounds_generation,
                 &self.overlay_placement_trust,
                 applied,
+                None,
                 None,
                 OverlayPersistenceAuthority::General,
             ) {

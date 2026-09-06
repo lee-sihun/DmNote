@@ -491,6 +491,7 @@ impl AppStore {
             .unwrap_or_default();
         crate::state::migration::canonicalize_gradient_pairs(&mut scratch);
         crate::state::migration::canonicalize_image_modes(&mut scratch);
+        crate::state::migration::normalize_sprite_triggers(&mut scratch);
 
         // editorRevision은 이 트랜잭션만 관리
         scratch.editor_revision = current_store.editor_revision;

@@ -129,7 +129,7 @@ const renderElement = (
   act(() => {
     root.render(
       <I18nContext.Provider
-        value={{ locale: 'ko', setLocale: () => {}, t: (key) => key }}
+        value={{ locale: 'ko', setLocale: async () => {}, t: (key) => key }}
       >
         <PluginElement element={element} windowType={windowType} />
       </I18nContext.Provider>,

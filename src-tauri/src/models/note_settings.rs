@@ -10,6 +10,9 @@ pub(super) fn default_note_effect_enabled() -> bool {
 pub(super) fn default_key_height() -> f64 {
     60.0
 }
+pub(super) fn default_element_rotation() -> f64 {
+    0.0
+}
 pub(super) fn default_key_note_color() -> NoteColor {
     NoteColor::Solid("#FFFFFF".to_string())
 }

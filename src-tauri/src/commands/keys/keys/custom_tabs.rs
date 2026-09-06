@@ -270,6 +270,7 @@ fn custom_tabs_delete_inner(
                             EditorField::StatPositions,
                             EditorField::GraphPositions,
                             EditorField::KnobPositions,
+                            EditorField::SpritePositions,
                             EditorField::LayerGroups,
                         ],
                         plugin_instances_reset: PluginInstancesResetScope::Mode(id.clone()),
@@ -341,6 +342,11 @@ fn custom_tabs_delete_inner(
         app,
         "knobPositions:changed",
         &transaction.change.document.knob_positions,
+    );
+    emit_best_effort(
+        app,
+        "spritePositions:changed",
+        &transaction.change.document.sprite_positions,
     );
     emit_best_effort(
         app,

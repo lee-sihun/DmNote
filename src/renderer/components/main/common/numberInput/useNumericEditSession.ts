@@ -27,7 +27,7 @@ interface NumericEditPolicyBase {
   decimalScale: number;
   isMixed: boolean;
   hasPrefix: boolean;
-  onCancel?: () => void;
+  onCancel?: (reason?: 'history') => void;
   onBlur?: (value?: number) => void;
 }
 
@@ -472,7 +472,7 @@ export const useNumericEditSession = (policy: NumericEditPolicy) => {
       lastEmittedRef.current = null;
       invokeChange(final);
     },
-    onCancel: () => {
+    onCancel: (reason) => {
       cancelPendingCommit();
       const committed = committedValueRef.current;
       syncText(
@@ -483,7 +483,12 @@ export const useNumericEditSession = (policy: NumericEditPolicy) => {
       hasUserInputRef.current = false;
       fieldError.clear();
       digitPop.clear();
-      restorePreview();
+      // undo·redo가 스크럽을 끊으면 preview 복원 대신 history 취소를 그대로 전달
+      if (reason === 'history') {
+        emittedRef.current = false;
+        lastEmittedRef.current = null;
+        onCancel?.('history');
+      } else restorePreview();
     },
   });
 

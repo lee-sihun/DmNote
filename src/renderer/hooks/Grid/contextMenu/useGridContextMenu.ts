@@ -85,6 +85,7 @@ interface UseGridContextMenuReturn {
   getStatMenuItems: (contextIndex: number | null) => MenuItem[];
   getGraphMenuItems: (contextIndex: number | null) => MenuItem[];
   getKnobMenuItems: (contextIndex: number | null) => MenuItem[];
+  getSpriteMenuItems: (contextIndex: number | null) => MenuItem[];
   getGridMenuItems: (
     gridAddLocalPos: { dx: number; dy: number } | null,
   ) => MenuEntry[];
@@ -279,6 +280,13 @@ export function useGridContextMenu({
     { id: 'sendToBack', label: t('contextMenu.sendToBack') },
   ];
 
+  const getSpriteMenuItems = (_contextIndex: number | null): MenuItem[] => [
+    { id: 'delete', label: t('contextMenu.deleteSprite') },
+    { id: 'duplicate', label: t('contextMenu.duplicateSprite') },
+    { id: 'bringToFront', label: t('contextMenu.bringToFront') },
+    { id: 'sendToBack', label: t('contextMenu.sendToBack') },
+  ];
+
   const getGridMenuItems = (
     gridAddLocalPos: { dx: number; dy: number } | null,
   ): MenuEntry[] => {
@@ -287,6 +295,7 @@ export function useGridContextMenu({
       { id: 'addStat', label: t('contextMenu.addStat') },
       { id: 'addGraph', label: t('contextMenu.addGraph') },
       { id: 'addKnob', label: t('contextMenu.addKnob') },
+      { id: 'addSprite', label: t('contextMenu.addSprite') },
     ];
     // 묶음 안에서는 부모가 맥락을 주므로 라벨을 줄인다
     const tabItems: MenuItem[] = [
@@ -349,6 +358,7 @@ export function useGridContextMenu({
     getStatMenuItems,
     getGraphMenuItems,
     getKnobMenuItems,
+    getSpriteMenuItems,
     getGridMenuItems,
     pluginKeyMenuItems,
     pluginGridMenuItems,

@@ -1,15 +1,20 @@
 import { useEffect, useRef } from 'react';
 import { overlayApi } from '@api/modules/window/overlayApi';
+import type { I18nContextValue } from '@contexts/I18nContextDef';
 import type { OverlayResizeAnchor } from '@src/types/settings/settings';
 
 interface UseOverlayResizeAnchorControllerOptions {
   overlayResizeAnchor: OverlayResizeAnchor;
   setOverlayResizeAnchor: (anchor: OverlayResizeAnchor) => void;
+  t: I18nContextValue['t'];
+  showAlert: (msg: string, confirmText?: string) => void;
 }
 
 export const useOverlayResizeAnchorController = ({
   overlayResizeAnchor,
   setOverlayResizeAnchor,
+  t,
+  showAlert,
 }: UseOverlayResizeAnchorControllerOptions) => {
   const pendingResizeAnchorRef = useRef<OverlayResizeAnchor | null>(null);
   const applyingResizeAnchorRef = useRef(false);
@@ -36,6 +41,7 @@ export const useOverlayResizeAnchorController = ({
           confirmedResizeAnchorRef.current = requested;
         } catch (error) {
           console.error('Failed to set overlay anchor', error);
+          showAlert(t('common.saveFailed'));
           if (!pendingResizeAnchorRef.current) {
             setOverlayResizeAnchor(confirmedResizeAnchorRef.current);
           }

@@ -8,6 +8,7 @@ import {
 import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
 import { computeBatchGeometryPlan } from '@src/renderer/editor/runtime/geometry/batchGeometryPlan';
 import { commitMixedBatchGeometry } from '@src/renderer/editor/runtime/geometry/mixedBatchGeometry';
+import { spriteResizePatch } from '@utils/sprite/resizeProjection';
 import type { EditorElementTypeV1 } from '@src/types/editor';
 import type { KeyPosition } from '@src/types/key/keys';
 
@@ -20,7 +21,9 @@ type UsePropertiesPanelBatchGeometryProps = Pick<
   | 'statItemPositions'
   | 'graphItemPositions'
   | 'knobItemPositions'
-  | 'selectedBatchStyleElements'
+  | 'canonicalSpritePositions'
+  | 'spriteItemPositions'
+  | 'selectedBatchGeometryElements'
   | 'stableBatchGeometryTargets'
   | 'stablePluginGeometryElements'
   | 'stablePluginGeometryTargets'
@@ -32,14 +35,16 @@ export const usePropertiesPanelBatchGeometry = ({
   statItemPositions,
   graphItemPositions,
   knobItemPositions,
-  selectedBatchStyleElements,
+  canonicalSpritePositions,
+  spriteItemPositions,
+  selectedBatchGeometryElements,
   stableBatchGeometryTargets,
   stablePluginGeometryElements,
   stablePluginGeometryTargets,
 }: UsePropertiesPanelBatchGeometryProps) =>
   useBatchHandlers({
-    selectedKeyLikeElements: selectedBatchStyleElements as {
-      type: 'key' | 'stat' | 'graph' | 'knob';
+    selectedKeyLikeElements: selectedBatchGeometryElements as {
+      type: 'key' | 'stat' | 'graph' | 'knob' | 'sprite';
       id: string;
       index?: number;
     }[],
@@ -48,6 +53,7 @@ export const usePropertiesPanelBatchGeometry = ({
     graphPositions: graphItemPositions,
     selectedKeyType,
     knobPositions: knobItemPositions,
+    spritePositions: spriteItemPositions,
     pluginLayoutElements: stablePluginGeometryElements,
     onStableGeometryPreview: (operation) => {
       if (!stableBatchGeometryTargets) return;
@@ -56,7 +62,7 @@ export const usePropertiesPanelBatchGeometry = ({
         string,
         {
           type: EditorElementTypeV1;
-          position: KeyPosition;
+          position: Pick<KeyPosition, 'id' | 'dx' | 'dy' | 'width' | 'height'>;
         }
       >();
       for (const target of stableBatchGeometryTargets) {
@@ -69,7 +75,9 @@ export const usePropertiesPanelBatchGeometry = ({
             ? statItemPositions
             : target.type === 'graph'
             ? graphItemPositions
-            : knobItemPositions;
+            : target.type === 'knob'
+            ? knobItemPositions
+            : spriteItemPositions;
         const position = record[selectedKeyType]?.[locator.index];
         if (!position || position.id !== target.id) return;
         targetsByKey.set(`${target.type}:${target.id}`, {
@@ -102,6 +110,27 @@ export const usePropertiesPanelBatchGeometry = ({
         operation,
       );
       if (!plan) return;
+      // 스프라이트는 bounds와 콘텐츠 스케일이 한 몸이라 커밋이 resizeSprite를 낸다.
+      // 미리보기가 원시 bounds만 얹으면 드래그 중엔 활동 영역만 줄다가 놓는 순간
+      // 이미지와 자세가 한꺼번에 축소된다 - 커밋과 같은 투영을 여기서도 쓴다.
+      // 기준은 canonical: 합성된 spriteItemPositions를 넣으면 이전 프레임의 배율
+      // 위에 다시 배율이 얹혀 누적된다
+      const spriteBoundsByKey = new Map(
+        plan.bounds.map(({ key, bounds }) => [key, bounds] as const),
+      );
+      const spritePreviewPatch = (
+        key: string,
+        id: string,
+      ): Record<string, unknown> | null => {
+        const bounds = spriteBoundsByKey.get(key);
+        if (!bounds) return null;
+        const canonical = (
+          canonicalSpritePositions[selectedKeyType] ?? []
+        ).find((position) => position.id === id);
+        return canonical
+          ? (spriteResizePatch(canonical, bounds) as Record<string, unknown>)
+          : null;
+      };
       const byType = new Map<
         EditorElementTypeV1,
         Array<{ id: string; patch: Record<string, unknown> }>
@@ -111,9 +140,14 @@ export const usePropertiesPanelBatchGeometry = ({
         const target = targetsByKey.get(update.key);
         if (!target) return;
         const entries = byType.get(target.type) ?? [];
+        // 이동 계열은 배율 1이라 커밋도 setBounds와 같다 - 원시 patch 유지
+        const projected =
+          target.type === 'sprite' && operation.kind === 'resize'
+            ? spritePreviewPatch(update.key, target.position.id)
+            : null;
         entries.push({
           id: target.position.id,
-          patch: update.patch,
+          patch: projected ?? update.patch,
         });
         byType.set(target.type, entries);
       }
@@ -126,7 +160,9 @@ export const usePropertiesPanelBatchGeometry = ({
               ? 'statPosition'
               : type === 'graph'
               ? 'graphPosition'
-              : 'knobPosition',
+              : type === 'knob'
+              ? 'knobPosition'
+              : 'spritePosition',
         });
       }
     },

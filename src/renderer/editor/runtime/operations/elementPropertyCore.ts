@@ -19,6 +19,7 @@ const POSITION_FIELD_BY_TYPE: Record<NativeElementType, string> = {
   stat: 'statPositions',
   graph: 'graphPositions',
   knob: 'knobPositions',
+  sprite: 'spritePositions',
 };
 
 // 현재 문서의 요소 레코드 (없으면 null)

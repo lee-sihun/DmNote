@@ -1,0 +1,7 @@
+{
+  "rotation": {
+    "min": -180,
+    "max": 180
+  },
+  "default": 0
+}

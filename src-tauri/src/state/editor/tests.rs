@@ -5,10 +5,85 @@ use crate::models::{
     EditorElementPropertyPatchV1, EditorElementTypeV1, EditorFrozenKeySlotV1, EditorGroupUpdateV1,
     EditorOpResultStatusV1, EditorOpResultV1, EditorOpV1, EditorPatchV1, EditorTargetGroupV1,
     EditorZUpdateV1, ElementShadowSpec, GraphPosition, GraphStatType, GraphType, KeyPosition,
-    KnobPosition, LayerGroupDef, StatPosition, StatType,
+    KnobPosition, LayerGroupDef, ReactiveSpritePosition, SpriteActivation, SpriteImageMetrics,
+    SpritePose, SpriteReferenceNaturalSize, StatPosition, StatType,
 };
 
 use super::*;
+
+const SPRITE_CONSTRAINT_FIXTURE: &str =
+    include_str!("../../../../tests/fixtures/sprite-constraint-parity.json");
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SpriteConstraintFixture {
+    offset: NumericRangeFixture,
+    rotation: NumericRangeFixture,
+    scale: NumericRangeFixture,
+    anchor: NumericRangeFixture,
+    transition_ms: IntegerRangeFixture,
+    press_duration_ms: IntegerRangeFixture,
+    image_metrics: ImageMetricsRangeFixture,
+    max_poses: usize,
+    max_triggers_per_pose: usize,
+    default_transition_ms: u32,
+    default_transition_easing: String,
+    default_activation: SpriteActivation,
+    default_press_duration_ms: u32,
+}
+
+#[derive(serde::Deserialize)]
+struct NumericRangeFixture {
+    min: f64,
+    max: f64,
+}
+
+#[derive(serde::Deserialize)]
+struct IntegerRangeFixture {
+    min: u32,
+    max: u32,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ImageMetricsRangeFixture {
+    dimension_min: u32,
+    dimension_max: u32,
+}
+
+fn sprite_constraint_fixture() -> SpriteConstraintFixture {
+    serde_json::from_str(SPRITE_CONSTRAINT_FIXTURE).unwrap()
+}
+
+fn validate_new_sprite(
+    sprite: ReactiveSpritePosition,
+) -> Result<(), crate::errors::EditorCommitError> {
+    let current_store = AppStoreData::default();
+    let mut candidate_store = current_store.clone();
+    candidate_store
+        .sprite_positions
+        .insert("4key".to_string(), vec![sprite]);
+    validate_document_transition(
+        &EditorDocumentV1::from_store(&current_store),
+        &EditorDocumentV1::from_store(&candidate_store),
+        &current_store,
+        &candidate_store,
+    )
+}
+
+fn sprite_with_pose_count(count: usize) -> ReactiveSpritePosition {
+    ReactiveSpritePosition {
+        id: Uuid::from_u128(1).to_string(),
+        poses: (0..count)
+            .map(|index| SpritePose {
+                pose_id: Uuid::from_u128(1_000 + index as u128).to_string(),
+                triggers: vec![Uuid::from_u128(10_000 + index as u128).to_string()],
+                ..SpritePose::default()
+            })
+            .collect(),
+        ..ReactiveSpritePosition::default()
+    }
+}
 
 fn request(keys: KeyMappings) -> EditorCommitRequest {
     EditorCommitRequest {
@@ -1106,6 +1181,40 @@ fn property_and_key_slot_wires_are_exact_and_canonical() {
 }
 
 #[test]
+fn sprite_patch_element_wire_accepts_generic_and_rejects_dedicated_fields() {
+    let base = serde_json::json!({
+        "baseRevision": 0,
+        "mutationId": Uuid::new_v4().to_string(),
+        "opsVersion": EDITOR_OPS_VERSION,
+        "ops": [{
+            "kind": "patchElement",
+            "elementType": "sprite",
+            "id": Uuid::new_v4().to_string(),
+            "patch": { "property": "hidden", "value": true },
+        }],
+    });
+    decode_editor_commit_request(base.clone()).unwrap();
+
+    for (property, value) in [
+        ("baseImage", serde_json::json!("sprite.png")),
+        ("poses", serde_json::json!([])),
+        ("pivot", serde_json::json!({ "x": 0.5, "y": 0.5 })),
+    ] {
+        let mut wire = base.clone();
+        wire["ops"][0]["patch"] = serde_json::json!({
+            "property": property,
+            "value": value,
+        });
+        let error = decode_editor_commit_request(wire).unwrap_err();
+        assert_eq!(
+            validation_code(&error),
+            Some("INVALID_REQUEST_PAYLOAD"),
+            "{property} must not be a patchElement property"
+        );
+    }
+}
+
+#[test]
 fn frozen_insert_wire_is_exact_through_nested_full_records() {
     let request = ops_request(vec![frozen_insert_op(Uuid::new_v4().to_string())]);
     let mut valid = serde_json::to_value(request).unwrap();
@@ -1722,8 +1831,8 @@ fn frozen_insert_is_a_bounded_sole_op_with_unique_disjoint_ids() {
 #[test]
 fn editor_ops_enforce_version_count_ids_and_global_target_uniqueness() {
     let id = Uuid::new_v4().to_string();
-    // 구버전 1과 미래 버전 3 모두 거부, v1 이중 수용 없음
-    for unsupported_version in [1, 3] {
+    // 구버전과 미래 버전 모두 거부, 다중 버전 수용 없음
+    for unsupported_version in (1..EDITOR_OPS_VERSION).chain([EDITOR_OPS_VERSION + 1]) {
         let mut unsupported = ops_request(vec![set_bounds_op(&id, EditorElementTypeV1::Key)]);
         unsupported.ops_version = Some(unsupported_version);
         assert_eq!(
@@ -1766,6 +1875,23 @@ fn editor_ops_enforce_version_count_ids_and_global_target_uniqueness() {
     ]);
     assert_eq!(
         validation_code(&validate_request_envelope(&duplicate).unwrap_err()),
+        Some("DUPLICATE_EDITOR_OP_TARGET")
+    );
+
+    let duplicate_resize = ops_request(vec![
+        set_bounds_op(&id, EditorElementTypeV1::Key),
+        EditorOpV1::ResizeSprite {
+            id: id.clone(),
+            bounds: EditorBoundsV1 {
+                dx: 10.0,
+                dy: 20.0,
+                width: 200.0,
+                height: 100.0,
+            },
+        },
+    ]);
+    assert_eq!(
+        validation_code(&validate_request_envelope(&duplicate_resize).unwrap_err()),
         Some("DUPLICATE_EDITOR_OP_TARGET")
     );
 
@@ -1816,7 +1942,7 @@ fn editor_op_bounds_reuse_position_numeric_limits() {
     };
     validate_editor_op_bounds(
         0,
-        Some(&grandfathered),
+        Some(position_bounds(&grandfathered)),
         EditorBoundsV1 {
             width: MAX_DIMENSION + 1.0,
             ..position_bounds(&grandfathered)
@@ -2304,6 +2430,74 @@ fn editor_rejects_new_shadow_violations_in_every_position_collection() {
 }
 
 #[test]
+fn element_rotation_document_validation_checks_all_position_types() {
+    let store = store_with_each_position_collection();
+    let current = EditorDocumentV1::from_store(&store);
+    for collection in crate::models::POSITION_COLLECTION_FIELDS {
+        for rotation in [-180.0, -45.5, 0.0, 180.0] {
+            let mut candidate = current.clone();
+            position_mut(&mut candidate, collection).rotation = rotation;
+            let mut candidate_store = store.clone();
+            candidate.apply_to_store(&mut candidate_store);
+            validate_document_transition(&current, &candidate, &store, &candidate_store).unwrap();
+        }
+        for rotation in [-180.1, 180.1, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let mut candidate = current.clone();
+            position_mut(&mut candidate, collection).rotation = rotation;
+            let mut candidate_store = store.clone();
+            candidate.apply_to_store(&mut candidate_store);
+            let error =
+                validate_document_transition(&current, &candidate, &store, &candidate_store)
+                    .unwrap_err();
+            assert_eq!(validation_code(&error), Some("INVALID_ROTATION"));
+            assert_eq!(
+                error.message,
+                format!("{collection} 4key[0].rotation must be finite within -180..=180")
+            );
+        }
+    }
+}
+
+#[test]
+fn element_rotation_grandfathers_only_unchanged_value_and_identity() {
+    let base = store_with_each_position_collection();
+    for collection in crate::models::POSITION_COLLECTION_FIELDS {
+        for rotation in [-999.0, 999.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let mut current = EditorDocumentV1::from_store(&base);
+            position_mut(&mut current, collection).rotation = rotation;
+            let mut store = base.clone();
+            current.apply_to_store(&mut store);
+
+            let mut unrelated = current.clone();
+            position_mut(&mut unrelated, collection).font_size = Some(18.0);
+            let mut candidate_store = store.clone();
+            unrelated.apply_to_store(&mut candidate_store);
+            validate_document_transition(&current, &unrelated, &store, &candidate_store).unwrap();
+
+            for change_identity in [false, true] {
+                let mut candidate = unrelated.clone();
+                let position = position_mut(&mut candidate, collection);
+                if change_identity {
+                    position.id = uuid::Uuid::new_v4().to_string();
+                } else {
+                    position.rotation = 998.0;
+                }
+                candidate.apply_to_store(&mut candidate_store);
+                let error =
+                    validate_document_transition(&current, &candidate, &store, &candidate_store)
+                        .unwrap_err();
+                assert_eq!(validation_code(&error), Some("INVALID_ROTATION"));
+            }
+
+            let mut repaired = current.clone();
+            position_mut(&mut repaired, collection).rotation = 0.0;
+            repaired.apply_to_store(&mut candidate_store);
+            validate_document_transition(&current, &repaired, &store, &candidate_store).unwrap();
+        }
+    }
+}
+
+#[test]
 fn existing_shadow_violations_are_grandfathered_only_when_unchanged() {
     let mut store = default_editor_store();
     let position = &mut store.key_positions.get_mut("4key").unwrap()[0];
@@ -2392,8 +2586,171 @@ fn stage_four_grandfathering_ignores_diagnostic_message_changes() {
     assert!(is_grandfathered(
         &current,
         &ValidationViolation::new(key, "different diagnostic message"),
-        &HashMap::new()
+        &NativeIdAliases::default()
     ));
+}
+
+fn sprite_pose_with_triggers(triggers: Vec<String>) -> SpritePose {
+    SpritePose {
+        pose_id: Uuid::new_v4().to_string(),
+        triggers,
+        ..SpritePose::default()
+    }
+}
+
+fn store_with_grandfathered_sprite_poses(poses: Vec<SpritePose>) -> AppStoreData {
+    let mut store = default_editor_store();
+    store.sprite_positions.insert(
+        "4key".to_string(),
+        vec![ReactiveSpritePosition {
+            id: Uuid::new_v4().to_string(),
+            poses,
+            ..ReactiveSpritePosition::default()
+        }],
+    );
+    store
+}
+
+fn empty_trigger_violation_key(
+    document: &EditorDocumentV1,
+    store: &AppStoreData,
+    pose_id: &str,
+) -> ViolationKey {
+    collect_violations(document, &allowed_modes(store))
+        .into_iter()
+        .find(|violation| {
+            violation.code() == "EMPTY_SPRITE_POSE_TRIGGERS"
+                && matches!(
+                    &violation.key.property_path,
+                    ViolationPropertyPath::SpritePoseProperty {
+                        pose_id: violation_pose_id,
+                        ..
+                    } if violation_pose_id == pose_id
+                )
+        })
+        .expect("empty trigger violation exists")
+        .key
+}
+
+#[test]
+fn sprite_pose_violation_survives_deleting_an_earlier_pose() {
+    let normal = sprite_pose_with_triggers(vec![Uuid::new_v4().to_string()]);
+    let invalid = sprite_pose_with_triggers(Vec::new());
+    let invalid_pose_id = invalid.pose_id.clone();
+    let store = store_with_grandfathered_sprite_poses(vec![normal, invalid]);
+    let current = EditorDocumentV1::from_store(&store);
+    let mut candidate = current.clone();
+    candidate.sprite_positions.get_mut("4key").unwrap()[0]
+        .poses
+        .remove(0);
+    let mut candidate_store = store.clone();
+    candidate.apply_to_store(&mut candidate_store);
+
+    validate_document_transition(&current, &candidate, &store, &candidate_store).unwrap();
+    assert_eq!(
+        candidate.sprite_positions["4key"][0].poses[0].pose_id,
+        invalid_pose_id
+    );
+}
+
+#[test]
+fn sprite_pose_violation_follows_pose_id_across_reorder() {
+    let normal = sprite_pose_with_triggers(vec![Uuid::new_v4().to_string()]);
+    let invalid = sprite_pose_with_triggers(Vec::new());
+    let invalid_pose_id = invalid.pose_id.clone();
+    let store = store_with_grandfathered_sprite_poses(vec![normal, invalid]);
+    let current = EditorDocumentV1::from_store(&store);
+    let mut candidate = current.clone();
+    candidate.sprite_positions.get_mut("4key").unwrap()[0]
+        .poses
+        .swap(0, 1);
+    let mut candidate_store = store.clone();
+    candidate.apply_to_store(&mut candidate_store);
+
+    validate_document_transition(&current, &candidate, &store, &candidate_store).unwrap();
+    assert_eq!(
+        candidate.sprite_positions["4key"][0].poses[0].pose_id,
+        invalid_pose_id
+    );
+}
+
+#[test]
+fn same_sprite_pose_violation_on_a_new_pose_id_is_rejected() {
+    let invalid = sprite_pose_with_triggers(Vec::new());
+    let store = store_with_grandfathered_sprite_poses(vec![invalid]);
+    let current = EditorDocumentV1::from_store(&store);
+    let mut candidate = current.clone();
+    candidate.sprite_positions.get_mut("4key").unwrap()[0]
+        .poses
+        .push(sprite_pose_with_triggers(Vec::new()));
+    let mut candidate_store = store.clone();
+    candidate.apply_to_store(&mut candidate_store);
+
+    let error =
+        validate_document_transition(&current, &candidate, &store, &candidate_store).unwrap_err();
+
+    assert_eq!(validation_code(&error), Some("EMPTY_SPRITE_POSE_TRIGGERS"));
+}
+
+#[test]
+fn empty_sprite_pose_trigger_signature_is_index_independent() {
+    let normal = sprite_pose_with_triggers(vec![Uuid::new_v4().to_string()]);
+    let invalid = sprite_pose_with_triggers(Vec::new());
+    let invalid_pose_id = invalid.pose_id.clone();
+    let store = store_with_grandfathered_sprite_poses(vec![normal, invalid]);
+    let current = EditorDocumentV1::from_store(&store);
+    let current_key = empty_trigger_violation_key(&current, &store, &invalid_pose_id);
+    let mut reordered = current.clone();
+    reordered.sprite_positions.get_mut("4key").unwrap()[0]
+        .poses
+        .swap(0, 1);
+    let reordered_key = empty_trigger_violation_key(&reordered, &store, &invalid_pose_id);
+
+    assert_eq!(current_key, reordered_key);
+    assert_eq!(current_key.invalid_value, InvalidValueSignature::Empty);
+}
+
+#[test]
+fn preset_pose_alias_grandfathers_rekeyed_existing_violation() {
+    let invalid = sprite_pose_with_triggers(Vec::new());
+    let store = store_with_grandfathered_sprite_poses(vec![invalid]);
+    let current = EditorDocumentV1::from_store(&store);
+    let mut candidate_store = store.clone();
+    crate::state::native_element_id::rekey_store_element_ids(&mut candidate_store);
+    let candidate = EditorDocumentV1::from_store(&candidate_store);
+
+    validate_document_transition_with_keying(
+        &current,
+        &candidate,
+        &store,
+        &candidate_store,
+        GrandfatherKeying::LegacyPresetModeIndex,
+    )
+    .unwrap();
+}
+
+#[test]
+fn preset_pose_alias_rejects_new_violation() {
+    let normal = sprite_pose_with_triggers(vec![Uuid::new_v4().to_string()]);
+    let store = store_with_grandfathered_sprite_poses(vec![normal]);
+    let current = EditorDocumentV1::from_store(&store);
+    let mut candidate_store = store.clone();
+    crate::state::native_element_id::rekey_store_element_ids(&mut candidate_store);
+    candidate_store.sprite_positions.get_mut("4key").unwrap()[0]
+        .poses
+        .push(sprite_pose_with_triggers(Vec::new()));
+    let candidate = EditorDocumentV1::from_store(&candidate_store);
+
+    let error = validate_document_transition_with_keying(
+        &current,
+        &candidate,
+        &store,
+        &candidate_store,
+        GrandfatherKeying::LegacyPresetModeIndex,
+    )
+    .unwrap_err();
+
+    assert_eq!(validation_code(&error), Some("EMPTY_SPRITE_POSE_TRIGGERS"));
 }
 
 #[test]
@@ -3410,4 +3767,443 @@ fn compact_request_size_boundaries_are_exact() {
         error.details.unwrap().validation_code.as_deref(),
         Some("REQUEST_TOO_LARGE")
     );
+}
+
+fn sprite_violation_codes(sprite: ReactiveSpritePosition) -> BTreeSet<&'static str> {
+    let mut document = EditorDocumentV1::from_store(&AppStoreData::default());
+    document
+        .sprite_positions
+        .insert("4key".to_string(), vec![sprite]);
+    let mut violations = BTreeSet::new();
+    collect_sprite_violations(&document, &mut violations);
+    violations.iter().map(ValidationViolation::code).collect()
+}
+
+fn sprite_with_triggers(triggers: Vec<String>) -> ReactiveSpritePosition {
+    ReactiveSpritePosition {
+        id: Uuid::new_v4().to_string(),
+        poses: vec![SpritePose {
+            pose_id: Uuid::new_v4().to_string(),
+            triggers,
+            ..SpritePose::default()
+        }],
+        ..ReactiveSpritePosition::default()
+    }
+}
+
+#[test]
+fn sprite_transform_constraints_follow_shared_fixture() {
+    let fixture = sprite_constraint_fixture();
+    assert_eq!(fixture.offset.min, SPRITE_TRANSFORM_OFFSET_MIN);
+    assert_eq!(fixture.offset.max, SPRITE_TRANSFORM_OFFSET_MAX);
+    assert_eq!(fixture.rotation.min, SPRITE_TRANSFORM_ROTATION_MIN);
+    assert_eq!(fixture.rotation.max, SPRITE_TRANSFORM_ROTATION_MAX);
+    assert_eq!(fixture.scale.min, SPRITE_TRANSFORM_SCALE_MIN);
+    assert_eq!(fixture.scale.max, SPRITE_TRANSFORM_SCALE_MAX);
+
+    for transform in [
+        SpriteTransform {
+            x: fixture.offset.min,
+            y: fixture.offset.max,
+            rotation: fixture.rotation.min,
+            scale: fixture.scale.min,
+        },
+        SpriteTransform {
+            x: fixture.offset.max,
+            y: fixture.offset.min,
+            rotation: fixture.rotation.max,
+            scale: fixture.scale.max,
+        },
+    ] {
+        let violations = sprite_violation_codes(ReactiveSpritePosition {
+            idle_transform: transform,
+            ..ReactiveSpritePosition::default()
+        });
+        assert!(!violations.contains("INVALID_SPRITE_TRANSFORM"));
+    }
+
+    for transform in [
+        SpriteTransform {
+            x: fixture.offset.min - 0.000_001,
+            ..SpriteTransform::default()
+        },
+        SpriteTransform {
+            y: fixture.offset.max + 0.000_001,
+            ..SpriteTransform::default()
+        },
+        SpriteTransform {
+            rotation: fixture.rotation.max + 0.000_001,
+            ..SpriteTransform::default()
+        },
+        SpriteTransform {
+            rotation: fixture.rotation.min - 0.000_001,
+            ..SpriteTransform::default()
+        },
+        SpriteTransform {
+            scale: fixture.scale.min - 0.000_001,
+            ..SpriteTransform::default()
+        },
+        SpriteTransform {
+            scale: fixture.scale.max + 0.000_001,
+            ..SpriteTransform::default()
+        },
+    ] {
+        let violations = sprite_violation_codes(ReactiveSpritePosition {
+            idle_transform: transform,
+            ..ReactiveSpritePosition::default()
+        });
+        assert!(violations.contains("INVALID_SPRITE_TRANSFORM"));
+    }
+}
+
+#[test]
+fn sprite_geometry_constraints_follow_shared_fixture() {
+    let fixture = sprite_constraint_fixture();
+    assert_eq!(
+        fixture.image_metrics.dimension_min,
+        SPRITE_IMAGE_DIMENSION_MIN
+    );
+    assert_eq!(
+        fixture.image_metrics.dimension_max,
+        SPRITE_IMAGE_DIMENSION_MAX
+    );
+
+    for pivot in [
+        crate::models::SpriteAnchor {
+            x: fixture.anchor.min,
+            y: fixture.anchor.max,
+        },
+        crate::models::SpriteAnchor {
+            x: fixture.anchor.max,
+            y: fixture.anchor.min,
+        },
+    ] {
+        let violations = sprite_violation_codes(ReactiveSpritePosition {
+            pivot,
+            ..ReactiveSpritePosition::default()
+        });
+        assert!(!violations.contains("INVALID_SPRITE_PIVOT"));
+    }
+    for pivot in [
+        crate::models::SpriteAnchor {
+            x: fixture.anchor.min - 0.000_001,
+            y: fixture.anchor.min,
+        },
+        crate::models::SpriteAnchor {
+            x: fixture.anchor.max,
+            y: fixture.anchor.max + 0.000_001,
+        },
+    ] {
+        let violations = sprite_violation_codes(ReactiveSpritePosition {
+            pivot,
+            ..ReactiveSpritePosition::default()
+        });
+        assert!(violations.contains("INVALID_SPRITE_PIVOT"));
+    }
+
+    for pivot in [
+        crate::models::SpriteAnchor {
+            x: fixture.anchor.min,
+            y: fixture.anchor.max,
+        },
+        crate::models::SpriteAnchor {
+            x: fixture.anchor.max,
+            y: fixture.anchor.min,
+        },
+    ] {
+        let violations = sprite_violation_codes(ReactiveSpritePosition {
+            poses: vec![SpritePose {
+                pivot: Some(pivot),
+                ..SpritePose::default()
+            }],
+            ..ReactiveSpritePosition::default()
+        });
+        assert!(!violations.contains("INVALID_SPRITE_POSE_PIVOT"));
+    }
+    for pivot in [
+        crate::models::SpriteAnchor {
+            x: fixture.anchor.min - 0.000_001,
+            y: fixture.anchor.min,
+        },
+        crate::models::SpriteAnchor {
+            x: fixture.anchor.max,
+            y: fixture.anchor.max + 0.000_001,
+        },
+    ] {
+        let violations = sprite_violation_codes(ReactiveSpritePosition {
+            poses: vec![SpritePose {
+                pivot: Some(pivot),
+                ..SpritePose::default()
+            }],
+            ..ReactiveSpritePosition::default()
+        });
+        assert!(violations.contains("INVALID_SPRITE_POSE_PIVOT"));
+    }
+}
+
+#[test]
+fn sprite_image_metrics_are_optional_but_invalid_or_stale_values_are_rejected() {
+    for sprite in [
+        ReactiveSpritePosition {
+            reference_natural_size: Some(SpriteReferenceNaturalSize {
+                source: None,
+                width: 0,
+                height: SPRITE_IMAGE_DIMENSION_MAX,
+            }),
+            ..ReactiveSpritePosition::default()
+        },
+        ReactiveSpritePosition {
+            poses: vec![SpritePose {
+                image_override: Some("/images/pose.png".to_string()),
+                image_override_metrics: Some(SpriteImageMetrics {
+                    source: "/images/pose.png".to_string(),
+                    width: 0,
+                    height: SPRITE_IMAGE_DIMENSION_MAX,
+                }),
+                ..SpritePose::default()
+            }],
+            ..ReactiveSpritePosition::default()
+        },
+    ] {
+        assert!(sprite_violation_codes(sprite).contains("INVALID_SPRITE_IMAGE_METRICS"));
+    }
+
+    let without_metrics = ReactiveSpritePosition {
+        base_image: Some("/images/base.png".to_string()),
+        poses: vec![SpritePose {
+            image_override: Some("/images/pose.png".to_string()),
+            ..SpritePose::default()
+        }],
+        ..ReactiveSpritePosition::default()
+    };
+    assert!(!sprite_violation_codes(without_metrics).contains("STALE_SPRITE_IMAGE_METRICS"));
+
+    let stale_codes = sprite_violation_codes(ReactiveSpritePosition {
+        base_image: Some("/images/base.png".to_string()),
+        reference_natural_size: Some(SpriteReferenceNaturalSize {
+            source: Some("/images/old-base.png".to_string()),
+            width: 100,
+            height: 200,
+        }),
+        poses: vec![SpritePose {
+            image_override: Some("/images/pose.png".to_string()),
+            image_override_metrics: Some(SpriteImageMetrics {
+                source: "/images/old-pose.png".to_string(),
+                width: 50,
+                height: 75,
+            }),
+            ..SpritePose::default()
+        }],
+        ..ReactiveSpritePosition::default()
+    });
+    assert!(stale_codes.contains("STALE_SPRITE_IMAGE_METRICS"));
+
+    let valid_codes = sprite_violation_codes(ReactiveSpritePosition {
+        base_image: Some("/images/base.png".to_string()),
+        reference_natural_size: Some(SpriteReferenceNaturalSize {
+            source: Some("/images/base.png".to_string()),
+            width: SPRITE_IMAGE_DIMENSION_MAX,
+            height: SPRITE_IMAGE_DIMENSION_MIN,
+        }),
+        poses: vec![SpritePose {
+            image_override: Some("/images/pose.png".to_string()),
+            image_override_metrics: Some(SpriteImageMetrics {
+                source: "/images/pose.png".to_string(),
+                width: SPRITE_IMAGE_DIMENSION_MIN,
+                height: SPRITE_IMAGE_DIMENSION_MAX,
+            }),
+            ..SpritePose::default()
+        }],
+        ..ReactiveSpritePosition::default()
+    });
+    assert!(!valid_codes.contains("INVALID_SPRITE_IMAGE_METRICS"));
+    assert!(!valid_codes.contains("STALE_SPRITE_IMAGE_METRICS"));
+}
+
+#[test]
+fn whitespace_sprite_image_refs_follow_renderable_validation_contract() {
+    let whitespace_only = sprite_violation_codes(ReactiveSpritePosition {
+        base_image: Some("   ".to_string()),
+        poses: vec![SpritePose {
+            image_override: Some("\t \n".to_string()),
+            ..SpritePose::default()
+        }],
+        ..ReactiveSpritePosition::default()
+    });
+    assert!(!whitespace_only.contains("STALE_SPRITE_IMAGE_METRICS"));
+
+    let stale_reference = sprite_violation_codes(ReactiveSpritePosition {
+        base_image: Some("   ".to_string()),
+        reference_natural_size: Some(SpriteReferenceNaturalSize {
+            source: Some("   ".to_string()),
+            width: 100,
+            height: 100,
+        }),
+        ..ReactiveSpritePosition::default()
+    });
+    assert!(stale_reference.contains("STALE_SPRITE_IMAGE_METRICS"));
+
+    let renderable_override = sprite_violation_codes(ReactiveSpritePosition {
+        base_image: Some("   ".to_string()),
+        poses: vec![SpritePose {
+            image_override: Some("/images/pose.png".to_string()),
+            image_override_metrics: Some(SpriteImageMetrics {
+                source: "/images/pose.png".to_string(),
+                width: 100,
+                height: 100,
+            }),
+            ..SpritePose::default()
+        }],
+        ..ReactiveSpritePosition::default()
+    });
+    assert!(!renderable_override.contains("STALE_SPRITE_IMAGE_METRICS"));
+}
+
+#[test]
+fn sprite_image_validation_uses_existing_validation_failed_details_codes() {
+    let cases = [
+        (
+            ReactiveSpritePosition {
+                id: Uuid::new_v4().to_string(),
+                reference_natural_size: Some(SpriteReferenceNaturalSize {
+                    source: None,
+                    width: 0,
+                    height: 100,
+                }),
+                ..ReactiveSpritePosition::default()
+            },
+            "INVALID_SPRITE_IMAGE_METRICS",
+        ),
+        (
+            ReactiveSpritePosition {
+                id: Uuid::new_v4().to_string(),
+                base_image: Some("/images/base.png".to_string()),
+                reference_natural_size: Some(SpriteReferenceNaturalSize {
+                    source: Some("/images/old.png".to_string()),
+                    width: 100,
+                    height: 100,
+                }),
+                ..ReactiveSpritePosition::default()
+            },
+            "STALE_SPRITE_IMAGE_METRICS",
+        ),
+    ];
+
+    for (sprite, expected_code) in cases {
+        let error = validate_new_sprite(sprite).unwrap_err();
+        assert_eq!(
+            error.error_code,
+            crate::errors::EditorCommitErrorCode::ValidationFailed
+        );
+        assert_eq!(
+            error
+                .details
+                .and_then(|details| details.validation_code)
+                .as_deref(),
+            Some(expected_code)
+        );
+    }
+}
+
+#[test]
+fn sprite_collection_constraints_follow_shared_fixture() {
+    let fixture = sprite_constraint_fixture();
+    assert_eq!(fixture.max_poses, MAX_SPRITE_POSES);
+    assert_eq!(fixture.max_triggers_per_pose, MAX_SPRITE_POSE_TRIGGERS);
+
+    validate_new_sprite(sprite_with_pose_count(fixture.max_poses)).unwrap();
+    let error = validate_new_sprite(sprite_with_pose_count(fixture.max_poses + 1)).unwrap_err();
+    assert_eq!(
+        error
+            .details
+            .as_ref()
+            .and_then(|details| details.validation_code.as_deref()),
+        Some("COLLECTION_TOO_LARGE")
+    );
+
+    let triggers = (0..fixture.max_triggers_per_pose)
+        .map(|index| Uuid::from_u128(20_000 + index as u128).to_string())
+        .collect::<Vec<_>>();
+    let at_limit = sprite_violation_codes(sprite_with_triggers(triggers.clone()));
+    assert!(!at_limit.contains("TOO_MANY_SPRITE_POSE_TRIGGERS"));
+    let mut over_limit = triggers;
+    over_limit.push(Uuid::from_u128(20_000 + fixture.max_triggers_per_pose as u128).to_string());
+    assert!(sprite_violation_codes(sprite_with_triggers(over_limit))
+        .contains("TOO_MANY_SPRITE_POSE_TRIGGERS"));
+}
+
+#[test]
+fn sprite_transition_constraints_and_defaults_follow_shared_fixture() {
+    let fixture = sprite_constraint_fixture();
+    assert_eq!(fixture.transition_ms.min, 0);
+    assert_eq!(fixture.transition_ms.max, SPRITE_TRANSITION_MS_MAX);
+    for transition_ms in [fixture.transition_ms.min, fixture.transition_ms.max] {
+        let violations = sprite_violation_codes(ReactiveSpritePosition {
+            transition_ms,
+            ..ReactiveSpritePosition::default()
+        });
+        assert!(!violations.contains("INVALID_SPRITE_TRANSITION"));
+    }
+    assert!(sprite_violation_codes(ReactiveSpritePosition {
+        transition_ms: fixture.transition_ms.max + 1,
+        ..ReactiveSpritePosition::default()
+    })
+    .contains("INVALID_SPRITE_TRANSITION"));
+
+    assert_eq!(fixture.press_duration_ms.min, SPRITE_PRESS_DURATION_MS_MIN);
+    assert_eq!(fixture.press_duration_ms.max, SPRITE_PRESS_DURATION_MS_MAX);
+    for press_duration_ms in [fixture.press_duration_ms.min, fixture.press_duration_ms.max] {
+        let violations = sprite_violation_codes(ReactiveSpritePosition {
+            press_duration_ms,
+            ..ReactiveSpritePosition::default()
+        });
+        assert!(!violations.contains("INVALID_SPRITE_PRESS_DURATION"));
+    }
+    for press_duration_ms in [
+        fixture.press_duration_ms.min - 1,
+        fixture.press_duration_ms.max + 1,
+    ] {
+        assert!(sprite_violation_codes(ReactiveSpritePosition {
+            press_duration_ms,
+            ..ReactiveSpritePosition::default()
+        })
+        .contains("INVALID_SPRITE_PRESS_DURATION"));
+    }
+
+    assert_eq!(
+        crate::models::default_sprite_transition_ms(),
+        fixture.default_transition_ms
+    );
+    assert_eq!(
+        crate::models::default_sprite_transition_easing(),
+        fixture.default_transition_easing
+    );
+    let default_sprite = ReactiveSpritePosition::default();
+    assert_eq!(default_sprite.activation, fixture.default_activation);
+    assert_eq!(
+        default_sprite.press_duration_ms,
+        fixture.default_press_duration_ms
+    );
+}
+
+#[test]
+fn sprite_pose_trigger_count_accepts_512_and_rejects_513() {
+    let triggers = (1..=MAX_SPRITE_POSE_TRIGGERS)
+        .map(|index| Uuid::from_u128(index as u128).to_string())
+        .collect::<Vec<_>>();
+    let at_limit = sprite_violation_codes(sprite_with_triggers(triggers.clone()));
+    assert!(!at_limit.contains("TOO_MANY_SPRITE_POSE_TRIGGERS"));
+    assert!(!at_limit.contains("INVALID_SPRITE_TRIGGER"));
+
+    let mut over_limit = triggers;
+    over_limit.push(Uuid::from_u128(MAX_SPRITE_POSE_TRIGGERS as u128 + 1).to_string());
+    let over_limit = sprite_violation_codes(sprite_with_triggers(over_limit));
+    assert!(over_limit.contains("TOO_MANY_SPRITE_POSE_TRIGGERS"));
+}
+
+#[test]
+fn sprite_pose_trigger_rejects_invalid_element_id() {
+    let violations =
+        sprite_violation_codes(sprite_with_triggers(vec!["not-an-element-id".to_string()]));
+    assert!(violations.contains("INVALID_SPRITE_TRIGGER"));
 }

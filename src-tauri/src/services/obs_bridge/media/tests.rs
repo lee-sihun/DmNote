@@ -6,28 +6,29 @@ use tokio::net::{TcpListener, TcpStream};
 
 use super::*;
 
+// 선택창이 받는 이미지는 전부 OBS에서도 서빙되고 image/* MIME으로 나가야 한다
 #[test]
-fn percent_decoding_preserves_malformed_sequences_and_unicode() {
-    for (input, expected) in [
-        ("%가", "%가"),
-        ("%a가", "%a가"),
-        ("%😀", "%😀"),
-        ("%", "%"),
-        ("%2", "%2"),
-        ("%GG", "%GG"),
-        ("한글%2f이미지%2F", "한글/이미지/"),
-        ("%EA%B0%80", "가"),
-        ("%FF", "�"),
-    ] {
-        assert_eq!(percent_decode(input), expected, "input: {input}");
+fn media_whitelist_serves_every_picker_image_extension() {
+    for ext in SUPPORTED_IMAGE_EXTENSIONS {
+        assert!(
+            is_servable_media_extension(ext),
+            "{ext} 이미지가 OBS 서빙에서 빠짐"
+        );
+        let mime = guess_mime(&format!("/app/images/sample.{ext}"));
+        assert!(
+            mime.starts_with("image/"),
+            "{ext} MIME이 image/*가 아님: {mime}"
+        );
     }
+    assert_eq!(guess_mime("/app/images/a.BMP"), "image/bmp");
+    assert_eq!(guess_mime("/app/images/a.ico"), "image/x-icon");
+    assert_eq!(guess_mime("/app/images/a.avif"), "image/avif");
 }
 
-#[tokio::test]
-async fn authenticated_malformed_media_path_returns_bad_request() {
-    for path in ["%가", "%a가", "%😀", "%", "%2", "%GG"] {
-        let response = media_response("secret", &format!("{path}?token=secret"), None).await;
-        assert_eq!(response, empty_response("400 Bad Request"), "path: {path}");
+#[test]
+fn media_whitelist_still_rejects_non_media_files() {
+    for ext in ["json", "html", "js", "exe", "css", ""] {
+        assert!(!is_servable_media_extension(ext), "{ext} 서빙 허용됨");
     }
 }
 
@@ -275,4 +276,29 @@ async fn canonical_containment_follows_symlinks_before_authorization() {
     let response = media_response("", &encode_path(&outside_link), Some(app_data_dir)).await;
     assert!(response.starts_with(b"HTTP/1.1 200 OK"));
     assert!(response.ends_with(b"inside"));
+}
+
+#[test]
+fn percent_decoding_preserves_malformed_sequences_and_unicode() {
+    for (input, expected) in [
+        ("%가", "%가"),
+        ("%a가", "%a가"),
+        ("%😀", "%😀"),
+        ("%", "%"),
+        ("%2", "%2"),
+        ("%GG", "%GG"),
+        ("한글%2f이미지%2F", "한글/이미지/"),
+        ("%EA%B0%80", "가"),
+        ("%FF", "�"),
+    ] {
+        assert_eq!(percent_decode(input), expected, "input: {input}");
+    }
+}
+
+#[tokio::test]
+async fn authenticated_malformed_media_path_returns_bad_request() {
+    for path in ["%가", "%a가", "%😀", "%", "%2", "%GG"] {
+        let response = media_response("secret", &format!("{path}?token=secret"), None).await;
+        assert_eq!(response, empty_response("400 Bad Request"), "path: {path}");
+    }
 }

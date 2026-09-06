@@ -5,6 +5,7 @@ import {
 } from './useMainDialogRuntime';
 import { useTranslation } from '@contexts/useTranslation';
 import TitleBar from '@components/main/TitleBar';
+import EditorSaveNotice from '@components/main/EditorSaveNotice';
 import { useCustomCssInjection } from '@hooks/app/useCustomCssInjection';
 import { USER_CSS_SCOPE_SELECTOR } from '@utils/css/scopeUserCss';
 import { useCustomJsInjection } from '@hooks/app/useCustomJsInjection';
@@ -52,7 +53,7 @@ import { appApi } from '@api/modules/app/appApi';
 
 import { useUIStore } from '@stores/useUIStore';
 
-type ToolbarAddItemType = 'key' | 'stat' | 'graph' | 'knob';
+type ToolbarAddItemType = 'key' | 'stat' | 'graph' | 'knob' | 'sprite';
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) {
@@ -412,6 +413,7 @@ export default function App() {
   return (
     <div className="bg-app w-full h-full flex flex-col overflow-hidden rounded-[8px]">
       <TitleBar />
+      <EditorSaveNotice />
       <div className="flex-1 bg-panel overflow-hidden flex relative">
         {isSettingsOpen ? (
           <div className="h-full w-full overflow-y-auto">
@@ -507,12 +509,8 @@ export default function App() {
           settings={shownNoteSettings}
           onClose={() => setIsNoteSettingOpen(false)}
           onSave={async (normalized) => {
-            try {
-              await settingsApi.update({ noteSettings: normalized });
-              setNoteSettings(normalized);
-            } catch (error) {
-              console.error('Failed to update note settings', error);
-            }
+            await settingsApi.update({ noteSettings: normalized });
+            setNoteSettings(normalized);
           }}
         />
       )}

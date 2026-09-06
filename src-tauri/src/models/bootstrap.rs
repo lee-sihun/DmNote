@@ -18,6 +18,7 @@ pub struct BootstrapPayload {
     pub stat_positions: StatPositions,
     pub graph_positions: GraphPositions,
     pub knob_positions: KnobPositions,
+    pub sprite_positions: SpritePositions,
     pub custom_tabs: Vec<CustomTab>,
     pub tab_order: Vec<String>,
     pub bar_count: u8,

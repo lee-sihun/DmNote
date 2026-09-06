@@ -1,12 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React from 'react';
 import type { ElementBounds as SmartGuideElementBounds } from '@utils/grid/smartGuides';
-import {
-  clearPendingCustomCursorHover,
-  getCursor,
-  isCustomCursorHoverSuspended,
-  setCustomCursorHover,
-  setPendingCustomCursorHover,
-} from '@utils/grid/cursorUtils';
+import { getCursor } from '@utils/grid/cursorUtils';
+import { useCustomCursorHover } from '@hooks/Grid/viewport/useCustomCursorHover';
 import type { ContinuousInputStrategy } from '@utils/animation/rafLatestScheduler';
 import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
@@ -19,6 +14,9 @@ import {
 } from './groupResizeUtils';
 import type { GroupResizeHandle, GroupResizeResult } from './groupResizePlan';
 import { useGroupResizeSession } from './useGroupResizeSession';
+import { rotatePointAround } from '@utils/element/rotation';
+import { resizeCursorForHandle } from './rotatedResize';
+import type { GroupRotationFrame } from './rotatedGroupResize';
 
 /**
  * 다중 선택 시 그룹 전체를 감싸는 리사이즈 핸들을 표시하는 컴포넌트
@@ -31,6 +29,7 @@ interface HandleProps {
   handle: GroupResizeHandle;
   centerX: number;
   centerY: number;
+  rotation: number;
   onMouseDown: (e: React.MouseEvent, handle: GroupResizeHandle) => void;
 }
 
@@ -40,12 +39,15 @@ interface GroupResizeHandlesProps {
   statPositions: CanonicalEditorDocumentV1['statPositions'];
   graphPositions: CanonicalEditorDocumentV1['graphPositions'];
   knobPositions: CanonicalEditorDocumentV1['knobPositions'];
+  // Grid 배선 전에도 컴포넌트가 동작하도록 선택 prop - 미전달 시 스프라이트만 제외
+  spritePositions?: CanonicalEditorDocumentV1['spritePositions'];
   selectedKeyType: string;
   pluginElements: PluginDisplayElementInternal[];
   zoom?: number;
   panX?: number;
   panY?: number;
   previewGroupBounds?: Bounds | null;
+  rotationFrame?: GroupRotationFrame;
   onGroupResizeStart?: (handle: GroupResizeHandle) => void;
   onGroupResize?: (result: GroupResizeResult) => void;
   onGroupResizeEnd?: () => void;
@@ -102,13 +104,11 @@ const HANDLES: GroupResizeHandle[] = [
 // 핸들 시각적 스타일 반환
 const getHandleStyle = (
   type: GroupResizeHandle['type'],
-  isHovered: boolean,
 ): React.CSSProperties => {
   const baseStyle: React.CSSProperties = {
-    backgroundColor: isHovered ? 'var(--ui-selection)' : 'white',
+    backgroundColor: 'white',
     border: '2px solid var(--ui-selection-border-strong)',
     pointerEvents: 'none',
-    transition: 'background-color 0.15s ease',
   };
 
   if (type === 'corner') {
@@ -140,27 +140,10 @@ const Handle = ({
   handle,
   centerX,
   centerY,
+  rotation,
   onMouseDown,
 }: HandleProps): React.ReactElement => {
-  const [isHovered, setIsHovered] = useState<boolean>(false);
-  const hoveredRef = useRef(false);
-  const pendingApplyRef = useRef<(() => void) | null>(null);
-
-  // 호버 중 unmount로 leave가 유실되면 남는 커서 오버레이·보류 기록 정리
-  useEffect(() => {
-    return () => {
-      if (pendingApplyRef.current) {
-        clearPendingCustomCursorHover(pendingApplyRef.current);
-        pendingApplyRef.current = null;
-      }
-      if (hoveredRef.current) setCustomCursorHover(null);
-    };
-  }, []);
-
-  const setHovered = (next: boolean) => {
-    hoveredRef.current = next;
-    setIsHovered(next);
-  };
+  const hover = useCustomCursorHover(handle.cursor);
 
   const hitX = centerX - HANDLE_HIT_HALF;
   const hitY = centerY - HANDLE_HIT_HALF;
@@ -185,32 +168,15 @@ const Handle = ({
         justifyContent: 'center',
       }}
       onMouseDown={(e) => onMouseDown(e, handle)}
-      onPointerEnter={(e) => {
-        // 드래그 세션 중 enter는 즉시 적용하지 않고 보류 기록 - 릴리즈 후
-        // resume 시점에 포인터가 핸들 안이면 그 hover를 적용한다
-        if (isCustomCursorHoverSuspended()) {
-          const apply = () => {
-            pendingApplyRef.current = null;
-            setHovered(true);
-          };
-          pendingApplyRef.current = apply;
-          setPendingCustomCursorHover(handle.cursor, apply, e.nativeEvent);
-          return;
-        }
-        setHovered(true);
-        setCustomCursorHover(handle.cursor, e.nativeEvent);
-      }}
-      onPointerLeave={(e) => {
-        // 자기 보류 기록만 소거 - 다른 핸들의 pending은 건드리지 않는다
-        if (pendingApplyRef.current) {
-          clearPendingCustomCursorHover(pendingApplyRef.current);
-          pendingApplyRef.current = null;
-        }
-        setHovered(false);
-        setCustomCursorHover(null, e.nativeEvent);
-      }}
+      onPointerEnter={hover.onPointerEnter}
+      onPointerLeave={hover.onPointerLeave}
     >
-      <div style={getHandleStyle(handle.type, isHovered)} />
+      <div
+        style={{
+          ...getHandleStyle(handle.type),
+          ...(rotation !== 0 ? { transform: `rotate(${rotation}deg)` } : {}),
+        }}
+      />
     </div>
   );
 };
@@ -221,12 +187,14 @@ const GroupResizeHandles = ({
   statPositions,
   graphPositions,
   knobPositions,
+  spritePositions,
   selectedKeyType,
   pluginElements,
   zoom = 1,
   panX = 0,
   panY = 0,
   previewGroupBounds,
+  rotationFrame,
   onGroupResizeStart,
   onGroupResize,
   onGroupResizeEnd,
@@ -242,6 +210,7 @@ const GroupResizeHandles = ({
     knobPositions,
     selectedKeyType,
     pluginElements,
+    spritePositions,
   );
 
   // 각 요소가 리사이즈 가능한지 확인
@@ -273,6 +242,8 @@ const GroupResizeHandles = ({
     selectedKeyType,
     pluginElements,
     zoom,
+    spritePositions,
+    rotationFrame,
     onGroupResizeStart,
     onGroupResize,
     onGroupResizeEnd,
@@ -282,12 +253,14 @@ const GroupResizeHandles = ({
   if (!groupData || selectedElements.length < 2) return null;
 
   // 표시할 bounds (프리뷰 또는 실제)
-  const displayBounds: Bounds = previewGroupBounds || {
-    x: groupData.x,
-    y: groupData.y,
-    width: groupData.width,
-    height: groupData.height,
-  };
+  const displayBounds: Bounds = previewGroupBounds ||
+    rotationFrame?.bounds || {
+      x: groupData.x,
+      y: groupData.y,
+      width: groupData.width,
+      height: groupData.height,
+    };
+  const rotation = rotationFrame?.rotation ?? 0;
 
   // 그룹 테두리 좌표 계산 - 내부 요소 테두리와 동일한 위치에 겹치게
   const selectionLeft = displayBounds.x * zoom + panX - 2;
@@ -309,12 +282,14 @@ const GroupResizeHandles = ({
     <>
       {/* 그룹 바운딩 박스 테두리 */}
       <div
+        data-group-resize-outline=""
         style={{
           position: 'absolute',
           left: selectionLeft,
           top: selectionTop,
           width: selectionWidth,
           height: selectionHeight,
+          ...(rotation !== 0 ? { transform: `rotate(${rotation}deg)` } : {}),
           border: `${GROUP_BORDER_WIDTH}px solid var(--ui-selection-border-strong)`,
           borderRadius: '6px',
           pointerEvents: 'none' as const,
@@ -332,6 +307,7 @@ const GroupResizeHandles = ({
           knobPositions,
           selectedKeyType,
           pluginElements,
+          spritePositions,
         );
         if (!bounds) return null;
 
@@ -358,15 +334,31 @@ const GroupResizeHandles = ({
       {resizableElements.length > 0 &&
         HANDLES.map((handle) => {
           // 핸들을 테두리 중앙에 배치
-          const centerX = handleAreaLeft + handleAreaWidth * handle.x;
-          const centerY = handleAreaTop + handleAreaHeight * handle.y;
+          const center = rotatePointAround(
+            {
+              x: handleAreaLeft + handleAreaWidth * handle.x,
+              y: handleAreaTop + handleAreaHeight * handle.y,
+            },
+            {
+              x: selectionLeft + selectionWidth / 2,
+              y: selectionTop + selectionHeight / 2,
+            },
+            rotation,
+          );
+          const rotatedHandle = rotationFrame
+            ? {
+                ...handle,
+                cursor: resizeCursorForHandle(handle.dx, handle.dy, rotation),
+              }
+            : handle;
 
           return (
             <Handle
               key={handle.id}
-              handle={handle}
-              centerX={centerX}
-              centerY={centerY}
+              handle={rotatedHandle}
+              centerX={center.x}
+              centerY={center.y}
+              rotation={rotation}
               onMouseDown={handleMouseDown}
             />
           );

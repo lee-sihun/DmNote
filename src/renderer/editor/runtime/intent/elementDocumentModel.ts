@@ -32,10 +32,15 @@ export const removeAt = (
 
 export const FIELD_BY_TYPE: Record<
   NativeElementType,
-  'keyPositions' | 'statPositions' | 'graphPositions' | 'knobPositions'
+  | 'keyPositions'
+  | 'statPositions'
+  | 'graphPositions'
+  | 'knobPositions'
+  | 'spritePositions'
 > = {
   key: 'keyPositions',
   stat: 'statPositions',
   graph: 'graphPositions',
   knob: 'knobPositions',
+  sprite: 'spritePositions',
 };

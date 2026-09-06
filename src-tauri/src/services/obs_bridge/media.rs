@@ -5,6 +5,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 
 use super::transport::write_empty_http_response;
+use crate::state::assets::image_asset::SUPPORTED_IMAGE_EXTENSIONS;
 
 pub(super) async fn handle_media_request<ExpectedToken, AppDataDir>(
     stream: &mut TcpStream,
@@ -101,22 +102,7 @@ pub(super) async fn handle_media_request<ExpectedToken, AppDataDir>(
         .and_then(|e| e.to_str())
         .unwrap_or("")
         .to_ascii_lowercase();
-    if !matches!(
-        ext.as_str(),
-        "png"
-            | "jpg"
-            | "jpeg"
-            | "gif"
-            | "webp"
-            | "svg"
-            | "mp4"
-            | "webm"
-            | "ogg"
-            | "woff"
-            | "woff2"
-            | "ttf"
-            | "otf"
-    ) {
+    if !is_servable_media_extension(&ext) {
         let _ = stream
             .write_all(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
             .await;
@@ -144,6 +130,15 @@ pub(super) async fn handle_media_request<ExpectedToken, AppDataDir>(
     }
 }
 
+// 이미지는 선택창 목록 그대로, 나머지는 영상·폰트만
+fn is_servable_media_extension(ext: &str) -> bool {
+    SUPPORTED_IMAGE_EXTENSIONS.contains(&ext)
+        || matches!(
+            ext,
+            "mp4" | "webm" | "ogg" | "woff" | "woff2" | "ttf" | "otf"
+        )
+}
+
 /// 파일 확장자로 MIME 타입 추정
 pub(super) fn guess_mime(path: &str) -> &'static str {
     match path
@@ -162,6 +157,9 @@ pub(super) fn guess_mime(path: &str) -> &'static str {
         "gif" => "image/gif",
         "webp" => "image/webp",
         "svg" => "image/svg+xml",
+        "bmp" => "image/bmp",
+        "ico" => "image/x-icon",
+        "avif" => "image/avif",
         "mp4" => "video/mp4",
         "webm" => "video/webm",
         "ogg" => "video/ogg",

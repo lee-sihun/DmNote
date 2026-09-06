@@ -11,6 +11,7 @@ import {
 import type { StatItemPositions } from '@src/types/key/statItems';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
 import type { KnobItemPositions } from '@src/types/key/knobs';
+import type { SpritePositions } from '@src/types/key/sprites';
 import type { LayerGroups } from '@src/types/layerGroups';
 import type {
   EditorPluginCommitResult,
@@ -370,6 +371,7 @@ export type PresetSnapshot = {
   statPositions: StatItemPositions;
   graphPositions: GraphItemPositions;
   knobPositions: KnobItemPositions;
+  spritePositions: SpritePositions;
   customTabs: CustomTab[];
   tabOrder: string[];
   barCount: number;

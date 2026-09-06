@@ -20,11 +20,13 @@ import {
   resolvedGlowSize,
   type TrackLayoutInput,
 } from '@stores/signals/noteBuffer';
+import { trackRectFromOrigin } from '@utils/layout/trackGeometry';
 
 const vertexShader = `
   attribute vec3 position;
-  attribute vec3 noteInfo; // x: startTime, y: endTime, z: trackX
-  attribute vec2 noteSize; // x: width, y: trackBottomY
+  attribute vec3 noteInfo; // x: startTime, y: endTime, z: origin x
+  attribute vec2 noteSize; // x: 교차축 폭, y: origin y
+  attribute vec2 noteDir; // 진행 방향 단위벡터 d (캔버스 좌표, y 아래 양수)
   attribute vec4 noteColorTop;
   attribute vec4 noteColorBottom;
   attribute float noteRadius;
@@ -60,14 +62,14 @@ const vertexShader = `
   varying vec2 vBorderGradient; // x: LUT 행, y: 각도 라디안
   varying vec3 vBodyPaint;
   varying vec4 vGlowPaint;
-  varying float vTrackTopY;
-  varying float vTrackBottomY;
+  // 흐름 비율 (1 - s/H). 글로우 확장 정점의 raw 값을 보간하고 fragment에서 clamp
+  varying float vFlowRatioRaw;
 
   void main() {
     float startTime = noteInfo.x;
     float endTime = noteInfo.y;
-    float trackX = noteInfo.z;
-    float trackBottomY = noteSize.y;
+    // O: 히트라인의 c=0 코너, s는 O에서 진행 방향으로 잰 거리
+    vec2 origin = vec2(noteInfo.z, noteSize.y);
     float noteWidth = noteSize.x;
 
     if (startTime == 0.0) {
@@ -89,49 +91,47 @@ const vertexShader = `
       rawNoteLength = max(0.0, (endTime - startTime) * uFlowSpeed / 1000.0);
     }
 
-    float noteLength = min(rawNoteLength, uTrackHeight);
-    float noteTopY;
-    float noteBottomY;
-
+    // 활성 [0, len], 완료 [travel, travel+len]
+    float len = min(rawNoteLength, uTrackHeight);
+    float rawLo;
+    float rawHi;
     if (isActive) {
-      if (uReverse < 0.5) {
-        noteBottomY = trackBottomY;
-        noteTopY = trackBottomY - noteLength;
-      } else {
-        float trackTopY_local = trackBottomY - uTrackHeight;
-        noteTopY = trackTopY_local;
-        noteBottomY = trackTopY_local + noteLength;
-      }
+      rawLo = 0.0;
+      rawHi = len;
     } else {
-      if (uReverse < 0.5) {
-        float travel = (uTime - endTime) * uFlowSpeed / 1000.0;
-        noteBottomY = trackBottomY - travel;
-        noteTopY = noteBottomY - noteLength;
-      } else {
-        float travel = (uTime - endTime) * uFlowSpeed / 1000.0;
-        float trackTopY_local = trackBottomY - uTrackHeight;
-        noteTopY = trackTopY_local + travel;
-        noteBottomY = noteTopY + noteLength;
-      }
+      float travel = (uTime - endTime) * uFlowSpeed / 1000.0;
+      rawLo = travel;
+      rawHi = travel + len;
     }
 
-    float trackTopY = trackBottomY - uTrackHeight;
-    noteTopY = max(noteTopY, trackTopY);
-    noteBottomY = min(noteBottomY, trackBottomY);
+    // 리버스 = s 공간 미러 (진행 방향과 독립)
+    if (uReverse >= 0.5) {
+      float mirroredLo = uTrackHeight - rawHi;
+      rawHi = uTrackHeight - rawLo;
+      rawLo = mirroredLo;
+    }
 
-    // noteBottomY < noteTopY: 트랙을 벗어난 역방향 완료 노트 —
-    // 음수 길이 쿼드 래스터라이즈와 clamp(r, 0, 음수) undefined 방지
-    // strict less로 길이 0(스폰 프레임 글로우 퍼프)은 보존
-    if (noteBottomY <= trackTopY || noteBottomY < 0.0 || noteBottomY < noteTopY) {
+    // 컬링은 raw 구간으로 선판정 - 클램프 뒤에 판정하면 트랙을 벗어난 완료 노트가
+    // 0길이로 접혀 잔류한다. 키쪽 경계는 strict less로 스폰 프레임 길이 0 글로우 퍼프 보존
+    if (rawLo >= uTrackHeight || rawHi < 0.0 || rawHi < rawLo) {
       gl_Position = vec4(2.0, 2.0, 2.0, 0.0);
       vColorTop = vec4(0.0);
       vColorBottom = vec4(0.0);
       return;
     }
 
-    noteLength = noteBottomY - noteTopY;
-    float centerCanvasY = (noteTopY + noteBottomY) / 2.0;
-    float centerWorldY = uScreenHeight - centerCanvasY;
+    float sLo = clamp(rawLo, 0.0, uTrackHeight);
+    float sHi = clamp(rawHi, 0.0, uTrackHeight);
+    float noteLength = sHi - sLo;
+
+    vec2 dir = noteDir;
+    vec2 perp = vec2(-dir.y, dir.x);
+    float centerS = (sLo + sHi) / 2.0;
+    vec2 centerCanvas = origin + dir * centerS + perp * (noteWidth / 2.0);
+    // 캔버스(y 아래) → 월드(y 위): y만 뒤집기
+    vec2 centerWorld = vec2(centerCanvas.x, uScreenHeight - centerCanvas.y);
+    vec2 dirWorld = vec2(dir.x, -dir.y);
+    vec2 perpWorld = vec2(perp.x, -perp.y);
 
     // SDF의 1px AA가 primitive 경계에서 잘리지 않게 최소 halo 보장
     // 길이 0·글로우 없음은 기존처럼 degenerate quad를 유지
@@ -140,14 +140,12 @@ const vertexShader = `
     float expandedWidth = noteWidth + quadHalo * 2.0;
     float expandedLength = noteLength + quadHalo * 2.0;
 
-    vec3 transformed = vec3(position.x, position.y, position.z);
-    transformed.x *= expandedWidth;
-    transformed.y *= expandedLength;
-    transformed.x += trackX + noteWidth / 2.0;
-    transformed.y += centerWorldY;
-    transformed.z = 0.0;
+    // 쿼드 로컬: position.x = 교차축, position.y = 진행축
+    vec2 planar = centerWorld
+      + dirWorld * (position.y * expandedLength)
+      + perpWorld * (position.x * expandedWidth);
 
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(transformed, 1.0);
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(planar, 0.0, 1.0);
 
     vColorTop = noteColorTop;
     vColorBottom = noteColorBottom;
@@ -163,16 +161,17 @@ const vertexShader = `
     vBorderGradient = noteBorderGradientInfo;
     vBodyPaint = noteBodyPaint;
     vGlowPaint = noteGlowPaint;
-    vTrackTopY = trackTopY;
-    vTrackBottomY = trackBottomY;
+    // 확장 정점의 raw s로 흐름 비율 (1 = 히트라인쪽, 0 = 먼쪽)
+    float sVertex = centerS + position.y * expandedLength;
+    vFlowRatioRaw = 1.0 - sVertex / max(uTrackHeight, 0.0001);
   }
 `;
 
 const fragmentShader = `
   precision highp float;
 
-  uniform float uCanvasBottomDomY;
   uniform float uDomPerPx;
+  uniform float uTrackHeight;
   uniform float uFadeTopPx;
   uniform float uFadeBottomPx;
   uniform sampler2D uGradientLUT;
@@ -191,8 +190,7 @@ const fragmentShader = `
   varying vec2 vBorderGradient; // x: LUT 행, y: 각도 라디안
   varying vec3 vBodyPaint; // x: 행 (-1 = direct), y: 각도, z: 배율
   varying vec4 vGlowPaint; // x: 행, y: 각도, z: 배율, w: LUT 알파 사용
-  varying float vTrackTopY;
-  varying float vTrackBottomY;
+  varying float vFlowRatioRaw;
 
   // 트랙 rect 기준 CSS linear-gradient 투영으로 LUT 샘플 (전 표면 공유)
   vec4 sampleGradientLUT(float row, float angleRad, float nx, float ny, float boxW, float boxH) {
@@ -206,12 +204,9 @@ const fragmentShader = `
   }
 
   void main() {
-    // gl_FragCoord는 crop된 캔버스 기준 물리 픽셀 단위
-    // uDomPerPx = cssHeight / drawingBufferHeight — 비정수 DPR의 backing 반올림 반영
-    // max()는 uniform 미설정/0 방어
-    float currentDOMY = uCanvasBottomDomY - gl_FragCoord.y * max(uDomPerPx, 0.0001);
-    float trackHeight = max(vTrackBottomY - vTrackTopY, 0.0001);
-    float gradientRatio = clamp((currentDOMY - vTrackTopY) / trackHeight, 0.0, 1.0);
+    // 흐름 비율: 0 = 먼쪽 끝, 1 = 키(히트라인)쪽. 버텍스 raw 보간 후 여기서 clamp
+    float trackHeight = max(uTrackHeight, 0.0001);
+    float gradientRatio = clamp(vFlowRatioRaw, 0.0, 1.0);
     float trackRelativeY = gradientRatio;
 
     vec4 baseColor = mix(vColorTop, vColorBottom, gradientRatio);
@@ -263,7 +258,8 @@ const fragmentShader = `
     float r = clamp(vRadius, 0.0, min(vHalfSize.x, vHalfSize.y));
     vec2 q = abs(vLocalPos) - (vHalfSize - vec2(r));
     float dist = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
-    // AA 폭은 물리 픽셀 1개(CSS px 단위) - backing 배율이 올라가면 경계 램프가 그만큼 좁아진다
+    // AA 폭은 물리 픽셀 1개(CSS px 단위) - backing 배율이 올라가면 경계 램프가 그만큼 좁아진다.
+    // uDomPerPx = cssHeight / drawingBufferHeight, 비정수 DPR의 backing 반올림 반영. max()는 미설정/0 방어
     float aa = max(uDomPerPx, 0.0001);
 
     // 테두리 디코딩: width에 side mode 인코딩됨 (0~20=all, 100~120=vertical, 200~220=horizontal)
@@ -368,6 +364,7 @@ const buildPlaneGeometry = (gl: OGLRenderingContext): Geometry =>
 const INSTANCED_ATTRIBUTE_KEYS: readonly string[] = Object.freeze([
   'noteInfo',
   'noteSize',
+  'noteDir',
   'noteColorTop',
   'noteColorBottom',
   'noteRadius',
@@ -482,6 +479,7 @@ interface AppliedCrop {
 }
 
 const CROP_AA_PAD = 2;
+const UP_DIRECTION = Object.freeze({ x: 0, y: -1 });
 
 const computeTrackBounds = (
   tracks: TrackLayoutInput[],
@@ -494,11 +492,17 @@ const computeTrackBounds = (
   let maxY = -Infinity;
   for (const track of tracks) {
     const pad = resolvedGlowSize(track) + CROP_AA_PAD;
-    minX = Math.min(minX, track.position.dx - pad);
-    maxX = Math.max(maxX, track.position.dx + track.width + pad);
     // 셰이더는 uTrackHeight 기준으로 노트를 클램프하므로 per-track height 대신 설정값 사용
-    minY = Math.min(minY, track.position.dy - trackHeight - pad);
-    maxY = Math.max(maxY, track.position.dy + pad);
+    const rect = trackRectFromOrigin(
+      { x: track.position.dx, y: track.position.dy },
+      track.direction ?? UP_DIRECTION,
+      trackHeight,
+      track.width,
+    );
+    minX = Math.min(minX, rect.minX - pad);
+    maxX = Math.max(maxX, rect.maxX + pad);
+    minY = Math.min(minY, rect.minY - pad);
+    maxY = Math.max(maxY, rect.maxY + pad);
   }
   // 뷰포트 교집합 + floor/ceil 반올림 (1px 클리핑·떨림 방지)
   const x = Math.max(0, Math.floor(minX));
@@ -550,6 +554,7 @@ interface NoteBuffer {
   maybeRebaseEpoch(nowMs: number): boolean;
   noteInfo: Float32Array;
   noteSize: Float32Array;
+  noteDir: Float32Array;
   noteColorTop: Float32Array;
   noteColorBottom: Float32Array;
   noteRadius: Float32Array;
@@ -652,6 +657,12 @@ export function WebGLTracksOGL({
       instanced: 1,
       size: 2,
       data: noteBuffer.noteSize,
+      usage: gl.DYNAMIC_DRAW,
+    });
+    geometry.addAttribute('noteDir', {
+      instanced: 1,
+      size: 2,
+      data: noteBuffer.noteDir,
       usage: gl.DYNAMIC_DRAW,
     });
     geometry.addAttribute('noteColorTop', {
@@ -757,7 +768,6 @@ export function WebGLTracksOGL({
           value: noteSettings.speed || DEFAULT_NOTE_SETTINGS.speed,
         },
         uScreenHeight: { value: window.innerHeight },
-        uCanvasBottomDomY: { value: window.innerHeight },
         uDomPerPx: { value: 1 },
         uTrackHeight: {
           value: noteSettings.trackHeight || DEFAULT_NOTE_SETTINGS.trackHeight,
@@ -1061,7 +1071,6 @@ export function WebGLTracksOGL({
         bottom: windowH - (rect.y + rect.h),
       });
       program.uniforms.uScreenHeight.value = windowH;
-      program.uniforms.uCanvasBottomDomY.value = rect.y + rect.h;
       // 비정수 DPR에서 backing 반올림까지 반영한 정확 CSS px/물리 px 비율
       program.uniforms.uDomPerPx.value =
         rect.h / Math.max(renderer.gl.drawingBufferHeight, 1);

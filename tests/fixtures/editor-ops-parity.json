@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 4,
   "comment": "semantic op 결과 동등성 파리티 fixture. 소비자: src-tauri/src/state/editor_ops_parity.rs (canonical 적용기), tests/editor-ops-parity.test.ts (프론트 낙관 적용기). 각 케이스는 같은 initialDocument에 같은 ops를 적용했을 때 양측이 만드는 문서가 expectedDocument와 일치함을 고정한다. 플러그인 그룹 멤버 원천(양측 근사 지점)은 양쪽 모두 비어 있는 상태를 전제한다.",
   "cases": [
     {
@@ -25,7 +25,8 @@
         "statPositions": {},
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": {}
+        "layerGroups": {},
+        "spritePositions": {}
       },
       "ops": [
         {
@@ -55,7 +56,8 @@
         "statPositions": {},
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": {}
+        "layerGroups": {},
+        "spritePositions": {}
       }
     },
     {
@@ -81,7 +83,8 @@
         "statPositions": {},
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": {}
+        "layerGroups": {},
+        "spritePositions": {}
       },
       "ops": [
         {
@@ -111,7 +114,8 @@
         "statPositions": {},
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": {}
+        "layerGroups": {},
+        "spritePositions": {}
       }
     },
     {
@@ -177,7 +181,8 @@
             }
           ]
         },
-        "layerGroups": {}
+        "layerGroups": {},
+        "spritePositions": {}
       },
       "ops": [
         {
@@ -259,7 +264,8 @@
             }
           ]
         },
-        "layerGroups": {}
+        "layerGroups": {},
+        "spritePositions": {}
       }
     },
     {
@@ -343,7 +349,8 @@
             }
           ]
         },
-        "layerGroups": {}
+        "layerGroups": {},
+        "spritePositions": {}
       },
       "ops": [
         {
@@ -457,7 +464,8 @@
             }
           ]
         },
-        "layerGroups": {}
+        "layerGroups": {},
+        "spritePositions": {}
       }
     },
     {
@@ -494,7 +502,8 @@
         "statPositions": {},
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": {}
+        "layerGroups": {},
+        "spritePositions": {}
       },
       "ops": [
         {
@@ -541,7 +550,8 @@
         "statPositions": {},
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": {}
+        "layerGroups": {},
+        "spritePositions": {}
       }
     },
     {
@@ -666,7 +676,8 @@
         },
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": {}
+        "layerGroups": {},
+        "spritePositions": {}
       },
       "ops": [
         {
@@ -807,7 +818,8 @@
         },
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": {}
+        "layerGroups": {},
+        "spritePositions": {}
       }
     },
     {
@@ -858,7 +870,8 @@
         "statPositions": {},
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": {}
+        "layerGroups": {},
+        "spritePositions": {}
       },
       "ops": [
         {
@@ -922,7 +935,8 @@
         "statPositions": {},
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": {}
+        "layerGroups": {},
+        "spritePositions": {}
       }
     },
     {
@@ -983,7 +997,8 @@
             }
           ]
         },
-        "layerGroups": {}
+        "layerGroups": {},
+        "spritePositions": {}
       },
       "ops": [
         {
@@ -1088,7 +1103,8 @@
             }
           ]
         },
-        "layerGroups": {}
+        "layerGroups": {},
+        "spritePositions": {}
       }
     },
     {
@@ -1184,7 +1200,8 @@
         },
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": {}
+        "layerGroups": {},
+        "spritePositions": {}
       },
       "ops": [
         {
@@ -1334,7 +1351,8 @@
         },
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": {}
+        "layerGroups": {},
+        "spritePositions": {}
       }
     },
     {
@@ -1387,7 +1405,8 @@
             }
           ]
         },
-        "layerGroups": {}
+        "layerGroups": {},
+        "spritePositions": {}
       },
       "ops": [
         {
@@ -1490,7 +1509,8 @@
             }
           ]
         },
-        "layerGroups": {}
+        "layerGroups": {},
+        "spritePositions": {}
       }
     },
     {
@@ -1538,7 +1558,8 @@
         "statPositions": {},
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": {}
+        "layerGroups": {},
+        "spritePositions": {}
       },
       "ops": [
         {
@@ -1625,7 +1646,8 @@
         "statPositions": {},
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": {}
+        "layerGroups": {},
+        "spritePositions": {}
       }
     },
     {
@@ -1667,17 +1689,15 @@
         "statPositions": {},
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": {}
+        "layerGroups": {},
+        "spritePositions": {}
       },
       "ops": [
         {
           "kind": "patchElement",
           "elementType": "key",
           "id": "11111111-1111-4111-8111-111111111111",
-          "patch": {
-            "property": "noteGlowSyncPaint",
-            "value": true
-          }
+          "patch": { "property": "noteGlowSyncPaint", "value": true }
         }
       ],
       "expectedDocument": {
@@ -1729,7 +1749,8 @@
         "statPositions": {},
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": {}
+        "layerGroups": {},
+        "spritePositions": {}
       }
     },
     {
@@ -1758,7 +1779,8 @@
         "statPositions": {},
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": {}
+        "layerGroups": {},
+        "spritePositions": {}
       },
       "ops": [
         {
@@ -1834,7 +1856,8 @@
         "statPositions": {},
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": {}
+        "layerGroups": {},
+        "spritePositions": {}
       }
     },
     {
@@ -1920,7 +1943,8 @@
         "statPositions": {},
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": {}
+        "layerGroups": {},
+        "spritePositions": {}
       },
       "ops": [
         {
@@ -2022,7 +2046,8 @@
         "statPositions": {},
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": {}
+        "layerGroups": {},
+        "spritePositions": {}
       }
     },
     {
@@ -2070,7 +2095,8 @@
         "statPositions": {},
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": {}
+        "layerGroups": {},
+        "spritePositions": {}
       },
       "ops": [
         {
@@ -2129,7 +2155,8 @@
         "statPositions": {},
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": {}
+        "layerGroups": {},
+        "spritePositions": {}
       }
     },
     {
@@ -2180,7 +2207,8 @@
         },
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": { "4key": [{ "id": "group-a", "name": "Group A" }] }
+        "layerGroups": { "4key": [{ "id": "group-a", "name": "Group A" }] },
+        "spritePositions": {}
       },
       "ops": [
         {
@@ -2214,7 +2242,8 @@
         "statPositions": { "4key": [] },
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": { "4key": [] }
+        "layerGroups": { "4key": [] },
+        "spritePositions": {}
       }
     },
     {
@@ -2240,7 +2269,8 @@
         "statPositions": {},
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": {}
+        "layerGroups": {},
+        "spritePositions": {}
       },
       "ops": [
         {
@@ -2337,7 +2367,8 @@
         },
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": { "4key": [{ "id": "group-new", "name": "New Group" }] }
+        "layerGroups": { "4key": [{ "id": "group-new", "name": "New Group" }] },
+        "spritePositions": {}
       }
     },
     {
@@ -2387,7 +2418,8 @@
         },
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": {}
+        "layerGroups": {},
+        "spritePositions": {}
       },
       "ops": [
         {
@@ -2455,7 +2487,8 @@
         },
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": {}
+        "layerGroups": {},
+        "spritePositions": {}
       }
     },
     {
@@ -2512,7 +2545,8 @@
             { "id": "group-a", "name": "Group A" },
             { "id": "group-b", "name": "Group B" }
           ]
-        }
+        },
+        "spritePositions": {}
       },
       "ops": [
         {
@@ -2604,7 +2638,8 @@
             { "id": "group-a", "name": "Group A" },
             { "id": "group-b", "name": "Group B" }
           ]
-        }
+        },
+        "spritePositions": {}
       }
     },
     {
@@ -2641,7 +2676,8 @@
         "statPositions": {},
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": { "4key": [{ "id": "group-a", "name": "Group A" }] }
+        "layerGroups": { "4key": [{ "id": "group-a", "name": "Group A" }] },
+        "spritePositions": {}
       },
       "ops": [
         {
@@ -2701,7 +2737,8 @@
         "statPositions": {},
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": { "4key": [] }
+        "layerGroups": { "4key": [] },
+        "spritePositions": {}
       }
     },
     {
@@ -2742,7 +2779,8 @@
         },
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": { "4key": [{ "id": "group-a", "name": "Group A" }] }
+        "layerGroups": { "4key": [{ "id": "group-a", "name": "Group A" }] },
+        "spritePositions": {}
       },
       "ops": [
         {
@@ -2801,7 +2839,8 @@
         },
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": { "4key": [{ "id": "group-new", "name": "Fresh" }] }
+        "layerGroups": { "4key": [{ "id": "group-new", "name": "Fresh" }] },
+        "spritePositions": {}
       }
     },
     {
@@ -2858,7 +2897,8 @@
             { "id": "group-a", "name": "Group A" },
             { "id": "group-b", "name": "Group B" }
           ]
-        }
+        },
+        "spritePositions": {}
       },
       "ops": [
         {
@@ -2925,7 +2965,8 @@
             { "id": "group-a", "name": "Group A" },
             { "id": "group-b", "name": "Group B" }
           ]
-        }
+        },
+        "spritePositions": {}
       }
     },
     {
@@ -2952,7 +2993,8 @@
         "statPositions": {},
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": { "4key": [{ "id": "group-a", "name": "Group A" }] }
+        "layerGroups": { "4key": [{ "id": "group-a", "name": "Group A" }] },
+        "spritePositions": {}
       },
       "ops": [
         {
@@ -2987,7 +3029,8 @@
         "statPositions": {},
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": { "4key": [] }
+        "layerGroups": { "4key": [] },
+        "spritePositions": {}
       }
     },
     {
@@ -3014,7 +3057,8 @@
         "statPositions": {},
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": { "4key": [{ "id": "group-a", "name": "Group A" }] }
+        "layerGroups": { "4key": [{ "id": "group-a", "name": "Group A" }] },
+        "spritePositions": {}
       },
       "ops": [
         {
@@ -3045,7 +3089,378 @@
         "statPositions": {},
         "graphPositions": {},
         "knobPositions": {},
-        "layerGroups": { "4key": [{ "id": "group-a", "name": "Renamed" }] }
+        "layerGroups": { "4key": [{ "id": "group-a", "name": "Renamed" }] },
+        "spritePositions": {}
+      }
+    },
+    {
+      "name": "resizesprite-scale-with-setbounds-batch",
+      "comment": "resizeSprite는 bounds 교체 + 이전 bounds 대비 배율(sx=2, sy=0.5)로 idleTransform·poses 오프셋을 스케일한다. rotation·scale·pivot 불변. 같은 배치의 다른 요소 setBounds와 원자 커밋",
+      "initialDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "statPositions": {},
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {},
+        "spritePositions": {
+          "4key": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "dx": 10,
+              "dy": 20,
+              "width": 200,
+              "height": 100,
+              "hidden": false,
+              "zIndex": null,
+              "className": null,
+              "useInlineStyles": null,
+              "baseImage": null,
+              "pivot": { "x": 0.5, "y": 0.5 },
+              "idleTransform": {
+                "x": 12,
+                "y": -6,
+                "rotation": 15,
+                "scale": 1.5
+              },
+              "poses": [
+                {
+                  "poseId": "44444444-4444-4444-8444-444444444444",
+                  "triggers": ["11111111-1111-4111-8111-111111111111"],
+                  "transform": {
+                    "x": -30,
+                    "y": 44,
+                    "rotation": -90,
+                    "scale": 0.5
+                  },
+                  "imageOverride": null
+                }
+              ],
+              "activation": "whileHeld",
+              "pressDurationMs": 300,
+              "transitionMs": 90,
+              "transitionEasing": "cubic-bezier(0.4, 0, 0.2, 1)"
+            }
+          ]
+        }
+      },
+      "ops": [
+        {
+          "kind": "resizeSprite",
+          "id": "22222222-2222-4222-8222-222222222222",
+          "bounds": { "dx": 5, "dy": 8, "width": 400, "height": 50 }
+        },
+        {
+          "kind": "setBounds",
+          "elementType": "key",
+          "id": "11111111-1111-4111-8111-111111111111",
+          "bounds": { "dx": 100, "dy": 0, "width": 60, "height": 60 }
+        }
+      ],
+      "expectedDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 100,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "statPositions": {},
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {},
+        "spritePositions": {
+          "4key": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "dx": 5,
+              "dy": 8,
+              "width": 400,
+              "height": 50,
+              "hidden": false,
+              "zIndex": null,
+              "className": null,
+              "useInlineStyles": null,
+              "baseImage": null,
+              "pivot": { "x": 0.5, "y": 0.5 },
+              "idleTransform": {
+                "x": 24,
+                "y": -3,
+                "rotation": 15,
+                "scale": 1.5
+              },
+              "poses": [
+                {
+                  "poseId": "44444444-4444-4444-8444-444444444444",
+                  "triggers": ["11111111-1111-4111-8111-111111111111"],
+                  "transform": {
+                    "x": -60,
+                    "y": 22,
+                    "rotation": -90,
+                    "scale": 0.5
+                  },
+                  "imageOverride": null
+                }
+              ],
+              "activation": "whileHeld",
+              "pressDurationMs": 300,
+              "transitionMs": 90,
+              "transitionEasing": "cubic-bezier(0.4, 0, 0.2, 1)"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "resizesprite-pure-move-keeps-content",
+      "comment": "치수 불변 이동은 배율 1이라 콘텐츠를 건드리지 않는다",
+      "initialDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "statPositions": {},
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {},
+        "spritePositions": {
+          "4key": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "dx": 10,
+              "dy": 20,
+              "width": 200,
+              "height": 100,
+              "hidden": false,
+              "zIndex": null,
+              "className": null,
+              "useInlineStyles": null,
+              "baseImage": null,
+              "pivot": { "x": 0.5, "y": 0.5 },
+              "idleTransform": {
+                "x": 12,
+                "y": -6,
+                "rotation": 15,
+                "scale": 1.5
+              },
+              "poses": [
+                {
+                  "poseId": "44444444-4444-4444-8444-444444444444",
+                  "triggers": ["11111111-1111-4111-8111-111111111111"],
+                  "transform": {
+                    "x": -30,
+                    "y": 44,
+                    "rotation": -90,
+                    "scale": 0.5
+                  },
+                  "imageOverride": null
+                }
+              ],
+              "activation": "whileHeld",
+              "pressDurationMs": 300,
+              "transitionMs": 90,
+              "transitionEasing": "cubic-bezier(0.4, 0, 0.2, 1)"
+            }
+          ]
+        }
+      },
+      "ops": [
+        {
+          "kind": "resizeSprite",
+          "id": "22222222-2222-4222-8222-222222222222",
+          "bounds": { "dx": 300, "dy": -40, "width": 200, "height": 100 }
+        }
+      ],
+      "expectedDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "statPositions": {},
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {},
+        "spritePositions": {
+          "4key": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "dx": 300,
+              "dy": -40,
+              "width": 200,
+              "height": 100,
+              "hidden": false,
+              "zIndex": null,
+              "className": null,
+              "useInlineStyles": null,
+              "baseImage": null,
+              "pivot": { "x": 0.5, "y": 0.5 },
+              "idleTransform": {
+                "x": 12,
+                "y": -6,
+                "rotation": 15,
+                "scale": 1.5
+              },
+              "poses": [
+                {
+                  "poseId": "44444444-4444-4444-8444-444444444444",
+                  "triggers": ["11111111-1111-4111-8111-111111111111"],
+                  "transform": {
+                    "x": -30,
+                    "y": 44,
+                    "rotation": -90,
+                    "scale": 0.5
+                  },
+                  "imageOverride": null
+                }
+              ],
+              "activation": "whileHeld",
+              "pressDurationMs": 300,
+              "transitionMs": 90,
+              "transitionEasing": "cubic-bezier(0.4, 0, 0.2, 1)"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "patch-rotation-scalar",
+      "comment": "요소 회전 스칼라 patch. 네 종류 공통 필드라 flatten 상속 대상(stat)까지 같은 값으로 적용된다",
+      "initialDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "statPositions": {
+          "4key": [
+            {
+              "id": "44444444-4444-4444-8444-444444444444",
+              "statType": "kps",
+              "dx": 120,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {},
+        "spritePositions": {}
+      },
+      "ops": [
+        {
+          "kind": "patchElement",
+          "elementType": "key",
+          "id": "11111111-1111-4111-8111-111111111111",
+          "patch": { "property": "rotation", "value": -45.5 }
+        },
+        {
+          "kind": "patchElement",
+          "elementType": "stat",
+          "id": "44444444-4444-4444-8444-444444444444",
+          "patch": { "property": "rotation", "value": 90 }
+        }
+      ],
+      "expectedDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "rotation": -45.5,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "statPositions": {
+          "4key": [
+            {
+              "id": "44444444-4444-4444-8444-444444444444",
+              "statType": "kps",
+              "dx": 120,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "rotation": 90,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {},
+        "spritePositions": {}
       }
     }
   ]

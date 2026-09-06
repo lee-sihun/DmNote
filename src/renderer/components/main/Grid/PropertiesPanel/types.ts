@@ -244,7 +244,7 @@ export interface KeyData {
 // ============================================================================
 
 export interface LayerItem {
-  type: 'key' | 'stat' | 'graph' | 'knob' | 'plugin';
+  type: 'key' | 'stat' | 'graph' | 'knob' | 'sprite' | 'plugin';
   id: string;
   index?: number;
   name: string;

@@ -3,6 +3,7 @@ import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KeyPosition } from '@src/types/key/keys';
 import type { KnobItemPosition } from '@src/types/key/knobs';
 import type { StatItemPosition } from '@src/types/key/statItems';
+import { makeCanonicalSpritePosition } from '@utils/sprite/spriteFixtures';
 import {
   createBatchSelectionModel,
   type BatchSelectionModelInput,
@@ -43,6 +44,15 @@ const createInput = (): BatchSelectionModelInput => {
     statItemPositions: { '4key': [stat] },
     graphItemPositions: { '4key': [graph] },
     knobItemPositions: { '4key': [knob] },
+    spriteItemPositions: {
+      '4key': [
+        makeCanonicalSpritePosition({
+          id: 'sprite-1',
+          width: 200,
+          height: 200,
+        }),
+      ],
+    },
     selectedKeyElements: [{ type: 'key', id: 'key-1' }],
     selectedKeyLikeElements: [
       { type: 'key', id: 'key-1' },
@@ -55,6 +65,13 @@ const createInput = (): BatchSelectionModelInput => {
       { type: 'key', id: 'key-1' },
       { type: 'graph', id: 'graph-1' },
       { type: 'knob', id: 'knob-1' },
+    ],
+    selectedBatchGeometryElements: [
+      { type: 'stat', id: 'stat-1' },
+      { type: 'key', id: 'key-1' },
+      { type: 'graph', id: 'graph-1' },
+      { type: 'knob', id: 'knob-1' },
+      { type: 'sprite', id: 'sprite-1' },
     ],
   };
 };
@@ -86,6 +103,25 @@ describe('createBatchSelectionModel', () => {
     expect(
       model.getMixedValueCanonical((position) => position.width, 0),
     ).toEqual({ isMixed: false, value: 40 });
+  });
+
+  // 크기 입력은 resize 대상 집합을 읽는다 - 스타일 집합만 보면 스프라이트 값이 가려진다
+  it('크기 혼합 값은 스프라이트를 포함한 기하 집합에서 집계한다', () => {
+    const input = createInput();
+    input.selectedBatchStyleElements = [{ type: 'key', id: 'key-1' }];
+    input.selectedBatchGeometryElements = [
+      { type: 'key', id: 'key-1' },
+      { type: 'sprite', id: 'sprite-1' },
+    ];
+    const model = createBatchSelectionModel(input);
+
+    expect(model.getMixedValueBatch((position) => position.width, 0)).toEqual({
+      isMixed: false,
+      value: 60,
+    });
+    expect(
+      model.getMixedValueGeometry((position) => position.width, 0),
+    ).toEqual({ isMixed: true, value: 60 });
   });
 
   it('누락 ID를 제외하고 생성 시점의 선택 snapshot을 재사용한다', () => {

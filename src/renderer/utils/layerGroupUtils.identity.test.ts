@@ -26,6 +26,7 @@ describe('applyZIndexToLayerOrder stable identity', () => {
       {},
       {},
       {},
+      {},
     );
 
     expect(result.keyPositions['4key']).toMatchObject([

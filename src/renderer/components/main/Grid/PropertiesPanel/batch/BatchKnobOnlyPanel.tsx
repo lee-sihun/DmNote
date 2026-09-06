@@ -66,6 +66,8 @@ interface BatchKnobOnlyPanelProps {
     options?: { gestureId?: string },
   ) => void;
   handleKnobBatchSharedSetting: (updates: Partial<KnobItemPosition>) => void;
+  /** 크기 표시 전용 - resize 대상 집합(스프라이트 포함)에서 파생된다 */
+  getMixedValueGeometry: MixedValueGetter<KeyPosition>;
   getMixedValueKnobs: MixedValueGetter<KnobItemPosition>;
   getMixedValueKnobsAsKey: MixedValueGetter<KeyPosition>;
   getSelectedKnobsData: () => KeyData[];
@@ -102,6 +104,7 @@ const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
   handleBatchResizePreview,
   onElementPropertyCommit,
   handleKnobBatchSharedSetting,
+  getMixedValueGeometry,
   getMixedValueKnobs,
   getMixedValueKnobsAsKey,
   getSelectedKnobsData,
@@ -238,6 +241,7 @@ const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
                 </>
               }
               getMixedValue={getMixedValueKnobsAsKey}
+              getMixedValueSize={getMixedValueGeometry}
               getSelectedKeysData={getSelectedKnobsData}
               handleBatchAlign={handleBatchAlign}
               handleBatchDistribute={handleBatchDistribute}

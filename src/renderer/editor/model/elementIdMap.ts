@@ -1,11 +1,12 @@
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 
 import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
 
-export type NativeElementType = 'key' | 'stat' | 'graph' | 'knob';
+export type NativeElementType = 'key' | 'stat' | 'graph' | 'knob' | 'sprite';
 
 export interface ElementLocator {
   type: NativeElementType;
@@ -17,7 +18,8 @@ type CanonicalPosition =
   | CanonicalEditorDocumentV1['keyPositions'][string][number]
   | CanonicalEditorDocumentV1['statPositions'][string][number]
   | CanonicalEditorDocumentV1['graphPositions'][string][number]
-  | CanonicalEditorDocumentV1['knobPositions'][string][number];
+  | CanonicalEditorDocumentV1['knobPositions'][string][number]
+  | CanonicalEditorDocumentV1['spritePositions'][string][number];
 type PositionsRecord = Record<string, readonly CanonicalPosition[]> | undefined;
 
 // 권위 컬렉션만 읽는다. 키의 렌더 positions는 canonical + 프리뷰 합성이라
@@ -27,6 +29,7 @@ const authorityRecords = (): Record<NativeElementType, PositionsRecord> => ({
   stat: useStatItemStore.getState().positions,
   graph: useGraphItemStore.getState().positions,
   knob: useKnobItemStore.getState().positions,
+  sprite: useSpriteStore.getState().positions,
 });
 
 interface CacheEntry {

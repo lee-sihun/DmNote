@@ -8,20 +8,20 @@ pub(super) fn apply_element_patch(
 ) -> Result<bool, EditorCommitError> {
     Ok(match patch {
         EditorElementPropertyPatchV1::Hidden(patch) => {
-            let position = position_at_mut(candidate, location)?;
-            if position.hidden == *patch {
+            let common = element_common_at_mut(candidate, location)?;
+            if *common.hidden == *patch {
                 false
             } else {
-                position.hidden = *patch;
+                *common.hidden = *patch;
                 true
             }
         }
         EditorElementPropertyPatchV1::LayerName(patch) => {
-            let position = position_at_mut(candidate, location)?;
-            if position.layer_name == *patch {
+            let common = element_common_at_mut(candidate, location)?;
+            if *common.layer_name == *patch {
                 false
             } else {
-                position.layer_name.clone_from(patch);
+                common.layer_name.clone_from(patch);
                 true
             }
         }
@@ -170,11 +170,11 @@ pub(super) fn apply_element_patch(
             }
         }
         EditorElementPropertyPatchV1::UseInlineStyles(patch) => {
-            let position = position_at_mut(candidate, location)?;
-            if position.use_inline_styles == Some(*patch) {
+            let common = element_common_at_mut(candidate, location)?;
+            if *common.use_inline_styles == Some(*patch) {
                 false
             } else {
-                position.use_inline_styles = Some(*patch);
+                *common.use_inline_styles = Some(*patch);
                 true
             }
         }
@@ -247,11 +247,11 @@ pub(super) fn apply_element_patch(
             }
         }
         EditorElementPropertyPatchV1::ClassName(patch) => {
-            let position = position_at_mut(candidate, location)?;
-            if position.class_name.as_deref() == Some(patch.as_str()) {
+            let common = element_common_at_mut(candidate, location)?;
+            if common.class_name.as_deref() == Some(patch.as_str()) {
                 false
             } else {
-                position.class_name = Some(patch.clone());
+                *common.class_name = Some(patch.clone());
                 true
             }
         }
@@ -324,6 +324,15 @@ pub(super) fn apply_element_patch(
                 &mut position.active_border_gradient,
                 patch,
             )
+        }
+        EditorElementPropertyPatchV1::Rotation(patch) => {
+            let position = position_at_mut(candidate, location)?;
+            if position.rotation == *patch {
+                false
+            } else {
+                position.rotation = *patch;
+                true
+            }
         }
         EditorElementPropertyPatchV1::BorderWidth(patch) => {
             let position = position_at_mut(candidate, location)?;

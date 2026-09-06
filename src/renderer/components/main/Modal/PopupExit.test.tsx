@@ -127,6 +127,37 @@ describe('PopupExit', () => {
     expect(onCommit).toHaveBeenCalledWith('fill');
   });
 
+  it('splits the session when the child key changes while open', async () => {
+    const onMount = vi.fn();
+    const onCommit = vi.fn();
+
+    const renderKeyed = async (target: string) => {
+      await act(async () => {
+        root.render(
+          <PopupExit open>
+            <Panel
+              key={target}
+              open
+              target={target}
+              onMount={onMount}
+              onCommit={onCommit}
+            />
+          </PopupExit>,
+        );
+      });
+    };
+
+    await renderKeyed('fill');
+    expect(onMount).toHaveBeenCalledTimes(1);
+
+    // 닫힘 없이 대상만 교체 (상태 행 전환) - 세션이 끊겨 새 인스턴스가 마운트된다
+    await renderKeyed('stroke');
+    expect(onMount).toHaveBeenCalledTimes(2);
+    // 이전 세션의 언마운트 커밋은 자기 대상으로 간다
+    expect(onCommit).toHaveBeenCalledWith('fill');
+    expect(onCommit).not.toHaveBeenCalledWith('stroke');
+  });
+
   // 이 조합이 실제 payoff다 - 호출부가 대상을 비워도 팝업이 퇴장 상태를 거친다
   it('drives a real popup through the closing state before unmount', async () => {
     vi.spyOn(Element.prototype, 'getClientRects').mockReturnValue([

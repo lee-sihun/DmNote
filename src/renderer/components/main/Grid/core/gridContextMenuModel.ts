@@ -65,7 +65,8 @@ export const isStableNativeSelection = (element: {
   (element.type === 'key' ||
     element.type === 'stat' ||
     element.type === 'graph' ||
-    element.type === 'knob') &&
+    element.type === 'knob' ||
+    element.type === 'sprite') &&
   element.id.length > 0 &&
   isNativeElementId(element.id);
 
@@ -76,5 +77,6 @@ export const gridAddTypeForMenuItem = (
   if (id === 'addStat') return 'stat';
   if (id === 'addGraph') return 'graph';
   if (id === 'addKnob') return 'knob';
+  if (id === 'addSprite') return 'sprite';
   return null;
 };

@@ -11,7 +11,7 @@ description: Atomic editor document reads, commits, and change events
   document.
 </Callout>
 
-`dmn.editor` reads and updates the six collections that make up the editor
+`dmn.editor` reads and updates the seven collections that make up the editor
 layout as one revisioned document. Use it when one user action changes more
 than one collection, or when a consumer needs a single ordered change stream.
 
@@ -24,6 +24,7 @@ type EditorField =
   | 'statPositions'
   | 'graphPositions'
   | 'knobPositions'
+  | 'spritePositions'
   | 'layerGroups';
 
 interface EditorDocumentV1 {
@@ -33,6 +34,7 @@ interface EditorDocumentV1 {
   statPositions: StatItemPositions;
   graphPositions: GraphItemPositions;
   knobPositions: KnobItemPositions;
+  spritePositions: SpritePositions;
   layerGroups: LayerGroups;
 }
 
@@ -47,21 +49,126 @@ that top-level collection. It is not an item-level diff.
 <Callout type="warning">
   Since the multi-key update, `keys` entries in `EditorDocumentV1` (returned by
   `get()`) and in `EditorPatchV1` (delivered by `onCommitted()`) use the
-  `KeySlot` union (`string | MultiKeySlot`), not plain strings. See the
-  [Keys API](/docs/api-reference/keys) for the slot shape and canonical
-  identifier rules.
+  `KeySlot` union (`string | MultiKeySlot`), not plain strings. See the [Keys
+  API](/docs/api-reference/keys) for the slot shape and canonical identifier
+  rules.
 </Callout>
 
 <Callout>
   Every element in the position collections (`keyPositions`, `statPositions`,
-  `graphPositions`, `knobPositions`) carries a stable `id` (UUID) assigned and
-  owned by the app. Treat it as opaque: echo back the value you read and never
-  invent one. A written element with a missing or unknown `id` gets a fresh one
-  from the backend. If the same `id` appears more than once, for example when
-  you copy an element you read and append it, the element in its original slot
-  keeps the identity and the remaining copies get fresh ones. See the
-  [Keys API](/docs/api-reference/keys) for the identity rules.
+  `graphPositions`, `knobPositions`, `spritePositions`) carries a stable `id`
+  (UUID) assigned and owned by the app. Treat it as opaque: echo back the value
+  you read and never invent one. A written element whose `id` is missing or
+  unknown inherits the `id` of an existing element whose remaining fields match;
+  with no match, the backend assigns a fresh one. Omitting an `id` does not
+  guarantee a fresh identity, and editing an element's values while omitting its
+  `id` may give it one. If the same `id` appears more than once, for example
+  when you copy an element you read and append it, the element in its original
+  slot keeps the identity and the remaining copies get fresh ones. The `poseId`
+  carried by each pose of a sprite element follows the same rules. See the [Keys
+  API](/docs/api-reference/keys) for the identity rules.
 </Callout>
+
+## Sprite Position Types
+
+Reactive sprites are image layers that switch poses while their trigger keys
+are held. Unlike key elements they are not index-coupled to key mappings; each
+pose references the responsible key element ids directly. Documents you read
+always carry `id` and `poseId`; echo both back when you write.
+The collection and value limits noted below are enforced when you commit;
+documents you read echo stored data as is.
+
+```typescript
+// Keyed by tab/mode id (e.g., "4key")
+type SpritePositions = Record<string, ReactiveSpritePosition[]>;
+
+interface ReactiveSpritePosition {
+  id?: string; // stable element identity (UUID)
+  dx: number; // element box origin and size. The box is the base image box and feeds overlay window sizing
+  dy: number;
+  width: number;
+  height: number;
+  rotation?: number; // placement rotation around the element-box center, -180–180 deg, default 0
+  hidden: boolean;
+  zIndex: number | null;
+  layerName?: string | null; // omitted by the backend when unset
+  groupId?: string | null; // omitted by the backend when unset
+  className: string | null;
+  useInlineStyles: boolean | null;
+  baseImage: string | null; // image shown when no pose matches; always fills the element box
+  referenceNaturalSize: {
+    source: string | null;
+    width: number;
+    height: number;
+  } | null; // intrinsic pixel size that defines the pixel scale (integers, 1–32768). source must equal baseImage when one is set and be null otherwise; null falls back to drawing every image in the element box
+  pivot: { x: number; y: number }; // normalized shared axis, 0–1 each, default {0.5, 0.5}. Base-image pivot and transform origin for every pose
+  idleTransform: SpriteTransform; // base transform when no pose matches
+  poses: SpritePose[]; // commits accept at most 64
+  activation: 'whileHeld' | 'onPress'; // default whileHeld. onPress plays the pose once on key-down, then returns to idle
+  pressDurationMs: number; // onPress playback duration, 1–5000, default 300
+  transitionMs: number; // pose transition duration, 0–1000, default 0. Ignored by onPress, which plays for pressDurationMs
+  transitionEasing: string; // CSS easing, default 'cubic-bezier(0.4, 0, 0.2, 1)'
+}
+
+interface SpritePose {
+  poseId?: string; // stable pose identity (UUID)
+  name?: string | null; // omitted by the backend when unset
+  triggers: string[]; // key element ids; commits accept at most 512, sorted and deduplicated
+  transform: SpriteTransform;
+  pivot?: { x: number; y: number } | null; // independent pivot within the pose image; null or omission follows the sprite's shared pivot
+  imageOverride: string | null; // replaces baseImage while this pose is active
+  imageOverrideMetrics: {
+    source: string;
+    width: number;
+    height: number;
+  } | null; // intrinsic pixel size of imageOverride (integers, 1–32768). Optional; when set, source must equal the path exactly. Normalized to null when imageOverride is absent
+}
+
+interface SpriteTransform {
+  x: number; // -2000–2000 px
+  y: number; // -2000–2000 px
+  rotation: number; // -180–180 deg
+  scale: number; // 0.1–10
+}
+```
+
+The element-level `rotation` rotates the entire sprite, including all poses,
+around the center of its logical box. It is independent of
+`idleTransform.rotation` and each pose's `transform.rotation`, which remain
+local rotations around the shared pivot. Rotating a selection changes the
+sprite's `dx`, `dy`, and element-level `rotation` together; pose transforms,
+triggers, image references, and transition directions remain unchanged.
+New sprites default to 0 when `rotation` is omitted. For an existing sprite,
+schemaVersion 1 and 2 commits preserve its stored rotation when the field is
+omitted. `null`, non-finite values, and values outside `-180..180` are rejected.
+
+A pose activates while the set of held keys, among the keys the sprite
+references, exactly matches its trigger set; keys the sprite does not reference
+are ignored. When no pose matches exactly, the single-trigger poses of the held
+keys are blended with equal weight: x, y and scale are averaged, rotation uses a
+circular mean, and the image comes from the first override in poseId order.
+Poses with two or more triggers never take part in blending, so a sprite whose
+held keys only appear in such poses returns to idle. Two poses of one sprite may
+not share the same trigger set, and commits reject empty trigger lists.
+
+The element box is the base-image box. The base image always fills it, and the
+shared axis P is the sprite pivot × (width, height). A pose whose pivot is null
+or omitted uses the same normalized point. A pose with a pivot value aligns that
+independent point within its image to P. A pose image with a different intrinsic
+size is drawn at intrinsic pixels × the reference scale, where the reference
+scale is (width, height) ÷ referenceNaturalSize per axis. Without a reference
+size or the pose image's own metrics, the image uses the element-box size.
+Moving the shared pivot keeps the base image in place while linked poses follow
+the new axis. Poses with an independent pivot keep their screen position by
+compensating x/y in the same commit. Moving a pose pivot or switching the link
+also compensates x/y to avoid a sudden image jump. An out-of-range pivot
+rejects the commit with `VALIDATION_FAILED` and a `details.validationCode` of
+`INVALID_SPRITE_PIVOT` or `INVALID_SPRITE_POSE_PIVOT`. Invalid image metrics use
+`STALE_SPRITE_IMAGE_METRICS` or `INVALID_SPRITE_IMAGE_METRICS`. A schemaVersion 1
+patch that omits `pivot`, `referenceNaturalSize`, `imageOverrideMetrics`,
+`activation`, or `pressDurationMs` on an existing element or pose keeps the
+stored value. Sending null for a pose pivot links it to the shared pivot.
+Changing `baseImage` or `imageOverride` while omitting its metrics clears them.
 
 ## Read the Current Document
 
@@ -94,10 +201,10 @@ platform, while no application can guarantee recovery from hardware or
 firmware that violates those barriers.
 
 <Callout type="info">
-  The app's Undo/Redo path also restores the six editor collections, custom-tab
-  metadata, selected mode, counters, preset settings, and per-tab note settings
-  in one backend store transaction. This internal command is intentionally not
-  part of the public plugin API.
+  The app's Undo/Redo path also restores the seven editor collections,
+  custom-tab metadata, selected mode, counters, preset settings, and per-tab
+  note settings in one backend store transaction. This internal command is
+  intentionally not part of the public plugin API.
 </Callout>
 
 ```typescript
@@ -218,19 +325,19 @@ interface EditorCommitError {
 }
 ```
 
-| Code                     | Meaning                                                                   | `retryable` |
-| ------------------------ | ------------------------------------------------------------------------- | ----------- |
-| `REVISION_CONFLICT`      | `baseRevision` is stale; read, reconcile, and commit again                | `true`      |
-| `PLUGIN_REVISION_CONFLICT` | The plugin-scoped revision is stale; read, reconcile, and commit again  | `true`      |
-| `VALIDATION_FAILED`      | The completed document violates an editor validation rule                 | `false`     |
-| `TOO_MANY_GESTURE_IDS`   | `gestureIds` exceeds 32 entries or the combined unique set exceeds 32 IDs | `false`     |
-| `INVALID_GESTURE_ID`     | A gesture ID is not a UUID within the 64-byte limit                       | `false`     |
-| `PAIRED_UPDATE_REQUIRED` | A structural key change omitted its paired collection                     | `false`     |
-| `MULTI_KEY_UNSUPPORTED`  | A `keys` write did not declare `multiKey` while multi-key slots exist     | `false`     |
-| `MUTATION_ID_REUSED`     | The same mutation ID was used for a different request                     | `false`     |
-| `IO_ERROR`               | The document could not be persisted                                       | `true`      |
-| `HISTORY_IN_PROGRESS`    | An undo/redo barrier is in progress; retry after it settles               | `true`      |
-| `HISTORY_EPOCH_CONFLICT` | The observed history epoch is stale; re-read and commit again             | `true`      |
+| Code                       | Meaning                                                                   | `retryable` |
+| -------------------------- | ------------------------------------------------------------------------- | ----------- |
+| `REVISION_CONFLICT`        | `baseRevision` is stale; read, reconcile, and commit again                | `true`      |
+| `PLUGIN_REVISION_CONFLICT` | The plugin-scoped revision is stale; read, reconcile, and commit again    | `true`      |
+| `VALIDATION_FAILED`        | The completed document violates an editor validation rule                 | `false`     |
+| `TOO_MANY_GESTURE_IDS`     | `gestureIds` exceeds 32 entries or the combined unique set exceeds 32 IDs | `false`     |
+| `INVALID_GESTURE_ID`       | A gesture ID is not a UUID within the 64-byte limit                       | `false`     |
+| `PAIRED_UPDATE_REQUIRED`   | A structural key change omitted its paired collection                     | `false`     |
+| `MULTI_KEY_UNSUPPORTED`    | A `keys` write did not declare `multiKey` while multi-key slots exist     | `false`     |
+| `MUTATION_ID_REUSED`       | The same mutation ID was used for a different request                     | `false`     |
+| `IO_ERROR`                 | The document could not be persisted                                       | `true`      |
+| `HISTORY_IN_PROGRESS`      | An undo/redo barrier is in progress; retry after it settles               | `true`      |
+| `HISTORY_EPOCH_CONFLICT`   | The observed history epoch is stale; re-read and commit again             | `true`      |
 
 `details.currentRevision`, `details.validationCode`, `details.field`, or
 `details.currentHistoryEpoch` is included when it applies to the error.

@@ -1,6 +1,7 @@
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { isNativeElementId } from '../../model/elementId';
@@ -172,7 +173,7 @@ const validElementGroupTargets = (
   targets.length <= 4096 &&
   targets.every(
     ({ elementType, id }) =>
-      ['key', 'stat', 'graph', 'knob'].includes(elementType) &&
+      ['key', 'stat', 'graph', 'knob', 'sprite'].includes(elementType) &&
       isNativeElementId(id),
   ) &&
   new Set(targets.map(({ id }) => id)).size === targets.length;
@@ -204,6 +205,7 @@ export const setElementGroupsByTargets = (
     statPositions: useStatItemStore.getState().positions,
     graphPositions: useGraphItemStore.getState().positions,
     knobPositions: useKnobItemStore.getState().positions,
+    spritePositions: useSpriteStore.getState().positions,
     layerGroups: useLayerGroupStore.getState().layerGroups,
   };
   const projected = projectStableElementGroups({
@@ -219,6 +221,7 @@ export const setElementGroupsByTargets = (
     useStatItemStore.getState().setPositions(projected.statPositions);
     useGraphItemStore.getState().setPositions(projected.graphPositions);
     useKnobItemStore.getState().setPositions(projected.knobPositions);
+    useSpriteStore.getState().setPositions(projected.spritePositions);
     useLayerGroupStore.getState().setLayerGroups(projected.layerGroups);
   }
   let enrolled = false;
@@ -256,6 +259,9 @@ export const setElementGroupsByTargets = (
         }
         if (useKnobItemStore.getState().positions === projected.knobPositions) {
           useKnobItemStore.getState().setPositions(before.knobPositions);
+        }
+        if (useSpriteStore.getState().positions === projected.spritePositions) {
+          useSpriteStore.getState().setPositions(before.spritePositions);
         }
         if (
           useLayerGroupStore.getState().layerGroups === projected.layerGroups

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    default_key_height, default_key_note_color, default_key_note_opacity,
+    default_element_rotation, default_key_height, default_key_note_color, default_key_note_opacity,
     default_note_auto_y_correction, default_note_border_opacity, default_note_effect_enabled,
     default_note_glow_enabled, default_note_glow_opacity, default_note_glow_size, GradientSpec,
     ImageFit, KeyCounterSettings, NoteColor,
@@ -20,6 +20,7 @@ pub type KeyPositions = HashMap<String, Vec<KeyPosition>>;
 pub type StatPositions = HashMap<String, Vec<StatPosition>>;
 pub type GraphPositions = HashMap<String, Vec<GraphPosition>>;
 pub type KnobPositions = HashMap<String, Vec<KnobPosition>>;
+pub type SpritePositions = HashMap<String, Vec<ReactiveSpritePosition>>;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "kebab-case")]
@@ -43,6 +44,9 @@ pub const IMAGE_TRANSFORM_ROTATION_MIN: f64 = -180.0;
 pub const IMAGE_TRANSFORM_ROTATION_MAX: f64 = 180.0;
 pub const IMAGE_TRANSFORM_SCALE_MIN: f64 = 0.1;
 pub const IMAGE_TRANSFORM_SCALE_MAX: f64 = 10.0;
+
+pub const ELEMENT_ROTATION_MIN: f64 = -180.0;
+pub const ELEMENT_ROTATION_MAX: f64 = 180.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -91,6 +95,8 @@ pub struct KeyPosition {
     pub width: f64,
     #[serde(default = "default_key_height")]
     pub height: f64,
+    #[serde(default = "default_element_rotation")]
+    pub rotation: f64,
     /// 레이어 표시 여부 (true면 숨김)
     #[serde(default)]
     pub hidden: bool,
@@ -267,6 +273,7 @@ impl Default for KeyPosition {
             dy: 0.0,
             width: 60.0,
             height: default_key_height(),
+            rotation: default_element_rotation(),
             hidden: false,
             active_image: None,
             inactive_image: None,
@@ -409,6 +416,269 @@ pub struct KnobPosition {
     pub reverse: bool,
     #[serde(flatten)]
     pub position: KeyPosition,
+}
+
+pub const SPRITE_TRANSFORM_OFFSET_MIN: f64 = -2_000.0;
+pub const SPRITE_TRANSFORM_OFFSET_MAX: f64 = 2_000.0;
+pub const SPRITE_TRANSFORM_ROTATION_MIN: f64 = -180.0;
+pub const SPRITE_TRANSFORM_ROTATION_MAX: f64 = 180.0;
+pub const SPRITE_TRANSFORM_SCALE_MIN: f64 = 0.1;
+pub const SPRITE_TRANSFORM_SCALE_MAX: f64 = 10.0;
+pub const SPRITE_TRANSITION_MS_MAX: u32 = 1_000;
+pub const SPRITE_PRESS_DURATION_MS_MIN: u32 = 1;
+pub const SPRITE_PRESS_DURATION_MS_MAX: u32 = 5_000;
+pub const SPRITE_IMAGE_DIMENSION_MIN: u32 = 1;
+pub const SPRITE_IMAGE_DIMENSION_MAX: u32 = 32_768;
+pub const MAX_SPRITE_POSES: usize = 64;
+pub const MAX_SPRITE_POSE_TRIGGERS: usize = 512;
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SpriteAnchor {
+    pub x: f64,
+    pub y: f64,
+}
+
+impl Default for SpriteAnchor {
+    fn default() -> Self {
+        Self { x: 0.5, y: 0.5 }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SpriteTransform {
+    pub x: f64,
+    pub y: f64,
+    pub rotation: f64,
+    pub scale: f64,
+}
+
+impl Default for SpriteTransform {
+    fn default() -> Self {
+        Self {
+            x: 0.0,
+            y: 0.0,
+            rotation: 0.0,
+            scale: 1.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SpriteImageMetrics {
+    pub source: String,
+    pub width: u32,
+    pub height: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SpriteReferenceNaturalSize {
+    pub source: Option<String>,
+    pub width: u32,
+    pub height: u32,
+}
+
+pub(crate) fn is_renderable_image_ref(value: Option<&str>) -> bool {
+    value.is_some_and(|value| !value.trim().is_empty())
+}
+
+pub(crate) trait CoupledSpriteImageReference {
+    fn image_reference(&self) -> &Option<String>;
+    fn image_reference_mut(&mut self) -> &mut Option<String>;
+    fn coupled_source(&self) -> Option<&str>;
+    fn set_coupled_source(&mut self, source: Option<&str>);
+}
+
+pub(crate) fn rewrite_coupled_sprite_image_reference<T, R>(
+    target: &mut T,
+    rewrite: impl FnOnce(&mut Option<String>) -> R,
+) -> R
+where
+    T: CoupledSpriteImageReference,
+{
+    let original = target.image_reference().clone();
+    let source_was_coupled = original.as_deref().is_some_and(|image_ref| {
+        is_renderable_image_ref(Some(image_ref)) && target.coupled_source() == Some(image_ref)
+    });
+    let result = rewrite(target.image_reference_mut());
+
+    if source_was_coupled {
+        let rewritten = target
+            .image_reference()
+            .as_deref()
+            .filter(|image_ref| is_renderable_image_ref(Some(image_ref)))
+            .map(str::to_owned);
+        target.set_coupled_source(rewritten.as_deref());
+    }
+
+    result
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum SpriteActivation {
+    #[default]
+    WhileHeld,
+    OnPress,
+}
+
+pub(crate) fn default_sprite_press_duration_ms() -> u32 {
+    300
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SpritePose {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub pose_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    pub triggers: Vec<String>,
+    pub transform: SpriteTransform,
+    #[serde(default)]
+    pub pivot: Option<SpriteAnchor>,
+    #[serde(default)]
+    pub image_override: Option<String>,
+    #[serde(default)]
+    pub image_override_metrics: Option<SpriteImageMetrics>,
+}
+
+impl SpritePose {
+    pub fn normalize_triggers(&mut self) -> bool {
+        let original = self.triggers.clone();
+        self.triggers.sort_unstable();
+        self.triggers.dedup();
+        self.triggers != original
+    }
+}
+
+impl CoupledSpriteImageReference for SpritePose {
+    fn image_reference(&self) -> &Option<String> {
+        &self.image_override
+    }
+
+    fn image_reference_mut(&mut self) -> &mut Option<String> {
+        &mut self.image_override
+    }
+
+    fn coupled_source(&self) -> Option<&str> {
+        self.image_override_metrics
+            .as_ref()
+            .map(|metrics| metrics.source.as_str())
+    }
+
+    fn set_coupled_source(&mut self, source: Option<&str>) {
+        match source {
+            Some(source) => {
+                if let Some(metrics) = self.image_override_metrics.as_mut() {
+                    metrics.source = source.to_string();
+                }
+            }
+            None => self.image_override_metrics = None,
+        }
+    }
+}
+
+pub(crate) fn default_sprite_transition_ms() -> u32 {
+    0
+}
+
+pub(crate) fn default_sprite_transition_easing() -> String {
+    "cubic-bezier(0.4, 0, 0.2, 1)".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ReactiveSpritePosition {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub id: String,
+    pub dx: f64,
+    pub dy: f64,
+    pub width: f64,
+    pub height: f64,
+    #[serde(default = "default_element_rotation")]
+    pub rotation: f64,
+    #[serde(default)]
+    pub hidden: bool,
+    #[serde(default)]
+    pub z_index: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layer_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group_id: Option<String>,
+    #[serde(default)]
+    pub class_name: Option<String>,
+    #[serde(default)]
+    pub use_inline_styles: Option<bool>,
+    #[serde(default)]
+    pub base_image: Option<String>,
+    #[serde(default)]
+    pub reference_natural_size: Option<SpriteReferenceNaturalSize>,
+    pub pivot: SpriteAnchor,
+    pub idle_transform: SpriteTransform,
+    #[serde(default)]
+    pub poses: Vec<SpritePose>,
+    #[serde(default)]
+    pub activation: SpriteActivation,
+    #[serde(default = "default_sprite_press_duration_ms")]
+    pub press_duration_ms: u32,
+    #[serde(default = "default_sprite_transition_ms")]
+    pub transition_ms: u32,
+    #[serde(default = "default_sprite_transition_easing")]
+    pub transition_easing: String,
+}
+
+impl Default for ReactiveSpritePosition {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            dx: 0.0,
+            dy: 0.0,
+            width: 200.0,
+            height: 200.0,
+            rotation: default_element_rotation(),
+            hidden: false,
+            z_index: None,
+            layer_name: None,
+            group_id: None,
+            class_name: None,
+            use_inline_styles: None,
+            base_image: None,
+            reference_natural_size: None,
+            pivot: SpriteAnchor::default(),
+            idle_transform: SpriteTransform::default(),
+            poses: Vec::new(),
+            activation: SpriteActivation::default(),
+            press_duration_ms: default_sprite_press_duration_ms(),
+            transition_ms: default_sprite_transition_ms(),
+            transition_easing: default_sprite_transition_easing(),
+        }
+    }
+}
+
+impl CoupledSpriteImageReference for ReactiveSpritePosition {
+    fn image_reference(&self) -> &Option<String> {
+        &self.base_image
+    }
+
+    fn image_reference_mut(&mut self) -> &mut Option<String> {
+        &mut self.base_image
+    }
+
+    fn coupled_source(&self) -> Option<&str> {
+        self.reference_natural_size
+            .as_ref()
+            .and_then(|reference| reference.source.as_deref())
+    }
+
+    fn set_coupled_source(&mut self, source: Option<&str>) {
+        if let Some(reference) = self.reference_natural_size.as_mut() {
+            reference.source = source.map(str::to_owned);
+        }
+    }
 }
 
 pub(super) fn default_true() -> bool {

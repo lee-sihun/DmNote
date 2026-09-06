@@ -17,6 +17,11 @@ import { DRAG_THRESHOLD } from '../constants';
 import { tryAcquireDragSession, releaseDragSession } from './dragSession';
 import { isMac } from '@utils/core/platform';
 import { calculateZoomAdjustedGridSize, snapToGrid } from '@hooks/Grid/utils';
+import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
+import {
+  isHistoryEditorFlushLocked,
+  subscribeHistoryEditorFlushStart,
+} from '@src/renderer/editor/runtime/lifecycle/historyEditorFlushLock';
 
 interface SelectedElementLike {
   id: string;
@@ -35,7 +40,7 @@ interface UseSelectionDragOptions {
   selectedElements: SelectedElementLike[];
   getOtherElements: (excludeId: string) => ElementBounds[];
   getSelectedElementIds?: (element: SelectedElementLike) => string[];
-  onMultiDragStart?: () => void | (() => void);
+  onMultiDragStart?: () => void | ((commit?: boolean) => void);
   onMultiDrag?: (dx: number, dy: number) => void;
   onMultiDragEnd?: () => void;
 }
@@ -71,6 +76,23 @@ export const useSelectionDrag = ({
   const lastPressMovedRef = useRef(false);
   const activePointerIdRef = useRef<number | null>(null);
   const activeCleanupRef = useRef<(() => void) | null>(null);
+  const cancelHistoryDragRef = useRef<(() => void) | null>(null);
+
+  useEffect(
+    () =>
+      useCommittedApplyStore.subscribe((state, previous) => {
+        if (state.historyTick !== previous.historyTick) {
+          cancelHistoryDragRef.current?.();
+        }
+      }),
+    [],
+  );
+
+  useEffect(
+    () =>
+      subscribeHistoryEditorFlushStart(() => cancelHistoryDragRef.current?.()),
+    [],
+  );
 
   // 소비자는 enabled와 같은 조건으로 handlePointerDown을 조건부 부착한다 -
   // 비활성화(선택 해제)되면 press가 훅을 거치지 않아 표식 소비가 끊기므로,
@@ -126,7 +148,7 @@ export const useSelectionDrag = ({
     // 개별 드래그(useDraggable)와 동일한 시작 임계값 래치 - off-grid 시작
     // 좌표에서 1px 손떨림이 스냅 점프와 클릭 흡수로 번지는 것을 차단
     let passedThreshold = false;
-    let finishGesture: (() => void) | null = null;
+    let finishGesture: ((commit?: boolean) => void) | null = null;
 
     activePointerIdRef.current = pointerId;
     dragTarget.setPointerCapture(pointerId);
@@ -312,18 +334,20 @@ export const useSelectionDrag = ({
       rafId = requestAnimationFrame(pendingFrameCallback);
     };
 
-    const finishDrag = () => {
+    const finishDrag = (commit = true) => {
       if (dragEnded) return;
+      commit = commit && !isHistoryEditorFlushLocked();
       if (rafId !== null) {
         cancelAnimationFrame(rafId);
         rafId = null;
         const flush = pendingFrameCallback;
         pendingFrameCallback = null;
-        flush?.();
+        if (commit) flush?.();
       }
       dragEnded = true;
       activePointerIdRef.current = null;
       activeCleanupRef.current = null;
+      cancelHistoryDragRef.current = null;
       releaseDragSession();
 
       if (dragTarget.hasPointerCapture(pointerId)) {
@@ -332,8 +356,8 @@ export const useSelectionDrag = ({
       dragTarget.removeEventListener('pointermove', handlePointerMove);
       dragTarget.removeEventListener('pointerup', handlePointerEnd);
       dragTarget.removeEventListener('pointercancel', handlePointerEnd);
-      dragTarget.removeEventListener('lostpointercapture', finishDrag);
-      window.removeEventListener('blur', finishDrag);
+      dragTarget.removeEventListener('lostpointercapture', completeDrag);
+      window.removeEventListener('blur', completeDrag);
       dragTarget.style.userSelect = previousUserSelect;
       dragTarget.ownerDocument.body.classList.remove('dmn-dragging');
       resumeCustomCursorHover();
@@ -341,9 +365,9 @@ export const useSelectionDrag = ({
       if (actuallyDragging) {
         useGridSelectionStore.getState().setDraggingOrResizing(false);
         try {
-          onMultiDragEnd?.();
+          if (commit) onMultiDragEnd?.();
         } finally {
-          finishGesture?.();
+          finishGesture?.(commit);
           finishGesture = null;
         }
       }
@@ -354,12 +378,14 @@ export const useSelectionDrag = ({
       finishDrag();
     };
 
-    activeCleanupRef.current = finishDrag;
+    const completeDrag = () => finishDrag();
+    activeCleanupRef.current = completeDrag;
+    cancelHistoryDragRef.current = () => finishDrag(false);
     dragTarget.addEventListener('pointermove', handlePointerMove);
     dragTarget.addEventListener('pointerup', handlePointerEnd);
     dragTarget.addEventListener('pointercancel', handlePointerEnd);
-    dragTarget.addEventListener('lostpointercapture', finishDrag);
-    window.addEventListener('blur', finishDrag);
+    dragTarget.addEventListener('lostpointercapture', completeDrag);
+    window.addEventListener('blur', completeDrag);
   };
 
   const handlePointerDown = (event: React.PointerEvent<HTMLElement>) => {

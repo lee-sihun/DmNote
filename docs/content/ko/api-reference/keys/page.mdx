@@ -111,13 +111,24 @@ interface KeyPosition {
   dy: number;
   width: number;
   height: number;
+  rotation: number; // 도, -180~180. 생략하면 0. 상자 중심 기준 콘텐츠 회전
   activeImage?: string;
   inactiveImage?: string;
   activeTransparent?: boolean;
   idleTransparent?: boolean;
   imageMode?: 'replace' | 'overlay'; // 이미지 배치. 없으면 replace(이미지가 키를 대체)
-  idleImageTransform?: { offsetX: number; offsetY: number; rotation: number; scale: number }; // 없으면 identity
-  activeImageTransform?: { offsetX: number; offsetY: number; rotation: number; scale: number };
+  idleImageTransform?: {
+    offsetX: number;
+    offsetY: number;
+    rotation: number;
+    scale: number;
+  }; // 없으면 identity
+  activeImageTransform?: {
+    offsetX: number;
+    offsetY: number;
+    rotation: number;
+    scale: number;
+  };
   count: number;
   noteColor: string | { type: 'gradient'; top: string; bottom: string };
   noteOpacity: number;
@@ -178,9 +189,11 @@ interface ElementShadowSpec {
 ```
 
 모든 요소 위치(`keyPositions`, `statPositions`, `graphPositions`,
-`knobPositions`)는 안정 `id`를 가집니다. 불투명 값으로 다루세요. 읽은 값을
-그대로 되돌려 보내고, 직접 만들지 마세요. `id`가 없거나 미확인인 쓰기는
-백엔드가 새 값을 발급합니다. 같은 `id`가 여러 번 나오면(읽은 요소를 복사해
+`knobPositions`, `spritePositions`)는 안정 `id`를 가집니다. 불투명 값으로 다루세요. 읽은 값을
+그대로 되돌려 보내고, 직접 만들지 마세요. `id`가 없거나 미확인인 쓰기는 나머지
+필드가 같은 기존 요소의 신원을 승계합니다. 맞는 항목이 없으면 백엔드가
+새 값을 발급합니다. `id`를 빼는 것이 새 신원을 보장하지는 않고, 값을 바꾸면서
+`id`까지 빼면 새 신원이 될 수 있습니다. 같은 `id`가 여러 번 나오면(읽은 요소를 복사해
 덧붙이는 경우처럼) 원래 자리의 요소가 신원을 지키고 나머지 사본이 새 값을
 받습니다. 전체 프리셋을 불러오면 모든 `id`가 재발급되고, 탭 프리셋은 그
 프리셋이 위치를 준 컬렉션만 재발급됩니다. 재정렬을 가로질러 요소를 추적할
@@ -217,6 +230,16 @@ interface ElementShadowSpec {
 `shadow`와 `activeShadow`는 대기·입력 그림자를 각각 제어합니다. 필드를
 생략하면 기존 기본 그림자가 유지되며, 그림자를 명시적으로 끄려면
 `enabled: false`인 spec을 저장하세요.
+
+`rotation`은 요소 회전(도)입니다. 키·통계·그래프·노브가 같은 필드를 쓰며
+`dx`/`dy`/`width`/`height` 논리 상자는 축 정렬 그대로 두고 얼굴, 노트
+트랙, 외부 카운터가 상자 중심을 축으로 함께 돕니다. 생략하면 0이고
+`null`, 비유한값, `-180~180` 밖의 값은 거절됩니다. 자동 히트라인
+보정(`noteAutoYCorrection`)은 회전 0인 키는 콘텐츠 상단에, 회전한 키는
+같은 방향(각도 차 0.5° 이내)으로 도는 키끼리 가장 앞선 상변에 시작선을
+맞춥니다. 혼자 돌린 키는 자기 상변에서 시작하고 노트 오프셋은 그 뒤에
+적용됩니다. 스프라이트도 요소 배치용 `rotation`을 가지며 대기·자세별 회전과
+독립적으로 적용합니다. [스프라이트 위치 타입](/docs/api-reference/editor#스프라이트-위치-타입)을 참고하세요.
 
 ```javascript
 const positions = await dmn.keys.getPositions();

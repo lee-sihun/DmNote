@@ -24,6 +24,7 @@ import {
   resolveElementShadow,
   type ElementShadowSpec,
 } from '@src/types/key/shadows';
+import { elementRotationTransform } from '@utils/element/rotation';
 
 interface KnobPosition {
   hidden?: boolean;
@@ -34,6 +35,7 @@ interface KnobPosition {
   dy?: number;
   width?: number;
   height?: number;
+  rotation?: number;
   className?: string;
   zIndex?: number;
   activeImage?: string;
@@ -216,7 +218,10 @@ const OverlayKnobItem = ({ position, index = 0 }: OverlayKnobItemProps) => {
     }),
   );
 
-  const transform = `translate3d(calc(${dx}px + var(--key-offset-x, 0px)), calc(${dy}px + var(--key-offset-y, 0px)), 0)`;
+  // 요소 회전은 배치 div에만 - 안쪽 KnobFace의 rotate는 HID 값 표시라 섞지 않는다
+  const transform = `translate3d(calc(${dx}px + var(--key-offset-x, 0px)), calc(${dy}px + var(--key-offset-y, 0px)), 0)${elementRotationTransform(
+    position.rotation,
+  )}`;
 
   return (
     <div

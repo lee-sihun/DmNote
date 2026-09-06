@@ -7,7 +7,46 @@ use std::{
 use anyhow::{Context, Result};
 use uuid::Uuid;
 
+use super::local_asset_path::{file_url_to_path, FileUrlPath};
 use crate::state::atomic_file::{atomic_replace, atomic_replace_from_temp, sync_file_contents};
+
+// 이미지 선택창이 받는 확장자. OBS 브릿지 서빙 허용 목록도 이 목록을 따라야
+// 편집기·네이티브 오버레이에서 보이는 그림이 OBS에서만 빠지지 않는다
+pub(crate) const SUPPORTED_IMAGE_EXTENSIONS: &[&str] = &[
+    "png", "jpg", "jpeg", "webp", "gif", "bmp", "svg", "ico", "avif",
+];
+
+pub(crate) fn probe_local_raster_size(image_ref: &str) -> Result<Option<(u32, u32)>> {
+    let trimmed = image_ref.trim();
+    let path = match file_url_to_path(trimmed) {
+        FileUrlPath::Path(path) => path,
+        FileUrlPath::Invalid => return Ok(None),
+        FileUrlPath::NotFileUrl => PathBuf::from(trimmed),
+    };
+    if !path.is_absolute()
+        || path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("svg"))
+    {
+        return Ok(None);
+    }
+
+    let size = imagesize::size(&path)
+        .with_context(|| format!("failed to read raster image at {}", path.display()))?;
+    let Some(width) = u32::try_from(size.width).ok() else {
+        return Ok(None);
+    };
+    let Some(height) = u32::try_from(size.height).ok() else {
+        return Ok(None);
+    };
+    let is_supported = (crate::models::SPRITE_IMAGE_DIMENSION_MIN
+        ..=crate::models::SPRITE_IMAGE_DIMENSION_MAX)
+        .contains(&width)
+        && (crate::models::SPRITE_IMAGE_DIMENSION_MIN..=crate::models::SPRITE_IMAGE_DIMENSION_MAX)
+            .contains(&height);
+    Ok(is_supported.then_some((width, height)))
+}
 
 #[derive(Debug)]
 pub(crate) struct ImportedImage {
@@ -132,6 +171,73 @@ mod tests {
 
     fn test_directory(label: &str) -> PathBuf {
         std::env::temp_dir().join(format!("dmnote-{label}-{}", Uuid::new_v4()))
+    }
+
+    fn png_header(width: u32, height: u32) -> Vec<u8> {
+        let mut bytes = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec();
+        bytes.extend_from_slice(&width.to_be_bytes());
+        bytes.extend_from_slice(&height.to_be_bytes());
+        bytes
+    }
+
+    #[test]
+    fn local_raster_probe_reads_absolute_path_and_file_url() {
+        let directory = test_directory("sprite-image-size");
+        let path = directory.join("sprite.png");
+        fs::create_dir_all(&directory).unwrap();
+        fs::write(&path, png_header(321, 123)).unwrap();
+
+        assert_eq!(
+            probe_local_raster_size(path.to_str().unwrap()).unwrap(),
+            Some((321, 123))
+        );
+        assert_eq!(
+            probe_local_raster_size(url::Url::from_file_path(&path).unwrap().as_str()).unwrap(),
+            Some((321, 123))
+        );
+
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn local_raster_probe_ignores_non_local_and_unsupported_sources() {
+        let directory = test_directory("sprite-image-size-ignored");
+        let svg = directory.join("sprite.svg");
+        fs::create_dir_all(&directory).unwrap();
+        fs::write(&svg, b"<svg width=\"10\" height=\"20\"></svg>").unwrap();
+
+        assert_eq!(
+            probe_local_raster_size("https://example.com/sprite.png").unwrap(),
+            None
+        );
+        assert_eq!(
+            probe_local_raster_size("data:image/png;base64,AAAA").unwrap(),
+            None
+        );
+        assert_eq!(
+            probe_local_raster_size("relative/sprite.png").unwrap(),
+            None
+        );
+        assert_eq!(
+            probe_local_raster_size(svg.to_str().unwrap()).unwrap(),
+            None
+        );
+
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn local_raster_probe_reports_read_failures() {
+        let directory = test_directory("sprite-image-size-failure");
+        let corrupt = directory.join("corrupt.png");
+        let missing = directory.join("missing.png");
+        fs::create_dir_all(&directory).unwrap();
+        fs::write(&corrupt, b"not-an-image").unwrap();
+
+        assert!(probe_local_raster_size(corrupt.to_str().unwrap()).is_err());
+        assert!(probe_local_raster_size(missing.to_str().unwrap()).is_err());
+
+        fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]

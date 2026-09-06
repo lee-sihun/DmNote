@@ -12,18 +12,18 @@ use std::{
 use super::normalize_stored_overlay_bounds;
 use super::{
     acknowledge_editor_flush_handshake, acknowledge_panel_close_request,
-    applied_overlay_frame_from_native, apply_panel_bounds_change, begin_panel_close_request,
-    bootstrap_keyboard_state, canonical_hold_duration_ms, changed_panel_max_height,
-    clamp_overlay_dimension, collect_authorized_css_paths, collect_frontend_lifecycle_targets,
-    complete_overlay_scale_resolution, drop_panel_hidden_with_main,
-    frontend_history_mutation_blocked, frontend_lifecycle_restore_labels, global_css_watch_path,
-    hide_panel_with_main_transition, install_history_handshake, install_lifecycle_handshake,
-    is_panel_open_url, key_state_payload, main_window_starts_hidden, monitor_scale_is_usable,
-    next_keyboard_recovery_plan, next_overlay_placement_trust, overlay_close_action,
-    overlay_reset_fallback_rect, panel_bounds_from_sample, panel_height_bounds,
-    panel_position_beside_main, publish_panel_hidden_transition,
-    publish_panel_visibility_transition, resolve_event_age_ms, resolve_overlay_placement,
-    resolve_panel_window_layout, resolve_windows_overlay_placement,
+    adjust_overlay_resize_position, applied_overlay_frame_from_native, apply_panel_bounds_change,
+    begin_panel_close_request, bootstrap_keyboard_state, canonical_hold_duration_ms,
+    changed_panel_max_height, clamp_overlay_dimension, collect_authorized_css_paths,
+    collect_frontend_lifecycle_targets, complete_overlay_scale_resolution, content_offset_change,
+    drop_panel_hidden_with_main, frontend_history_mutation_blocked,
+    frontend_lifecycle_restore_labels, global_css_watch_path, hide_panel_with_main_transition,
+    install_history_handshake, install_lifecycle_handshake, is_panel_open_url, key_state_payload,
+    main_window_starts_hidden, monitor_scale_is_usable, next_keyboard_recovery_plan,
+    next_overlay_placement_trust, overlay_close_action, overlay_reset_fallback_rect,
+    panel_bounds_from_sample, panel_height_bounds, panel_position_beside_main,
+    publish_panel_hidden_transition, publish_panel_visibility_transition, resolve_event_age_ms,
+    resolve_overlay_placement, resolve_panel_window_layout, resolve_windows_overlay_placement,
     restore_panel_with_main_transition, run_panel_close_timeout, should_create_overlay_on_startup,
     should_recover_keyboard_daemon, should_restore_panel_on_startup,
     stored_overlay_bounds_for_persistence, take_cancelable_editor_flush_handshake,
@@ -31,23 +31,24 @@ use super::{
     EditorFlushCompletion, EditorFlushHandshake, EditorFlushRequest, FrontendFlushAction,
     FrontendHistoryFlushPhase, FrontendHistoryFlushReady, FrontendLifecycleAction,
     KeyCounterEventEmitter, LifecycleHandshakeInstall, MonitorData, MonitorSpec,
-    MutationPublicationSequencer, Mutex, NativeRect, NativeRejectReason, OverlayCloseAction,
-    OverlayPersistenceAuthority, OverlayPlacementTrust, OverlayRestoreSource, PanelBoundsChange,
-    PanelBoundsPersistenceController, PanelBoundsPersistenceState, PanelBoundsSample,
-    PanelCloseRequestState, PanelCloseRequestedPayload, PanelPresentSnapshot,
-    PanelVisibilityEventEmitter, PanelVisibilityPayload, PanelVisibilityReason, PhysicalPosition,
-    PhysicalSize, DEFAULT_OVERLAY_HEIGHT, DEFAULT_OVERLAY_WIDTH,
-    HISTORY_FRONTEND_FLUSH_INTERRUPTED, KEYBOARD_DAEMON_STABLE_RUNTIME,
-    KEYBOARD_RECOVERY_DELAYS_MS, OVERLAY_LABEL, PANEL_BESIDE_GAP, PANEL_INITIAL_HEIGHT,
-    PANEL_LABEL, PANEL_MIN_HEIGHT, PANEL_OPEN_ARM_TIMEOUT, PANEL_WIDTH,
+    MutationPublicationSequencer, Mutex, NativePlacement, NativeRect, NativeRejectReason,
+    OverlayCloseAction, OverlayPersistenceAuthority, OverlayPlacementTrust, OverlayPosition,
+    OverlayRestoreSource, PanelBoundsChange, PanelBoundsPersistenceController,
+    PanelBoundsPersistenceState, PanelBoundsSample, PanelCloseRequestState,
+    PanelCloseRequestedPayload, PanelPresentSnapshot, PanelVisibilityEventEmitter,
+    PanelVisibilityPayload, PanelVisibilityReason, PhysicalPosition, PhysicalSize,
+    DEFAULT_OVERLAY_HEIGHT, DEFAULT_OVERLAY_WIDTH, HISTORY_FRONTEND_FLUSH_INTERRUPTED,
+    KEYBOARD_DAEMON_STABLE_RUNTIME, KEYBOARD_RECOVERY_DELAYS_MS, OVERLAY_LABEL, PANEL_BESIDE_GAP,
+    PANEL_INITIAL_HEIGHT, PANEL_LABEL, PANEL_MIN_HEIGHT, PANEL_OPEN_ARM_TIMEOUT, PANEL_WIDTH,
 };
 use crate::{
     keyboard::KeyboardManager,
     models::{
         AppStoreData, CustomCss, CustomTab, EditorCommitOrigin, EditorCommitRequest, EditorField,
         EditorFrozenKeySlotV1, EditorOpV1, GestureCommitRequest, GesturePluginInstancesChange,
-        KeyCounters, KeySlot, OverlayBounds, PanelBounds, PluginPoint, SavedPluginInstance,
-        StoredOverlayBounds, StoredOverlayNativePosition, TabCss, EDITOR_OPS_VERSION,
+        KeyCounters, KeySlot, OverlayBounds, OverlayResizeAnchor, PanelBounds, PluginPoint,
+        SavedPluginInstance, StoredOverlayBounds, StoredOverlayNativePosition, TabCss,
+        EDITOR_OPS_VERSION,
     },
     state::{
         assets::local_asset_path::path_identity_key,
@@ -61,6 +62,123 @@ use crate::{
 use std::path::Path;
 
 struct NoopCounterEmitter;
+
+fn resize_placement(x: f64, y: f64) -> NativePlacement {
+    NativePlacement {
+        position: OverlayPosition { x, y },
+        width: 100.0,
+        height: 100.0,
+        target_scale: 2.0,
+    }
+}
+
+#[test]
+fn unchanged_content_top_baseline_has_zero_first_delta() {
+    assert_eq!(
+        content_offset_change(Some(24.0), Some(24.0)),
+        Some((24.0, 0.0))
+    );
+    assert_eq!(content_offset_change(Some(24.0), None), Some((24.0, 0.0)));
+}
+
+#[test]
+fn top_left_resize_compensates_left_and_top_overhang() {
+    let current = resize_placement(100.0, 200.0);
+    let mut placement = NativePlacement {
+        width: 140.0,
+        height: 160.0,
+        ..current
+    };
+
+    adjust_overlay_resize_position(
+        &mut placement,
+        current,
+        &OverlayResizeAnchor::TopLeft,
+        None,
+        None,
+        Some(10.0),
+        Some(20.0),
+    );
+
+    assert_eq!(placement.position, OverlayPosition { x: 80.0, y: 160.0 });
+}
+
+#[test]
+fn fixed_position_resize_applies_fixed_and_content_deltas_once() {
+    let current = resize_placement(100.0, 200.0);
+    let mut placement = current;
+
+    adjust_overlay_resize_position(
+        &mut placement,
+        current,
+        &OverlayResizeAnchor::FixedPosition,
+        Some(3.0),
+        Some(4.0),
+        Some(10.0),
+        Some(20.0),
+    );
+
+    assert_eq!(placement.position, OverlayPosition { x: 86.0, y: 168.0 });
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn macos_sprite_visibility_roundtrip_keeps_overlay_position() {
+    // AppKit의 원점 내림과 크기 올림을 실제 창 대조 실행과 같은 순서로 반영
+    let apply_native = |mut placement: NativePlacement| {
+        let screen_height = 1440.0;
+        let bottom = (screen_height - placement.position.y - placement.height).floor();
+        placement.position.x = placement.position.x.floor();
+        placement.width = placement.width.ceil();
+        placement.height = placement.height.ceil();
+        placement.position.y = screen_height - bottom - placement.height;
+        placement
+    };
+    for anchor in [
+        OverlayResizeAnchor::TopLeft,
+        OverlayResizeAnchor::TopRight,
+        OverlayResizeAnchor::BottomLeft,
+        OverlayResizeAnchor::BottomRight,
+        OverlayResizeAnchor::Center,
+        OverlayResizeAnchor::FixedPosition,
+    ] {
+        for origin in [100.0, -100.0] {
+            for delta in [2.5776543848328117, 0.5, -0.5, 17.125] {
+                let original = NativePlacement {
+                    position: OverlayPosition {
+                        x: origin,
+                        y: origin,
+                    },
+                    width: 655.0,
+                    height: 505.0,
+                    target_scale: 1.0,
+                };
+                let mut current = original;
+                for _ in 0..100 {
+                    for visible in [true, false] {
+                        let change = if visible { delta } else { -delta };
+                        let mut placement = NativePlacement {
+                            width: if visible { 798.0 } else { 655.0 },
+                            height: if visible { 663.0 } else { 505.0 },
+                            ..current
+                        };
+                        adjust_overlay_resize_position(
+                            &mut placement,
+                            current,
+                            &anchor,
+                            Some(change),
+                            Some(-change),
+                            Some(change),
+                            Some(change),
+                        );
+                        current = apply_native(placement);
+                    }
+                    assert_eq!(current, original, "anchor={anchor:?}, delta={delta}");
+                }
+            }
+        }
+    }
+}
 
 impl KeyCounterEventEmitter for NoopCounterEmitter {
     fn emit_key_counters(
@@ -2239,6 +2357,129 @@ fn lifecycle_flush_interrupts_history_but_history_cannot_replace_lifecycle() {
     assert!(slot
         .as_ref()
         .is_some_and(|active| active.completion.is_lifecycle()));
+}
+
+#[cfg(unix)]
+#[test]
+fn sigterm_preserves_pending_state_and_allows_retry_after_canceled_flush() {
+    use std::{os::unix::process::ExitStatusExt, process::Command};
+
+    const CHILD_MODE: &str = "DMNOTE_SIGTERM_REGRESSION_MODE";
+    const CHILD_STORE: &str = "DMNOTE_SIGTERM_REGRESSION_STORE";
+    if let Ok(mode) = std::env::var(CHILD_MODE) {
+        let directory = std::env::var_os(CHILD_STORE).unwrap();
+        let state = Arc::new(
+            AppState::initialize(AppStore::initialize_for_test(Path::new(&directory)).unwrap())
+                .unwrap(),
+        );
+        state.key_counter_enabled.store(true, Ordering::SeqCst);
+        let snapshot = state.store.snapshot();
+        let key_mode = snapshot.selected_key_type;
+        let key = snapshot.keys[&key_mode][0].canonical();
+        for expected in 1..=9 {
+            assert_eq!(
+                state.increment_key_counter_and_emit(&NoopCounterEmitter, &key_mode, &key),
+                Some(expected)
+            );
+        }
+        state.store.flush().unwrap();
+        state
+            .store
+            .update_deferred(|store| {
+                store.overlay_bounds = Some(StoredOverlayBounds {
+                    x: 417.0,
+                    y: 19.0,
+                    width: 500.0,
+                    height: 400.0,
+                    native_position: None,
+                });
+            })
+            .unwrap();
+
+        let (sender, receiver) = mpsc::channel();
+        if mode == "protected" {
+            let state = Arc::clone(&state);
+            let requests = AtomicUsize::new(0);
+            crate::state::window::unix_termination::install(move || {
+                let request_number = requests.fetch_add(1, Ordering::SeqCst) + 1;
+                let mut active = state.editor_flush_handshake.lock();
+                let outcome = install_lifecycle_handshake(
+                    &mut active,
+                    EditorFlushHandshake {
+                        id: format!("sigterm-{request_number}"),
+                        completion: EditorFlushCompletion::Lifecycle(FrontendLifecycleAction::Quit),
+                        target_windows: HashSet::from(["main".to_string()]),
+                        pending_windows: HashSet::from(["main".to_string()]),
+                    },
+                );
+                let installed = matches!(outcome, LifecycleHandshakeInstall::Installed);
+                sender
+                    .send((active.as_ref().unwrap().id.clone(), installed))
+                    .unwrap();
+            })
+            .unwrap();
+        }
+
+        assert_eq!(unsafe { libc::raise(libc::SIGTERM) }, 0);
+        assert_eq!(
+            receiver.recv_timeout(Duration::from_secs(3)).unwrap(),
+            ("sigterm-1".to_string(), true)
+        );
+        assert_eq!(unsafe { libc::raise(libc::SIGTERM) }, 0);
+        assert_eq!(
+            receiver.recv_timeout(Duration::from_secs(3)).unwrap(),
+            ("sigterm-1".to_string(), false)
+        );
+        assert!(take_cancelable_editor_flush_handshake(
+            &mut state.editor_flush_handshake.lock(),
+            "sigterm-1"
+        )
+        .is_some());
+        assert_eq!(unsafe { libc::raise(libc::SIGTERM) }, 0);
+        assert_eq!(
+            receiver.recv_timeout(Duration::from_secs(3)).unwrap(),
+            ("sigterm-3".to_string(), true)
+        );
+        state.shutdown();
+        return;
+    }
+
+    for mode in ["default", "protected"] {
+        let directory = tempfile::tempdir().unwrap();
+        let output = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "state::app_state::tests::sigterm_preserves_pending_state_and_allows_retry_after_canceled_flush",
+                "--nocapture",
+            ])
+            .env(CHILD_MODE, mode)
+            .env(CHILD_STORE, directory.path())
+            .output()
+            .unwrap();
+        if mode == "default" {
+            assert_eq!(output.status.signal(), Some(libc::SIGTERM));
+        } else {
+            assert!(
+                output.status.success(),
+                "SIGTERM child failed: {:?}\n{}\n{}",
+                output.status,
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+        let persisted: AppStoreData =
+            serde_json::from_slice(&std::fs::read(directory.path().join("store.json")).unwrap())
+                .unwrap();
+        let key = persisted.keys[&persisted.selected_key_type][0].canonical();
+        let counter = persisted.key_counters[&persisted.selected_key_type][&key];
+        let x = persisted.overlay_bounds.as_ref().map(|bounds| bounds.x);
+        eprintln!(
+            "SIGTERM {mode}: status={}, counter={counter}, bounds_x={x:?}",
+            output.status
+        );
+        assert_eq!(counter, if mode == "protected" { 9 } else { 0 });
+        assert_eq!(x, (mode == "protected").then_some(417.0));
+    }
 }
 
 #[test]

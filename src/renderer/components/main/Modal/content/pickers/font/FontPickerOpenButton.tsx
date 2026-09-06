@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { preloadFontPickerFonts } from './fontPickerPreload';
+import { ACTION_BUTTON_CHROME_CLASS } from '@utils/cardRecipes';
 
 interface FontPickerOpenButtonProps {
   activePageKey: string | null;
@@ -40,7 +41,7 @@ const FontPickerOpenButton = ({
   return (
     <button
       type="button"
-      className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
+      className={`${ACTION_BUTTON_CHROME_CLASS} ${
         activePageKey === pageKey ? 'shadow-focus-ring' : ''
       } text-fg text-body`}
       onPointerEnter={(event) => preload(event.currentTarget.ownerDocument)}

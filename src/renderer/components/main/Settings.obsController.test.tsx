@@ -483,7 +483,8 @@ describe('Settings OBS controller surface', () => {
     },
   );
 
-  it('OBS start 뒤 settings 저장 실패도 optimistic 상태를 rollback하고 finally에서 gate를 연다', async () => {
+  // 시작 명령은 끝났고 저장만 실패한 경우 - 서버는 실제로 떠 있으므로 표시를 되돌리지 않는다
+  it('OBS start 뒤 settings 저장만 실패하면 실제 실행 상태를 유지하고 finally에서 gate를 연다', async () => {
     obsHarness.settingsUpdate.mockRejectedValueOnce(
       new Error('settings update failure'),
     );
@@ -497,13 +498,16 @@ describe('Settings OBS controller surface', () => {
     expect(obsHarness.settingsUpdate).toHaveBeenCalledWith({
       obsModeEnabled: true,
     });
-    expect(obsToggle().getAttribute('aria-pressed')).toBe('false');
-    expect(showAlert).toHaveBeenCalledWith('settings.obsStartFailed');
+    expect(obsToggle().getAttribute('aria-pressed')).toBe('true');
+    expect(showAlert).toHaveBeenCalledWith('common.saveFailed');
 
     obsHarness.settingsUpdate.mockResolvedValue(undefined);
     act(() => obsToggle().click());
     await settle();
-    expect(obsHarness.start).toHaveBeenCalledTimes(2);
+    expect(obsHarness.stop).toHaveBeenCalledOnce();
+    expect(obsHarness.settingsUpdate).toHaveBeenLastCalledWith({
+      obsModeEnabled: false,
+    });
   });
 
   it('OBS URL copy 성공은 완료 알림, clipboard 실패는 URL fallback을 표시한다', async () => {

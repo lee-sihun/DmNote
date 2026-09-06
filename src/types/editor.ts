@@ -10,6 +10,13 @@ import {
 } from '@src/types/key/keys';
 import type { KnobItemPosition, KnobItemPositions } from '@src/types/key/knobs';
 import {
+  reactiveSpritePositionInputSchema,
+  reactiveSpritePositionSchema,
+  type ReactiveSpritePosition,
+  type SpritePositions,
+  type SpritePositionsInput,
+} from '@src/types/key/sprites';
+import {
   STAT_ITEM_TYPES,
   type StatItemPosition,
   type StatItemPositions,
@@ -17,6 +24,7 @@ import {
 import type { LayerGroupDef, LayerGroups } from '@src/types/layerGroups';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import type { ElementShadowValuePatch } from '@src/types/key/shadows';
+import { isElementRotationValue } from '@src/types/key/rotation';
 import {
   isImageTransformLeafPatch,
   type ImageMode,
@@ -46,7 +54,7 @@ export const EDITOR_SCHEMA_VERSION = 1 as const;
 // 유지하고 id를 additive로 싣는다. v2 커밋은 포함된 모든 위치 항목에 유효 ID가
 // 필수라 백엔드가 형식·전역 유일성을 강제한다. 구형 플러그인 gateway만 v1로 남는다
 export const EDITOR_COMMIT_SCHEMA_VERSION = 2 as const;
-export const EDITOR_OPS_VERSION = 2 as const;
+export const EDITOR_OPS_VERSION = 4 as const;
 
 export const EDITOR_FIELDS = [
   'keys',
@@ -54,6 +62,7 @@ export const EDITOR_FIELDS = [
   'statPositions',
   'graphPositions',
   'knobPositions',
+  'spritePositions',
   'layerGroups',
 ] as const;
 
@@ -66,6 +75,7 @@ export interface EditorDocumentV1 {
   statPositions: StatItemPositions;
   graphPositions: GraphItemPositions;
   knobPositions: KnobItemPositions;
+  spritePositions: SpritePositions;
   layerGroups: LayerGroups;
 }
 
@@ -73,16 +83,24 @@ export type CanonicalKeyPosition = KeyPosition & { id: string };
 export type CanonicalStatItemPosition = StatItemPosition & { id: string };
 export type CanonicalGraphItemPosition = GraphItemPosition & { id: string };
 export type CanonicalKnobItemPosition = KnobItemPosition & { id: string };
+export type CanonicalReactiveSpritePosition = ReactiveSpritePosition & {
+  id: string;
+};
 
 export interface CanonicalEditorDocumentV1
   extends Omit<
     EditorDocumentV1,
-    'keyPositions' | 'statPositions' | 'graphPositions' | 'knobPositions'
+    | 'keyPositions'
+    | 'statPositions'
+    | 'graphPositions'
+    | 'knobPositions'
+    | 'spritePositions'
   > {
   keyPositions: Record<string, CanonicalKeyPosition[]>;
   statPositions: Record<string, CanonicalStatItemPosition[]>;
   graphPositions: Record<string, CanonicalGraphItemPosition[]>;
   knobPositions: Record<string, CanonicalKnobItemPosition[]>;
+  spritePositions: Record<string, CanonicalReactiveSpritePosition[]>;
 }
 
 export type EditorPatchV1 = {
@@ -91,11 +109,21 @@ export type EditorPatchV1 = {
     | typeof EDITOR_COMMIT_SCHEMA_VERSION;
 } & Partial<Pick<EditorDocumentV1, EditorField>>;
 
-// 플러그인 공개 표면 전용 패치. commit wire v2(ID 필수 검증)는 자사 내부
-// 전용이라 플러그인 경계에는 v1만 노출한다 - durable plugin ID는 별도 릴리스
-export type EditorLegacyPatchV1 = {
+// committed 이벤트 전용 패치. 백엔드 patch_for_fields가 만들므로 값은 항상
+// canonical(발급 완료)이고 버전은 v1 고정 - 커밋 요청 전용 v2를 타입에서 배제
+export type EditorEventPatchV1 = {
   schemaVersion: typeof EDITOR_SCHEMA_VERSION;
 } & Partial<Pick<EditorDocumentV1, EditorField>>;
+
+// 플러그인 공개 표면 전용 패치. commit wire v2(ID 필수 검증)는 자사 내부
+// 전용이라 플러그인 경계에는 v1만 노출한다 - durable plugin ID는 별도 릴리스.
+// 스프라이트는 input 타입을 쓴다 - poseId 생략(백엔드 발급)이 문서화된 계약이라
+// canonical 타입으로는 유효한 커밋을 표현할 수 없다
+export type EditorLegacyPatchV1 = {
+  schemaVersion: typeof EDITOR_SCHEMA_VERSION;
+} & Partial<Pick<EditorDocumentV1, Exclude<EditorField, 'spritePositions'>>> & {
+    spritePositions?: SpritePositionsInput;
+  };
 
 interface EditorCommitRequestBase {
   baseRevision: number;
@@ -115,7 +143,7 @@ export interface EditorPatchCommitRequest extends EditorCommitRequestBase {
   ops?: never;
 }
 
-export type EditorElementTypeV1 = 'key' | 'stat' | 'graph' | 'knob';
+export type EditorElementTypeV1 = 'key' | 'stat' | 'graph' | 'knob' | 'sprite';
 
 export interface EditorBoundsV1 {
   dx: number;
@@ -124,9 +152,26 @@ export interface EditorBoundsV1 {
   height: number;
 }
 
+// 백엔드 validate_bounds_metrics 상한 (editor.rs MAX_DIMENSION·MAX_ABS_COORDINATE)
+// - 저장 좌표 dx·dy의 절댓값과 치수만 검사하고 오른쪽·아래 가장자리는 보지 않는다
+export const EDITOR_BOUNDS_LIMITS = {
+  maxDimension: 32_768,
+  maxAbsCoordinate: 32_768,
+} as const;
+
 export interface EditorSetBoundsOpV1 {
   kind: 'setBounds';
   elementType: EditorElementTypeV1;
+  id: string;
+  bounds: EditorBoundsV1;
+}
+
+// 스프라이트 전용 - bounds 교체와 함께 idleTransform·poses의
+// px 좌표를 이전 bounds 대비 배율로 스케일한다. 배율은 적용 시점 문서의
+// bounds 기준(last-writer-wins) - 드래그 중 외부 patch가 끼어들어도
+// 최종 bounds는 요청 값, 콘텐츠는 최신 상태 기준 비례로 수렴한다
+export interface EditorResizeSpriteOpV1 {
+  kind: 'resizeSprite';
   id: string;
   bounds: EditorBoundsV1;
 }
@@ -141,7 +186,8 @@ export type EditorFrozenElementV1 =
   | { elementType: 'key'; slot: KeySlot; position: CanonicalKeyPosition }
   | { elementType: 'stat'; position: CanonicalStatItemPosition }
   | { elementType: 'graph'; position: CanonicalGraphItemPosition }
-  | { elementType: 'knob'; position: CanonicalKnobItemPosition };
+  | { elementType: 'knob'; position: CanonicalKnobItemPosition }
+  | { elementType: 'sprite'; position: CanonicalReactiveSpritePosition };
 
 export interface EditorFrozenZUpdateV1 {
   elementType: EditorElementTypeV1;
@@ -276,6 +322,7 @@ interface EditorElementPropertyValuesV1 {
   noteAlignment: 'left' | 'center' | 'right';
   noteBorderSide: 'all' | 'vertical' | 'horizontal';
   statType: 'kps' | 'kpsAvg' | 'kpsMax' | 'total';
+  rotation: number;
 }
 
 export type EditorElementPropertyKeyV1 = keyof EditorElementPropertyValuesV1;
@@ -363,6 +410,7 @@ export const EDITOR_ELEMENT_PROPERTY_KEYS = [
   'noteAutoYCorrection',
   'noteAlignment',
   'noteBorderSide',
+  'rotation',
 ] as const satisfies readonly EditorElementPropertyKeyV1[];
 
 type AssertNever<T extends never> = T;
@@ -479,6 +527,7 @@ export type EditorPreviewStylePropertyPatchV1 =
       | 'noteWidth'
       | 'noteBorderWidth'
       | 'noteBorderRadius'
+      | 'rotation'
     >;
 
 // 프리뷰 전용 - 커밋 wire는 leaf 패치지만 프리뷰는 keyPosition에 그대로 얹을 전체 변환을 보낸다
@@ -545,6 +594,7 @@ export interface EditorSetKeySlotOpV1 {
 
 export type EditorOpV1 =
   | EditorSetBoundsOpV1
+  | EditorResizeSpriteOpV1
   | EditorDeleteElementOpV1
   | EditorInsertFrozenElementsOpV1
   | EditorReorderElementsOpV1
@@ -630,7 +680,7 @@ export interface EditorCommittedV1 {
   origin?: string;
   changedFields: EditorField[];
   // 이벤트는 v1 고정 - 커밋 요청 전용 v2를 타입에서 배제한다
-  patch: EditorLegacyPatchV1;
+  patch: EditorEventPatchV1;
   // 커밋 요청의 gestureId echo, 수신 창의 프리뷰 오버레이 정리 신호
   gestureId?: string | null;
   // 합쳐진 커밋에 포함된 모든 프리뷰 세션 정리 신호
@@ -718,6 +768,8 @@ export const EDITOR_CAPACITY_VALIDATION_CODES: ReadonlySet<string> = new Set([
   // setElementGroups targets 상한. 빈 배열은 plugin-only 편집으로 허용되므로
   // 이 코드는 순수 배치 초과 전용이다
   'INVALID_ELEMENT_GROUP_TARGET_COUNT',
+  // 자세당 담당 키 상한 (MAX_SPRITE_POSE_TRIGGERS)
+  'TOO_MANY_SPRITE_POSE_TRIGGERS',
   // validate_plugin_instances_request 말미의 compact size 검사.
   // TOO_MANY_PLUGIN_INSTANCES와 같은 gesture 승격 채널로 프론트에 도달한다
   'PLUGIN_INSTANCES_REQUEST_TOO_LARGE',
@@ -1107,6 +1159,30 @@ const assertKnobPosition: (
   }
 };
 
+// 스프라이트 검증 방향. canonical(서빙)은 grandfather 컬렉션을 관대하게 받고,
+// input(플러그인 patch)은 poseId 생략을 허용하는 대신 상한을 선차단한다
+type SpriteAssertMode = 'canonical' | 'input';
+
+// 스프라이트는 KeyPosition 형태가 아니라 전용 스키마로 검증한다.
+// nullable 필드는 스키마가 직접 허용하므로 별도 정규화가 필요 없다
+const assertSpritePosition: (
+  value: unknown,
+  label: string,
+  mode: SpriteAssertMode,
+) => asserts value is ReactiveSpritePosition = (
+  value: unknown,
+  label: string,
+  mode: SpriteAssertMode,
+) => {
+  const schema =
+    mode === 'input'
+      ? reactiveSpritePositionInputSchema
+      : reactiveSpritePositionSchema;
+  if (!schema.safeParse(value).success) {
+    throw new EditorProtocolError(`${label} is not a valid sprite position`);
+  }
+};
+
 const assertLayerGroups = (value: unknown, label: string): void => {
   assertModeRecord(value, label, (item, itemLabel) => {
     if (
@@ -1124,6 +1200,7 @@ const assertEditorCollections = (
   value: Record<string, unknown>,
   label: string,
   partial: boolean,
+  spriteMode: SpriteAssertMode = 'canonical',
 ): void => {
   const validators: Record<
     EditorField,
@@ -1138,6 +1215,10 @@ const assertEditorCollections = (
       assertModeRecord(collection, collectionLabel, assertGraphPosition),
     knobPositions: (collection, collectionLabel) =>
       assertModeRecord(collection, collectionLabel, assertKnobPosition),
+    spritePositions: (collection, collectionLabel) =>
+      assertModeRecord(collection, collectionLabel, (item, itemLabel) =>
+        assertSpritePosition(item, itemLabel, spriteMode),
+      ),
     layerGroups: assertLayerGroups,
   };
 
@@ -1204,6 +1285,7 @@ const assertLayerGroupReferences = (
       'statPositions',
       'graphPositions',
       'knobPositions',
+      'spritePositions',
     ] as const
   ).forEach((field) => {
     Object.entries(value[field] as Record<string, unknown[]>).forEach(
@@ -1226,6 +1308,7 @@ const assertLayerGroupReferences = (
   });
 };
 
+// 그라데이션 형제 필드 정규화 대상. 스프라이트는 그라데이션 필드가 없어 제외
 const POSITION_COLLECTION_FIELDS = [
   'keyPositions',
   'statPositions',
@@ -1259,7 +1342,7 @@ const canonicalizePositionCollection = (
  * 변경이 없으면 동일 참조 반환
  */
 export function canonicalizeEditorGradients<
-  T extends EditorPatchV1 | EditorDocumentV1,
+  T extends EditorPatchV1 | EditorLegacyPatchV1 | EditorDocumentV1,
 >(value: T): T {
   if (!isRecord(value)) return value;
   let changed = false;
@@ -1281,11 +1364,12 @@ export function canonicalizeEditorGradients<
 export function assertEditorDocument(
   value: unknown,
   label = 'editor document',
+  spriteMode: SpriteAssertMode = 'canonical',
 ): asserts value is EditorDocumentV1 {
   if (!isRecord(value) || value.schemaVersion !== EDITOR_SCHEMA_VERSION) {
     throw new EditorProtocolError(`${label} has an unsupported schema version`);
   }
-  assertEditorCollections(value, label, false);
+  assertEditorCollections(value, label, false, spriteMode);
   assertPairedCollections(value, label);
   assertLayerGroupReferences(value, label);
 }
@@ -1302,6 +1386,7 @@ export function assertCanonicalEditorDocument(
     ['statPositions', document.statPositions],
     ['graphPositions', document.graphPositions],
     ['knobPositions', document.knobPositions],
+    ['spritePositions', document.spritePositions],
   ] as const;
   for (const [field, collection] of collections) {
     for (const [mode, positions] of Object.entries(collection)) {
@@ -1320,11 +1405,41 @@ export function assertCanonicalEditorDocument(
       }
     }
   }
+  // pose id는 요소 id와 같은 전역 네임스페이스 - 백엔드 backfill·검증이
+  // 요소를 먼저 등록한 뒤 pose를 도는 순서를 그대로 미러한다
+  for (const [mode, positions] of Object.entries(document.spritePositions)) {
+    for (const [index, position] of positions.entries()) {
+      for (const [poseIndex, pose] of position.poses.entries()) {
+        const poseLabel = `${label}.spritePositions.${mode}[${index}].poses[${poseIndex}]`;
+        if (!isNativeElementId(pose.poseId)) {
+          throw new EditorProtocolError(`${poseLabel}.poseId is invalid`);
+        }
+        if (seen.has(pose.poseId)) {
+          throw new EditorProtocolError(
+            `${poseLabel}.poseId is not globally unique`,
+          );
+        }
+        seen.add(pose.poseId);
+      }
+    }
+  }
 }
 
+// input 모드는 poseId 생략을 허용하므로 canonical EditorPatchV1로 좁히면
+// 타입 술어가 거짓이 된다 - 오버로드로 방향별 결과 타입을 분리
+export function assertEditorPatch(
+  value: unknown,
+  label?: string,
+): asserts value is EditorPatchV1;
+export function assertEditorPatch(
+  value: unknown,
+  label: string,
+  spriteMode: SpriteAssertMode,
+): asserts value is EditorPatchV1 | EditorLegacyPatchV1;
 export function assertEditorPatch(
   value: unknown,
   label = 'editor patch',
+  spriteMode: SpriteAssertMode = 'canonical',
 ): asserts value is EditorPatchV1 {
   if (
     !isRecord(value) ||
@@ -1339,7 +1454,7 @@ export function assertEditorPatch(
   if (unknownKey) {
     throw new EditorProtocolError(`${label}.${unknownKey} is not supported`);
   }
-  assertEditorCollections(value, label, true);
+  assertEditorCollections(value, label, true, spriteMode);
 }
 
 export function assertEditorFields(
@@ -1458,6 +1573,34 @@ function assertEditorFrozenElement(
       throw new EditorProtocolError(`${label}.position.id is invalid`);
     }
     assertFrozenPositionZIndex(value.position, `${label}.position`);
+    return;
+  }
+  if (value.elementType === 'sprite') {
+    // frozen 요소는 canonical 문서에서 뜬 스냅샷이라 서빙 방향으로 검증
+    assertSpritePosition(value.position, `${label}.position`, 'canonical');
+    const position = value.position as Record<string, unknown>;
+    if (!isNativeElementId(position.id)) {
+      throw new EditorProtocolError(`${label}.position.id is invalid`);
+    }
+    // poseId도 canonical 스냅샷 요건 - 형식은 여기서, 유일성은 op 수준
+    // insertedIds(요소 id와 같은 전역 네임스페이스)에서 확인한다
+    const poses = (value.position as ReactiveSpritePosition).poses;
+    for (const [poseIndex, pose] of poses.entries()) {
+      if (!isNativeElementId(pose.poseId)) {
+        throw new EditorProtocolError(
+          `${label}.position.poses[${poseIndex}].poseId is invalid`,
+        );
+      }
+    }
+    // 스프라이트 zIndex는 null 허용 - 정수 범위 검사는 값이 있을 때만
+    if (
+      position.zIndex !== null &&
+      (!Number.isSafeInteger(position.zIndex) ||
+        (position.zIndex as number) < -2_147_483_648 ||
+        (position.zIndex as number) > 2_147_483_647)
+    ) {
+      throw new EditorProtocolError(`${label}.position.zIndex is invalid`);
+    }
     return;
   }
   throw new EditorProtocolError(`${label}.elementType is invalid`);
@@ -1709,6 +1852,9 @@ const isEditorElementPropertyValueValid = (
         value >= 0 &&
         value <= 50
       );
+    case 'rotation':
+      // 네이티브 4종 공통. 스프라이트는 자세 회전이 따로 있다
+      return elementType !== 'sprite' && isElementRotationValue(value);
     case 'notePaint':
     case 'noteGlowPaint':
       return elementType === 'key' && isNotePaintValuePatchV1(value);
@@ -1818,9 +1964,20 @@ export function assertEditorOpsV1(
     if (op.kind === 'setBounds') {
       assertExactKeys(op, ['kind', 'elementType', 'id', 'bounds'], opLabel);
       if (
-        !['key', 'stat', 'graph', 'knob'].includes(op.elementType as string) ||
+        !['key', 'stat', 'graph', 'knob', 'sprite'].includes(
+          op.elementType as string,
+        ) ||
         !isNativeElementId(op.id)
       ) {
+        throw new EditorProtocolError(`${opLabel} target is invalid`);
+      }
+      assertUniqueDirectTarget(op.id, opLabel);
+      assertEditorBounds(op.bounds, `${opLabel}.bounds`);
+      return;
+    }
+    if (op.kind === 'resizeSprite') {
+      assertExactKeys(op, ['kind', 'id', 'bounds'], opLabel);
+      if (!isNativeElementId(op.id)) {
         throw new EditorProtocolError(`${opLabel} target is invalid`);
       }
       assertUniqueDirectTarget(op.id, opLabel);
@@ -1830,7 +1987,9 @@ export function assertEditorOpsV1(
     if (op.kind === 'deleteElement') {
       assertExactKeys(op, ['kind', 'elementType', 'id'], opLabel);
       if (
-        !['key', 'stat', 'graph', 'knob'].includes(op.elementType as string) ||
+        !['key', 'stat', 'graph', 'knob', 'sprite'].includes(
+          op.elementType as string,
+        ) ||
         !isNativeElementId(op.id)
       ) {
         throw new EditorProtocolError(`${opLabel} target is invalid`);
@@ -1841,7 +2000,9 @@ export function assertEditorOpsV1(
     if (op.kind === 'patchElement') {
       assertExactKeys(op, ['kind', 'elementType', 'id', 'patch'], opLabel);
       if (
-        !['key', 'stat', 'graph', 'knob'].includes(op.elementType as string) ||
+        !['key', 'stat', 'graph', 'knob', 'sprite'].includes(
+          op.elementType as string,
+        ) ||
         !isNativeElementId(op.id) ||
         !isRecord(op.patch)
       ) {
@@ -1880,7 +2041,7 @@ export function assertEditorOpsV1(
         }
         assertExactKeys(target, ['elementType', 'id'], targetLabel);
         if (
-          !['key', 'stat', 'graph', 'knob'].includes(
+          !['key', 'stat', 'graph', 'knob', 'sprite'].includes(
             target.elementType as string,
           ) ||
           typeof target.id !== 'string' ||
@@ -1986,7 +2147,7 @@ export function assertEditorOpsV1(
         targetLabel: string,
       ) => {
         if (
-          !['key', 'stat', 'graph', 'knob'].includes(
+          !['key', 'stat', 'graph', 'knob', 'sprite'].includes(
             target.elementType as string,
           ) ||
           !isNativeElementId(target.id)
@@ -2068,6 +2229,17 @@ export function assertEditorOpsV1(
         );
       }
       insertedIds.add(id);
+      if (element.elementType === 'sprite') {
+        // poseId는 요소 id와 같은 전역 네임스페이스 - 백엔드 seen 집합 미러
+        for (const pose of (element.position as ReactiveSpritePosition).poses) {
+          if (insertedIds.has(pose.poseId)) {
+            throw new EditorProtocolError(
+              `${opLabel}.elements contains an invalid or duplicate ID`,
+            );
+          }
+          insertedIds.add(pose.poseId);
+        }
+      }
     });
     const groupIds = new Set<string>();
     op.groups.forEach((group, groupIndex) => {
@@ -2094,7 +2266,7 @@ export function assertEditorOpsV1(
       }
       assertExactKeys(update, ['elementType', 'id', 'zIndex'], updateLabel);
       if (
-        !['key', 'stat', 'graph', 'knob'].includes(
+        !['key', 'stat', 'graph', 'knob', 'sprite'].includes(
           update.elementType as string,
         ) ||
         !isNativeElementId(update.id) ||
@@ -2175,6 +2347,7 @@ export function assertEditorOpCommitResult(
     stat: 'statPositions',
     graph: 'graphPositions',
     knob: 'knobPositions',
+    sprite: 'spritePositions',
   };
   const requiredFields = new Set<EditorField>();
   const allowedFields = new Set<EditorField>();
@@ -2193,6 +2366,22 @@ export function assertEditorOpCommitResult(
       if (result.status === 'applied') {
         requiredFields.add(positionFields[op.elementType]);
         allowedFields.add(positionFields[op.elementType]);
+      }
+      return;
+    }
+    if (op.kind === 'resizeSprite') {
+      if (
+        result.status !== 'targetMissing' &&
+        ((result.status !== 'applied' && result.status !== 'noChange') ||
+          result.bounds === undefined)
+      ) {
+        throw new EditorProtocolError(
+          `editor_commit opResults[${index}] is invalid for resizeSprite`,
+        );
+      }
+      if (result.status === 'applied') {
+        requiredFields.add('spritePositions');
+        allowedFields.add('spritePositions');
       }
       return;
     }
@@ -2398,6 +2587,30 @@ export function assertEditorCommittedEvent(value: EditorCommittedV1): void {
           );
         }
         suppliedIds.add(position.id);
+      }
+    }
+  }
+  // 스프라이트는 POSITION_COLLECTION_FIELDS(그라데이션 대상) 밖이라 별도 순회.
+  // 백엔드 committed patch는 항상 발급 완료 상태라 id·poseId를 같은
+  // 전역 네임스페이스로 강제한다
+  if (value.patch.spritePositions !== undefined) {
+    for (const [mode, positions] of Object.entries(
+      value.patch.spritePositions,
+    )) {
+      for (const [index, position] of positions.entries()) {
+        const spriteLabel = `editor:committed patch.spritePositions.${mode}[${index}]`;
+        if (!isNativeElementId(position.id) || suppliedIds.has(position.id)) {
+          throw new EditorProtocolError(`${spriteLabel}.id is invalid`);
+        }
+        suppliedIds.add(position.id);
+        for (const [poseIndex, pose] of position.poses.entries()) {
+          if (!isNativeElementId(pose.poseId) || suppliedIds.has(pose.poseId)) {
+            throw new EditorProtocolError(
+              `${spriteLabel}.poses[${poseIndex}].poseId is invalid`,
+            );
+          }
+          suppliedIds.add(pose.poseId);
+        }
       }
     }
   }

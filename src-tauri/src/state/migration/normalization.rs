@@ -56,6 +56,91 @@ pub(super) fn migrate_sound_library_enabled(value: &mut Value) -> bool {
     changed
 }
 
+pub(crate) fn migrate_legacy_sprite_wire(value: &mut Value) -> bool {
+    let Some(sprite_positions) = value.get_mut("spritePositions") else {
+        return false;
+    };
+    migrate_legacy_sprite_positions_value(sprite_positions)
+}
+
+pub(super) fn migrate_legacy_sprite_positions_value(value: &mut Value) -> bool {
+    let Some(modes) = value.as_object_mut() else {
+        return false;
+    };
+    let mut changed = false;
+    for sprite in modes.values_mut().filter_map(Value::as_array_mut).flatten() {
+        let Some(sprite) = sprite.as_object_mut() else {
+            continue;
+        };
+
+        let sprite_id = sprite
+            .get("id")
+            .and_then(Value::as_str)
+            .filter(|id| !id.is_empty())
+            .unwrap_or("<missing>")
+            .to_string();
+        let has_image_rect = sprite.contains_key("imageRect");
+        let image_rect = sprite.get("imageRect").and_then(Value::as_object);
+        let absorbed = image_rect.and_then(|rect| {
+            let x = rect.get("x")?.as_f64()?;
+            let y = rect.get("y")?.as_f64()?;
+            let width = rect.get("width")?.as_f64()?;
+            let height = rect.get("height")?.as_f64()?;
+            (x.is_finite()
+                && y.is_finite()
+                && width.is_finite()
+                && height.is_finite()
+                && width > 0.0
+                && height > 0.0)
+                .then_some((x, y, width, height))
+        });
+        if let Some((x, y, width, height)) = absorbed {
+            let transformed = sprite
+                .get("dx")
+                .and_then(Value::as_f64)
+                .zip(sprite.get("dy").and_then(Value::as_f64))
+                .and_then(|(dx, dy)| {
+                    Some((
+                        serde_json::Number::from_f64(dx + x)?,
+                        serde_json::Number::from_f64(dy + y)?,
+                        serde_json::Number::from_f64(width)?,
+                        serde_json::Number::from_f64(height)?,
+                    ))
+                });
+            if let Some((dx, dy, width, height)) = transformed {
+                sprite.insert("dx".to_string(), Value::Number(dx));
+                sprite.insert("dy".to_string(), Value::Number(dy));
+                sprite.insert("width".to_string(), Value::Number(width));
+                sprite.insert("height".to_string(), Value::Number(height));
+                changed = true;
+            } else {
+                log::warn!(
+                    "[SpriteMigration] legacy imageRect 적용 건너뜀: sprite_id={sprite_id}, reason=invalid transformed geometry"
+                );
+            }
+        } else if has_image_rect {
+            log::warn!(
+                "[SpriteMigration] legacy imageRect 적용 건너뜀: sprite_id={sprite_id}, reason=invalid imageRect"
+            );
+        }
+
+        for field in ["imageRect", "imageFit", "imagePlacement"] {
+            changed |= sprite.remove(field).is_some();
+        }
+        if let Some(poses) = sprite.get_mut("poses").and_then(Value::as_array_mut) {
+            for pose in poses {
+                let Some(pose) = pose.as_object_mut() else {
+                    continue;
+                };
+                for field in ["contactPoint", "imagePivot"] {
+                    changed |= pose.remove(field).is_some();
+                }
+            }
+        }
+    }
+    changed
+}
+
 /// 레거시 노브 민감도 마이그레이션: 도수/카운트(구 기본 1.40625) → 순수 배율(1.0)
 /// 배율 의미 전환 이전에 저장된 기본값만 1로 재매핑 (사용자 지정값은 유지)
 pub(super) fn migrate_legacy_knob_sensitivity(data: &mut AppStoreData) -> bool {
@@ -165,6 +250,7 @@ pub(crate) fn normalize_state(mut data: AppStoreData) -> AppStoreData {
     repair_editor_revision(&mut data);
     normalize_blank_font_colors(&mut data);
     canonicalize_image_modes(&mut data);
+    normalize_sprite_triggers(&mut data);
     data.tab_order = normalize_tab_order(&data.tab_order, &data.custom_tabs);
     data.bar_count = normalize_bar_count(data.bar_count, &data.tab_order);
 
@@ -254,7 +340,149 @@ pub(crate) fn normalize_state(mut data: AppStoreData) -> AppStoreData {
     data
 }
 
-pub(super) fn repair_image_transforms(data: &mut AppStoreData) -> bool {
+pub(crate) fn normalize_sprite_triggers(data: &mut AppStoreData) -> bool {
+    let mut changed = false;
+    for sprite in data.sprite_positions.values_mut().flatten() {
+        if !is_renderable_image_ref(sprite.base_image.as_deref()) {
+            if let Some(reference) = sprite.reference_natural_size.as_mut() {
+                changed |= reference.source.take().is_some();
+            }
+        }
+        for pose in &mut sprite.poses {
+            changed |= pose.normalize_triggers();
+            if !is_renderable_image_ref(pose.image_override.as_deref()) {
+                changed |= pose.image_override_metrics.take().is_some();
+            }
+        }
+    }
+    changed
+}
+
+// 복구 경계는 커밋 검증과 같은 상수를 그대로 쓴다. contains는 NaN·무한도 거절한다
+fn repair_bounded<T>(value: &mut T, fallback: T, minimum: T, maximum: T) -> bool
+where
+    T: Copy + PartialOrd,
+{
+    if (minimum..=maximum).contains(value) {
+        return false;
+    }
+    *value = fallback;
+    true
+}
+
+pub(super) fn repair_sprite_numeric_ranges(data: &mut AppStoreData) -> bool {
+    fn repair_finite(value: &mut f64, fallback: f64) -> bool {
+        if value.is_finite() {
+            return false;
+        }
+        *value = fallback;
+        true
+    }
+
+    fn repair_positive(value: &mut f64, fallback: f64, maximum: Option<f64>) -> bool {
+        let valid =
+            value.is_finite() && *value > 0.0 && maximum.is_none_or(|maximum| *value <= maximum);
+        if valid {
+            return false;
+        }
+        *value = fallback;
+        true
+    }
+
+    fn repair_transform(transform: &mut SpriteTransform) -> bool {
+        let fallback = SpriteTransform::default();
+        repair_bounded(
+            &mut transform.x,
+            fallback.x,
+            SPRITE_TRANSFORM_OFFSET_MIN,
+            SPRITE_TRANSFORM_OFFSET_MAX,
+        ) | repair_bounded(
+            &mut transform.y,
+            fallback.y,
+            SPRITE_TRANSFORM_OFFSET_MIN,
+            SPRITE_TRANSFORM_OFFSET_MAX,
+        ) | repair_bounded(
+            &mut transform.rotation,
+            fallback.rotation,
+            SPRITE_TRANSFORM_ROTATION_MIN,
+            SPRITE_TRANSFORM_ROTATION_MAX,
+        ) | repair_bounded(
+            &mut transform.scale,
+            fallback.scale,
+            SPRITE_TRANSFORM_SCALE_MIN,
+            SPRITE_TRANSFORM_SCALE_MAX,
+        )
+    }
+
+    fn repair_anchor(anchor: &mut SpriteAnchor, fallback: SpriteAnchor) -> bool {
+        repair_bounded(&mut anchor.x, fallback.x, 0.0, 1.0)
+            | repair_bounded(&mut anchor.y, fallback.y, 0.0, 1.0)
+    }
+
+    fn repair_position(position: &mut ReactiveSpritePosition) -> bool {
+        let fallback = ReactiveSpritePosition::default();
+        let mut repaired = repair_finite(&mut position.dx, fallback.dx)
+            | repair_finite(&mut position.dy, fallback.dy)
+            | repair_positive(&mut position.width, fallback.width, None)
+            | repair_positive(&mut position.height, fallback.height, None)
+            | repair_bounded(
+                &mut position.rotation,
+                fallback.rotation,
+                ELEMENT_ROTATION_MIN,
+                ELEMENT_ROTATION_MAX,
+            )
+            | repair_anchor(&mut position.pivot, SpriteAnchor::default())
+            | repair_transform(&mut position.idle_transform)
+            | repair_bounded(
+                &mut position.press_duration_ms,
+                default_sprite_press_duration_ms(),
+                SPRITE_PRESS_DURATION_MS_MIN,
+                SPRITE_PRESS_DURATION_MS_MAX,
+            );
+        if position.transition_ms > SPRITE_TRANSITION_MS_MAX {
+            position.transition_ms = default_sprite_transition_ms();
+            repaired = true;
+        }
+        let pose_pivot_fallback = position.pivot;
+        for pose in &mut position.poses {
+            repaired |= repair_transform(&mut pose.transform);
+            if let Some(pivot) = pose.pivot.as_mut() {
+                repaired |= repair_anchor(pivot, pose_pivot_fallback);
+            }
+            if pose.image_override_metrics.as_ref().is_some_and(|metrics| {
+                !(SPRITE_IMAGE_DIMENSION_MIN..=SPRITE_IMAGE_DIMENSION_MAX).contains(&metrics.width)
+                    || !(SPRITE_IMAGE_DIMENSION_MIN..=SPRITE_IMAGE_DIMENSION_MAX)
+                        .contains(&metrics.height)
+            }) {
+                pose.image_override_metrics = None;
+                repaired = true;
+            }
+        }
+        if position
+            .reference_natural_size
+            .as_ref()
+            .is_some_and(|reference| {
+                !(SPRITE_IMAGE_DIMENSION_MIN..=SPRITE_IMAGE_DIMENSION_MAX)
+                    .contains(&reference.width)
+                    || !(SPRITE_IMAGE_DIMENSION_MIN..=SPRITE_IMAGE_DIMENSION_MAX)
+                        .contains(&reference.height)
+            })
+        {
+            position.reference_natural_size = None;
+            repaired = true;
+        }
+        repaired
+    }
+
+    let mut repaired = false;
+    for position in data.sprite_positions.values_mut().flatten() {
+        repaired |= repair_position(position);
+    }
+    repaired
+}
+
+// 네이티브 4종 공통 KeyPosition의 이미지 변환·요소 회전 범위 보정
+pub(super) fn repair_native_position_ranges(data: &mut AppStoreData) -> bool {
     fn repair_transform(transform: &mut Option<ImageTransform>) -> bool {
         let Some(transform) = transform else {
             return false;
@@ -298,6 +526,12 @@ pub(super) fn repair_image_transforms(data: &mut AppStoreData) -> bool {
     fn repair_position(position: &mut KeyPosition) -> bool {
         repair_transform(&mut position.idle_image_transform)
             | repair_transform(&mut position.active_image_transform)
+            | repair_bounded(
+                &mut position.rotation,
+                0.0,
+                ELEMENT_ROTATION_MIN,
+                ELEMENT_ROTATION_MAX,
+            )
     }
 
     let mut repaired = false;
@@ -481,6 +715,7 @@ pub(crate) fn clear_dangling_group_ids(data: &mut AppStoreData) -> bool {
         &mut data.stat_positions,
         &mut data.graph_positions,
         &mut data.knob_positions,
+        &mut data.sprite_positions,
         &data.layer_groups,
     )
 }
@@ -490,6 +725,7 @@ pub(crate) fn clear_dangling_group_ids_in(
     stat_positions: &mut StatPositions,
     graph_positions: &mut GraphPositions,
     knob_positions: &mut KnobPositions,
+    sprite_positions: &mut SpritePositions,
     layer_groups: &LayerGroups,
 ) -> bool {
     let valid_ids: HashMap<&str, HashSet<&str>> = layer_groups
@@ -539,6 +775,14 @@ pub(crate) fn clear_dangling_group_ids_in(
         for knob in positions.iter_mut() {
             if is_dangling(tab, &knob.position.group_id) {
                 knob.position.group_id = None;
+                changed = true;
+            }
+        }
+    }
+    for (tab, sprites) in sprite_positions.iter_mut() {
+        for sprite in sprites {
+            if is_dangling(tab, &sprite.group_id) {
+                sprite.group_id = None;
                 changed = true;
             }
         }

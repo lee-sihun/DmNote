@@ -72,8 +72,9 @@ describe('FloatingPopup dismiss 런타임 계약', () => {
     modal.dataset.dmnModalBackdrop = 'true';
     const submenu = document.createElement('div');
     submenu.dataset.dmnPopupSubmenu = 'true';
+    // 온캔버스 편집 오버레이(그라데이션 축·자세 기즈모)는 한 속성으로 예외 처리
     const gradient = document.createElement('div');
-    gradient.dataset.dmnGradientOverlay = 'true';
+    gradient.dataset.dmnCanvasEditorOverlay = 'true';
     const higherLayer = document.createElement('div');
     higherLayer.dataset.dmnPopupLayer = 'true';
     document.body.append(modal, submenu, gradient, higherLayer);

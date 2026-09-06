@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { obsApi } from '@api/modules/window/obsApi';
 import { settingsApi } from '@api/modules/app/settingsApi';
+import { trackEditorWrite } from '@src/renderer/editor/runtime/lifecycle/editorWriteBarrier';
 import type { I18nContextValue } from '@contexts/I18nContextDef';
 import type { ObsStatus } from '@src/types/obs';
 import { DEFAULT_OBS_PORT } from '@src/types/obs';
@@ -10,7 +11,7 @@ interface UseObsSettingsControllerOptions {
   showAlert: (msg: string, confirmText?: string) => void;
   showConfirm: (
     msg: string,
-    onConfirm: () => void,
+    onConfirm: () => void | Promise<void>,
     options?: {
       onCancel?: () => void;
       confirmText?: string;
@@ -77,15 +78,27 @@ export const useObsSettingsController = ({
     const next = !obsStatus.running;
     setObsStatus((prev) => ({ ...prev, running: next }));
     obsTogglingRef.current = true;
+    let commandCompleted = false;
     try {
-      const status = next ? await obsApi.start() : await obsApi.stop();
-      setObsStatus(status);
-      await settingsApi.update({ obsModeEnabled: next });
+      await trackEditorWrite(
+        (async () => {
+          const status = next ? await obsApi.start() : await obsApi.stop();
+          commandCompleted = true;
+          setObsStatus(status);
+          await settingsApi.update({ obsModeEnabled: next });
+        })(),
+      );
     } catch (error) {
       console.error('Failed to toggle OBS mode', error);
-      setObsStatus((prev) => ({ ...prev, running: !next }));
+      if (!commandCompleted) {
+        setObsStatus((prev) => ({ ...prev, running: !next }));
+      }
       showAlert?.(
-        next ? t('settings.obsStartFailed') : t('settings.obsStopFailed'),
+        commandCompleted
+          ? t('common.saveFailed')
+          : next
+          ? t('settings.obsStartFailed')
+          : t('settings.obsStopFailed'),
       );
     } finally {
       obsTogglingRef.current = false;
@@ -115,6 +128,7 @@ export const useObsSettingsController = ({
           setObsStatus(status);
         } catch (error) {
           console.error('Failed to regenerate OBS token', error);
+          showAlert(t('common.actionFailed'));
         } finally {
           regeneratingObsTokenRef.current = false;
         }

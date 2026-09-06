@@ -141,11 +141,34 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
     };
 
     // storage에 설정 저장
-    const saveSettings = async (): Promise<void> => {
+    const saveSettings = async (
+      previousSettings: Record<string, unknown>,
+    ): Promise<void> => {
+      const attemptedSettings = currentSettings;
       try {
-        await namespacedStorage.set(SETTINGS_KEY, currentSettings);
+        await namespacedStorage.set(SETTINGS_KEY, attemptedSettings);
       } catch (err) {
         console.error(`[Plugin ${pluginId}] Failed to save settings:`, err);
+        let restoredSettings = previousSettings;
+        try {
+          const saved = await namespacedStorage.get(SETTINGS_KEY);
+          restoredSettings = omitLayoutSettingValues(definition.settings, {
+            ...defaultSettings,
+            ...(saved && typeof saved === 'object' ? saved : {}),
+          });
+        } catch (syncError) {
+          console.error(
+            `[Plugin ${pluginId}] Failed to reload settings:`,
+            syncError,
+          );
+        }
+        // 실패 뒤 시작된 새 편집은 복원으로 덮지 않음
+        if (currentSettings === attemptedSettings) {
+          currentSettings = { ...restoredSettings };
+          triggerPanelRerender();
+          notifyOverlay(currentSettings);
+        }
+        throw err;
       }
     };
 
@@ -213,7 +236,7 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
 
         if (confirmed) {
           // 확인: 현재 설정을 저장 (미리보기 상태가 이미 currentSettings에 반영됨)
-          await saveSettings();
+          await saveSettings(originalSettings);
 
           // onChange 콜백 호출
           if (definition.onChange) {
@@ -276,7 +299,7 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
           },
           onConfirm: async (nextSettings, prevSettings) => {
             currentSettings = { ...nextSettings };
-            await saveSettings();
+            await saveSettings(prevSettings);
 
             if (definition.onChange) {
               try {
@@ -377,7 +400,7 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
           ...currentSettings,
           ...updates,
         });
-        await saveSettings();
+        await saveSettings(oldSettings);
 
         // onChange 콜백 호출
         if (definition.onChange) {
@@ -404,7 +427,7 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
       reset: async () => {
         const oldSettings = { ...currentSettings };
         currentSettings = { ...defaultSettings };
-        await saveSettings();
+        await saveSettings(oldSettings);
 
         // onChange 콜백 호출
         if (definition.onChange) {

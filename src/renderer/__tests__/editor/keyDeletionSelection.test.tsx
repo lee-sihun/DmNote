@@ -150,4 +150,17 @@ describe('키 삭제 선택 정리', () => {
     expect(apiMocks.rebindKeySlotById).not.toHaveBeenCalled();
     expect(apiMocks.update).not.toHaveBeenCalled();
   });
+
+  it('저장 대기 중 대상 키가 사라지면 무시된 편집을 기록한다', async () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    apiMocks.rebindKeySlotById.mockResolvedValueOnce(false);
+    act(() => root.render(<Harness />));
+    await act(async () => latest().handleKeyMappingChange(1, 'Z'));
+
+    expect(warning).toHaveBeenCalledWith(
+      'Element operation skipped (fail-closed)',
+      'key mapping target disappeared',
+    );
+    warning.mockRestore();
+  });
 });

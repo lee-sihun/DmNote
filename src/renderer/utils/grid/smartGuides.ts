@@ -15,6 +15,7 @@ export type {
   ElementBounds,
   GuideLine,
   SizeMatchGuide,
+  SizeSnapAxes,
   SizeSnapResult,
   SnapPointsOptions,
   SnapResult,

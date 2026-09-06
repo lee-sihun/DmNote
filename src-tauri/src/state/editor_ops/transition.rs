@@ -1,4 +1,5 @@
 use super::*;
+use crate::models::{ELEMENT_ROTATION_MAX, ELEMENT_ROTATION_MIN};
 
 mod element_patch;
 
@@ -30,6 +31,7 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
             | EditorOpV1::PatchElement {
                 element_type, id, ..
             } => Some((*element_type, id)),
+            EditorOpV1::ResizeSprite { id, .. } => Some((EditorElementTypeV1::Sprite, id)),
             EditorOpV1::SetKeySlot { id, .. } => {
                 if let Some(location) = locations.get(id) {
                     validate_editor_op_target_type(
@@ -56,6 +58,22 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
             ..
         } = op
         {
+            if *element_type == EditorElementTypeV1::Sprite
+                && !matches!(
+                    patch,
+                    EditorElementPropertyPatchV1::Hidden(_)
+                        | EditorElementPropertyPatchV1::LayerName(_)
+                        | EditorElementPropertyPatchV1::ClassName(_)
+                        | EditorElementPropertyPatchV1::UseInlineStyles(_)
+                )
+            {
+                return Err(EditorCommitError::validation(
+                    "ELEMENT_TYPE_MISMATCH",
+                    format!(
+                        "editor op {op_index} sprite patch only allows hidden, layerName, className, or useInlineStyles"
+                    ),
+                ));
+            }
             // 속성 계열별 대상 타입 제약, variant 추가 시 컴파일 에러로 분류 강제
             match patch {
                 // 그래프 전용
@@ -404,6 +422,18 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                     }
                 }
                 // 타입 무제약, 값 범위 검증만
+                EditorElementPropertyPatchV1::Rotation(patch) => {
+                    if !patch.is_finite()
+                        || !(ELEMENT_ROTATION_MIN..=ELEMENT_ROTATION_MAX).contains(patch)
+                    {
+                        return Err(EditorCommitError::validation(
+                            "ROTATION_OUT_OF_RANGE",
+                            format!(
+                                "editor op {op_index} rotation must be finite and between {ELEMENT_ROTATION_MIN} and {ELEMENT_ROTATION_MAX}"
+                            ),
+                        ));
+                    }
+                }
                 EditorElementPropertyPatchV1::BorderWidth(patch) => {
                     if !patch.is_finite() || !(0.0..=20.0).contains(patch) {
                         return Err(EditorCommitError::validation(
@@ -465,27 +495,30 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
     for (op_index, op) in ops.iter().enumerate() {
         match op {
             EditorOpV1::SetBounds { id, bounds, .. } => {
-                let Some(location) = locations.get(id) else {
-                    validate_editor_op_bounds(op_index, None, *bounds)?;
-                    op_results.push(EditorOpResultV1 {
-                        status: EditorOpResultStatusV1::TargetMissing,
-                        bounds: None,
-                    });
-                    continue;
-                };
-
-                let position = position_at_mut(&mut candidate, location)?;
-                validate_editor_op_bounds(op_index, Some(position), *bounds)?;
-                let status = if bounds_of(position) == *bounds {
-                    EditorOpResultStatusV1::NoChange
-                } else {
-                    apply_bounds(position, bounds);
-                    EditorOpResultStatusV1::Applied
-                };
-                op_results.push(EditorOpResultV1 {
-                    status,
-                    bounds: Some(bounds_of(position)),
-                });
+                op_results.push(apply_bounds_op(
+                    &mut candidate,
+                    &locations,
+                    op_index,
+                    id,
+                    *bounds,
+                    |candidate, location, bounds| {
+                        apply_bounds(element_common_at_mut(candidate, location)?, bounds);
+                        Ok(())
+                    },
+                )?);
+            }
+            EditorOpV1::ResizeSprite { id, bounds } => {
+                op_results.push(apply_bounds_op(
+                    &mut candidate,
+                    &locations,
+                    op_index,
+                    id,
+                    *bounds,
+                    |candidate, location, bounds| {
+                        apply_sprite_resize(sprite_at_mut(candidate, location)?, bounds);
+                        Ok(())
+                    },
+                )?);
             }
             EditorOpV1::DeleteElement { element_type, id } => {
                 let Some(location) = locations.get(id) else {
@@ -633,9 +666,12 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
     }
     delete_elements(&mut candidate, &delete_ids);
     remove_empty_layer_groups(&mut candidate, &delete_modes, plugin_group_refs);
+    validate_document_element_ids(&candidate)?;
 
     let mut scratch = current_store.clone();
     candidate.apply_to_store(&mut scratch);
+    crate::state::migration::normalize_sprite_triggers(&mut scratch);
+    candidate = EditorDocumentV1::from_store(&scratch);
     scratch.editor_revision = current_store.editor_revision;
     validate_document_transition(&current, &candidate, current_store, &scratch)?;
     let changed_fields = current.changed_fields(&candidate);

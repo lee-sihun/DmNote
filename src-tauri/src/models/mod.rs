@@ -23,13 +23,26 @@ pub use counter::{
 use counter::{default_counter_font_size, default_counter_font_weight, default_gap};
 pub use editor::*;
 use element_positions::default_true;
+pub(crate) use element_positions::{
+    default_sprite_press_duration_ms, default_sprite_transition_ms, is_renderable_image_ref,
+    rewrite_coupled_sprite_image_reference,
+};
+// 테스트 기대값 조립에서만 참조
+#[cfg(test)]
+pub(crate) use element_positions::default_sprite_transition_easing;
 pub use element_positions::{
     ElementShadowSpec, GraphPosition, GraphPositions, GraphStatType, GraphType, ImageMode,
     ImageTransform, KeyPosition, KeyPositions, KnobPosition, KnobPositions, NoteAlignment,
-    StatPosition, StatPositions, StatType, IMAGE_TRANSFORM_OFFSET_MAX, IMAGE_TRANSFORM_OFFSET_MIN,
-    IMAGE_TRANSFORM_ROTATION_MAX, IMAGE_TRANSFORM_ROTATION_MIN, IMAGE_TRANSFORM_SCALE_MAX,
-    IMAGE_TRANSFORM_SCALE_MIN, POSITION_COLLECTION_FIELDS, SHADOW_BLUR_MAX, SHADOW_BLUR_MIN,
-    SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
+    ReactiveSpritePosition, SpriteActivation, SpriteAnchor, SpriteImageMetrics, SpritePose,
+    SpritePositions, SpriteReferenceNaturalSize, SpriteTransform, StatPosition, StatPositions,
+    StatType, ELEMENT_ROTATION_MAX, ELEMENT_ROTATION_MIN, IMAGE_TRANSFORM_OFFSET_MAX,
+    IMAGE_TRANSFORM_OFFSET_MIN, IMAGE_TRANSFORM_ROTATION_MAX, IMAGE_TRANSFORM_ROTATION_MIN,
+    IMAGE_TRANSFORM_SCALE_MAX, IMAGE_TRANSFORM_SCALE_MIN, MAX_SPRITE_POSES,
+    MAX_SPRITE_POSE_TRIGGERS, POSITION_COLLECTION_FIELDS, SHADOW_BLUR_MAX, SHADOW_BLUR_MIN,
+    SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN, SPRITE_IMAGE_DIMENSION_MAX, SPRITE_IMAGE_DIMENSION_MIN,
+    SPRITE_PRESS_DURATION_MS_MAX, SPRITE_PRESS_DURATION_MS_MIN, SPRITE_TRANSFORM_OFFSET_MAX,
+    SPRITE_TRANSFORM_OFFSET_MIN, SPRITE_TRANSFORM_ROTATION_MAX, SPRITE_TRANSFORM_ROTATION_MIN,
+    SPRITE_TRANSFORM_SCALE_MAX, SPRITE_TRANSFORM_SCALE_MIN, SPRITE_TRANSITION_MS_MAX,
 };
 pub use gesture::*;
 pub use key_slot::{
@@ -37,7 +50,7 @@ pub use key_slot::{
     SlotMatch, MAX_SLOT_KEYS,
 };
 use note_settings::{
-    default_key_height, default_key_note_color, default_key_note_opacity,
+    default_element_rotation, default_key_height, default_key_note_color, default_key_note_opacity,
     default_note_auto_y_correction, default_note_border_opacity, default_note_effect_enabled,
     default_note_glow_enabled, default_note_glow_opacity, default_note_glow_size,
 };
@@ -702,6 +715,8 @@ pub struct AppStoreData {
     #[serde(default)]
     pub knob_positions: KnobPositions,
     #[serde(default)]
+    pub sprite_positions: SpritePositions,
+    #[serde(default)]
     pub layer_groups: LayerGroups,
     #[serde(default)]
     pub key_counters: KeyCounters,
@@ -732,6 +747,7 @@ pub struct AppStoreData {
     /// 분리 패널 창 존재 여부 (재시작 복원용)
     #[serde(default)]
     pub panel_detached: bool,
+    pub overlay_last_content_left_offset: Option<f64>,
     pub overlay_last_content_top_offset: Option<f64>,
     #[serde(default)]
     pub overlay_bounds_are_logical: bool,
@@ -791,6 +807,7 @@ impl Default for AppStoreData {
             stat_positions: StatPositions::new(),
             graph_positions: GraphPositions::new(),
             knob_positions: KnobPositions::new(),
+            sprite_positions: SpritePositions::new(),
             layer_groups: LayerGroups::new(),
             key_counters: KeyCounters::new(),
             background_color: "transparent".to_string(),
@@ -807,6 +824,7 @@ impl Default for AppStoreData {
             overlay_bounds: None,
             panel_bounds: None,
             panel_detached: false,
+            overlay_last_content_left_offset: None,
             overlay_last_content_top_offset: None,
             overlay_bounds_are_logical: false,
             key_counter_enabled: false,

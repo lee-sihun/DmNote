@@ -186,6 +186,32 @@ resets it together with its spacing.
 }
 ```
 
+## Sprite Style Variables
+
+Reactive sprites render a single image layer that switches poses while its
+trigger keys are held. Placement and the rotation origin stay inline because the
+window bounds are computed from them; the appearance channels below are the ones
+you can replace. Disable **Inline Styles Priority** on the sprite to use them.
+
+`--sprite-transform` replaces only the image's local pose transform. The
+element-level placement `rotation` remains app-managed around the box center
+and is applied outside that pose transform.
+
+| Variable              | Description                                                                            | Type           | Example                    |
+| --------------------- | -------------------------------------------------------------------------------------- | -------------- | -------------------------- |
+| `--sprite-transform`  | Replacement transform for the resolved pose (an onPress sprite then only swaps images) | `<transform>`  | `rotate(15deg) scale(1.2)` |
+| `--sprite-transition` | Replacement transition for the pose change (whileHeld only)                            | `<transition>` | `transform 120ms ease-out` |
+
+```css
+.left-hand [data-sprite-element] > img {
+  --sprite-transition: transform 90ms cubic-bezier(0.2, 0, 0, 1);
+}
+```
+
+The image element already has the source aspect ratio and fills its box, so
+`object-fit` has nothing to change. Overriding the element size itself voids the
+pivot alignment of pose images.
+
 ## Selector Reference
 
 ### Key Selectors
@@ -224,6 +250,16 @@ resets it together with its spacing.
 | `[data-knob-state="active"]`     | Active knob surfaces            |
 | `.knobClass [data-knob-element]` | A specific class's knob surface |
 | `[data-knob-indicator]`          | Center rotation indicator       |
+
+### Sprite Selectors
+
+| Selector                             | Description                                                     |
+| ------------------------------------ | --------------------------------------------------------------- |
+| `[data-sprite-element]`              | Every sprite element box                                        |
+| `[data-sprite-element] > img`        | The sprite image layer                                          |
+| `[data-sprite-state="inactive"]`     | Sprites with no trigger key held                                |
+| `[data-sprite-state="active"]`       | Sprites with a trigger key held (onPress sprites stay inactive) |
+| `.spriteClass [data-sprite-element]` | A specific class's sprite                                       |
 
 ## Standard CSS Properties
 

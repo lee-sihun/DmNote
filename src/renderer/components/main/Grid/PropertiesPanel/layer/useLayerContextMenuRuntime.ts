@@ -14,6 +14,7 @@ import {
   createLayerActionMutations,
   stableSelectionGroupId,
 } from './layerActionMutations';
+import { layerItemToSelectedElement } from './layerSelectionIntent';
 
 export interface UseLayerContextMenuRuntimeParams {
   selectedKeyType: string;
@@ -84,9 +85,11 @@ export const useLayerContextMenuRuntime = ({
     }
 
     const selectedElements = useGridSelectionStore.getState().selectedElements;
-    const items: ListItem[] = [
-      { id: 'rename', label: t('contextMenu.rename') || 'Rename' },
-    ];
+    // 플러그인 인스턴스는 이름 저장 경로가 없다 - 항목 자체를 내지 않는다
+    const items: ListItem[] =
+      contextMenuItem?.type === 'plugin'
+        ? []
+        : [{ id: 'rename', label: t('contextMenu.rename') || 'Rename' }];
 
     if (selectedElements.length >= 2 && !contextMenuItem?.groupId) {
       items.push({
@@ -127,17 +130,7 @@ export const useLayerContextMenuRuntime = ({
       const { clearSelection, toggleSelection } =
         useGridSelectionStore.getState();
       clearSelection();
-      if (item.type === 'key' && item.index !== undefined) {
-        toggleSelection({ type: 'key', id: item.id, index: item.index });
-      } else if (item.type === 'stat' && item.index !== undefined) {
-        toggleSelection({ type: 'stat', id: item.id, index: item.index });
-      } else if (item.type === 'graph' && item.index !== undefined) {
-        toggleSelection({ type: 'graph', id: item.id, index: item.index });
-      } else if (item.type === 'knob' && item.index !== undefined) {
-        toggleSelection({ type: 'knob', id: item.id, index: item.index });
-      } else if (item.type === 'plugin') {
-        toggleSelection({ type: 'plugin', id: item.id });
-      }
+      toggleSelection(layerItemToSelectedElement(item));
       setLastClickedIndex(index);
       const displayIdx = displayItemsRef.current.findIndex(
         (di) => di.displayType === 'layer' && di.item.id === item.id,
@@ -171,6 +164,8 @@ export const useLayerContextMenuRuntime = ({
         const groupDef = layerGroupsForMode.find(
           (g) => g.id === contextMenuGroupId,
         );
+        // Escape로 언마운트된 입력은 blur가 오지 않아 취소 플래그가 남는다
+        renameCancelledRef.current = false;
         setRenamingItemId(`group:${contextMenuGroupId}`);
         setRenameValue(groupDef?.name || '');
         setContextMenuOpen(false);
@@ -208,7 +203,8 @@ export const useLayerContextMenuRuntime = ({
     }
 
     if (itemId === 'rename') {
-      if (contextMenuItem) {
+      if (contextMenuItem && contextMenuItem.type !== 'plugin') {
+        renameCancelledRef.current = false;
         setRenamingItemId(contextMenuItem.id);
         setRenameValue(contextMenuItem.name);
         setContextMenuOpen(false);
@@ -286,9 +282,11 @@ export const useLayerContextMenuRuntime = ({
     if (itemId === 'delete') {
       const selectedElements =
         useGridSelectionStore.getState().selectedElements;
-      if (selectedElements.length === 0) return;
-      onSelectionFromPanel?.();
-      await deleteFrozenSelection(selectedElements);
+      // 빈 선택이어도 메뉴는 닫는다
+      if (selectedElements.length > 0) {
+        onSelectionFromPanel?.();
+        await deleteFrozenSelection(selectedElements);
+      }
     }
 
     setContextMenuOpen(false);

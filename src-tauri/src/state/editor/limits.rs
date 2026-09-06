@@ -45,6 +45,11 @@ fn validate_aggregate_metric_limits(
         &candidate.knob_positions,
     )?;
     validate_collection_limits(
+        "spritePositions",
+        &current.sprite_positions,
+        &candidate.sprite_positions,
+    )?;
+    validate_collection_limits(
         "layerGroups",
         &current.layer_groups,
         &candidate.layer_groups,
@@ -291,7 +296,54 @@ fn validate_per_owner_metric_limits(
         }
     }
 
+    let current_sprite_positions = current
+        .sprite_positions
+        .values()
+        .flatten()
+        .map(|position| (position.id.as_str(), position))
+        .collect::<HashMap<_, _>>();
+    for (mode, sprites) in &candidate.sprite_positions {
+        for (index, sprite) in sprites.iter().enumerate() {
+            let current_sprite = match keying {
+                GrandfatherKeying::StableId => {
+                    current_sprite_positions.get(sprite.id.as_str()).copied()
+                }
+                #[cfg(test)]
+                GrandfatherKeying::ModeIndex => current
+                    .sprite_positions
+                    .get(mode)
+                    .and_then(|sprites| sprites.get(index)),
+                GrandfatherKeying::LegacyPresetModeIndex => current
+                    .sprite_positions
+                    .get(mode)
+                    .and_then(|sprites| sprites.get(index)),
+            };
+            validate_bounds_metrics(
+                &format!("spritePositions {mode}[{index}]"),
+                current_sprite.map(sprite_bounds),
+                sprite_bounds(sprite),
+                keying == GrandfatherKeying::LegacyPresetModeIndex,
+            )?;
+            validate_count_limit(
+                "COLLECTION_TOO_LARGE",
+                &format!("spritePositions {mode}[{index}] pose count"),
+                current_sprite.map_or(0, |sprite| sprite.poses.len()),
+                sprite.poses.len(),
+                MAX_SPRITE_POSES,
+            )?;
+        }
+    }
+
     Ok(())
+}
+
+fn sprite_bounds(sprite: &ReactiveSpritePosition) -> EditorBoundsV1 {
+    EditorBoundsV1 {
+        dx: sprite.dx,
+        dy: sprite.dy,
+        width: sprite.width,
+        height: sprite.height,
+    }
 }
 
 fn validate_key_slot_label_limits(
@@ -337,6 +389,7 @@ fn editor_modes(document: &EditorDocumentV1) -> BTreeSet<String> {
         .chain(document.stat_positions.keys())
         .chain(document.graph_positions.keys())
         .chain(document.knob_positions.keys())
+        .chain(document.sprite_positions.keys())
         .chain(document.layer_groups.keys())
         .cloned()
         .collect()
@@ -356,6 +409,11 @@ fn render_item_count(document: &EditorDocumentV1) -> usize {
             .sum::<usize>()
         + document
             .knob_positions
+            .values()
+            .map(Vec::len)
+            .sum::<usize>()
+        + document
+            .sprite_positions
             .values()
             .map(Vec::len)
             .sum::<usize>()
@@ -455,12 +513,12 @@ pub(super) fn position_bounds(position: &KeyPosition) -> EditorBoundsV1 {
 
 pub(crate) fn validate_editor_op_bounds(
     op_index: usize,
-    current: Option<&KeyPosition>,
+    current: Option<EditorBoundsV1>,
     bounds: EditorBoundsV1,
 ) -> Result<(), EditorCommitError> {
     validate_bounds_metrics(
         &format!("editor op {op_index}.bounds"),
-        current.map(position_bounds),
+        current,
         bounds,
         false,
     )

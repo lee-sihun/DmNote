@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { invoke, coordinatorFlush, drainEditorWrites } = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -14,7 +14,7 @@ vi.mock(
   }),
 );
 vi.mock('@src/renderer/editor/runtime/lifecycle/editorWriteBarrier', () => ({
-  drainEditorWrites,
+  beginEditorWriteBarrier: () => drainEditorWrites,
 }));
 
 import {
@@ -41,6 +41,9 @@ const bootstrapPayload = () => ({
 });
 
 describe('runAfterEditorFlush', () => {
+  beforeEach(() => {
+    drainEditorWrites.mockResolvedValue(true);
+  });
   afterEach(() => {
     vi.restoreAllMocks();
     invoke.mockReset();

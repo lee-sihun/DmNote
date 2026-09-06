@@ -1,7 +1,8 @@
 use super::*;
 
 /// 레거시/비정상 store 파일 필드별 복구
-pub(super) fn repair_legacy_state(value: Value) -> AppStoreData {
+pub(super) fn repair_legacy_state(mut value: Value) -> AppStoreData {
+    migrate_legacy_sprite_wire(&mut value);
     let Value::Object(mut source) = value else {
         return normalize_state(AppStoreData::default());
     };
@@ -45,7 +46,8 @@ pub(super) fn repair_legacy_state(value: Value) -> AppStoreData {
     prepare_tab_order_for_load(&mut data, has_tab_order);
     prepare_bar_count_for_load(&mut data, has_bar_count);
     migrate_legacy_knob_sensitivity(&mut data);
-    repair_image_transforms(&mut data);
+    repair_native_position_ranges(&mut data);
+    repair_sprite_numeric_ranges(&mut data);
     repair_semantic_identities(&mut data);
     repair_custom_tab_key_layout_pairs(
         &mut data,
@@ -116,7 +118,7 @@ fn source_mode_array<'a>(collection: Option<&'a Value>, mode: &str) -> Option<&'
         .map(Vec::as_slice)
 }
 
-fn recover_collection_field(field: &str, value: &Value) -> Option<Value> {
+pub(super) fn recover_collection_field(field: &str, value: &Value) -> Option<Value> {
     match field {
         "noteSettings" => recover_object_fields::<NoteSettings>(field, value),
         "customTabs" => recover_array_entries::<CustomTab>(field, value),
@@ -139,6 +141,28 @@ fn recover_collection_field(field: &str, value: &Value) -> Option<Value> {
             value,
             has_valid_knob_identity,
         ),
+        "spritePositions" => {
+            let mut value = value.clone();
+            migrate_legacy_sprite_positions_value(&mut value);
+            for sprite in value
+                .as_object_mut()?
+                .values_mut()
+                .filter_map(Value::as_array_mut)
+                .flatten()
+                .filter_map(Value::as_object_mut)
+            {
+                if sprite
+                    .get("rotation")
+                    .is_some_and(|rotation| rotation.as_f64().is_none())
+                {
+                    log::warn!(
+                        "[Store] Resetting invalid spritePositions rotation to default during recovery"
+                    );
+                    sprite.remove("rotation");
+                }
+            }
+            recover_position_entries::<ReactiveSpritePosition>(field, &value)
+        }
         "layerGroups" => recover_position_entries::<LayerGroupDef>(field, value),
         "keyCounters" => recover_key_counter_entries(value),
         "customCss" => recover_object_fields::<CustomCss>(field, value),

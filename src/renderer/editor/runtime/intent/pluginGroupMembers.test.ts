@@ -14,6 +14,7 @@ const emptyPositions = {
   statPositions: {},
   graphPositions: {},
   knobPositions: {},
+  spritePositions: {},
 };
 
 beforeEach(() => {

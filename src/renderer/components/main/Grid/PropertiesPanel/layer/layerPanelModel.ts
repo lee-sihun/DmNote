@@ -22,6 +22,7 @@ interface BuildLayerItemsParams {
   statPositions: CanonicalEditorDocumentV1['statPositions'];
   graphPositions: CanonicalEditorDocumentV1['graphPositions'];
   knobPositions: CanonicalEditorDocumentV1['knobPositions'];
+  spritePositions: CanonicalEditorDocumentV1['spritePositions'];
   pluginElements: PluginPanelElementView[];
   layerGroupsForMode: LayerGroupDef[];
 }
@@ -33,6 +34,7 @@ export function buildLayerItems({
   statPositions,
   graphPositions,
   knobPositions,
+  spritePositions,
   pluginElements,
   layerGroupsForMode,
 }: BuildLayerItemsParams): LayerItem[] {
@@ -110,6 +112,20 @@ export function buildLayerItems({
       zIndex: pos.zIndex ?? index,
       hidden: !!pos.hidden,
       groupId: pos.groupId,
+    });
+  });
+
+  // 스프라이트 아이템
+  const currentSpritePositions = spritePositions[selectedKeyType] || [];
+  currentSpritePositions.forEach((pos, index) => {
+    items.push({
+      type: 'sprite',
+      id: pos.id,
+      index,
+      name: pos.layerName || `Sprite ${index + 1}`,
+      zIndex: pos.zIndex ?? index,
+      hidden: !!pos.hidden,
+      groupId: pos.groupId ?? undefined,
     });
   });
 

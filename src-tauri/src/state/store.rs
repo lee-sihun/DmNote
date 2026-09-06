@@ -28,7 +28,7 @@ use tauri::Runtime;
 use super::assets::builtin_sounds::seed_builtin_sounds;
 use super::atomic_file::atomic_replace;
 use super::editor::{
-    canonical_request_fingerprint, next_revision, repair_selected_mode, request_fingerprint,
+    gesture_request_fingerprint, next_revision, repair_selected_mode, request_fingerprint,
     request_payload_size, sync_key_counters, touched_pair, validate_document_transition,
     validate_document_transition_with_keying, validate_history_restore_metadata,
     validate_paired_update, validate_request_envelope, GrandfatherKeying, RequestFingerprint,
@@ -46,8 +46,9 @@ use super::history::{
     HISTORY_SCOPE_MISMATCH, HISTORY_TARGET_ALREADY_APPLIED, INVALID_HISTORY_OPERATION_ID,
 };
 use super::migration::{
-    find_legacy_store_file, load_store_from_path, migrate_key_images_to_app_data,
-    migrate_local_fonts_to_app_data, normalize_state, rehome_foreign_asset_references,
+    fill_missing_sprite_image_metrics, find_legacy_store_file, load_store_from_path,
+    migrate_key_images_to_app_data, migrate_local_fonts_to_app_data, normalize_state,
+    rehome_foreign_asset_references,
 };
 use super::plugin::{
     add_plugin_group_refs, decode_plugin_instance_entries, decode_plugin_instances_lenient,
@@ -317,6 +318,9 @@ impl AppStore {
             needs_persist = true;
         }
         if migrate_key_images_to_app_data(dir, &mut state) {
+            needs_persist = true;
+        }
+        if fill_missing_sprite_image_metrics(&mut state.sprite_positions) {
             needs_persist = true;
         }
         // 내장 키음 시딩

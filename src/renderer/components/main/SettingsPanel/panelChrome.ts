@@ -73,3 +73,11 @@ export const PANEL_STATUS_BADGE_CLASS = 'shrink-0 text-caption text-danger-fg';
 export const PANEL_FOOTER_CLASS = 'flex gap-[8px] px-[12px] pb-[12px] shrink-0';
 export const PANEL_FOOTER_BUTTON_CLASS =
   'flex items-center justify-center h-[30px] rounded-surface text-label transition-colors duration-fast';
+
+// 파일 없이 저장된 CSS 토큰 칩 - '적용됨' 칩과 같은 규격에 오른쪽 제거 × 자리.
+// 면은 지금 적용 대상이라는 뜻, 글자색은 마스터 상태에 따라 호출부가 정한다
+export const PANEL_TOKEN_CHIP_CLASS =
+  'shrink-0 min-w-0 pl-[8px] pr-[5px] h-[23px] flex items-center gap-[5px] rounded-md bg-fill text-body';
+// 칩 안 제거 버튼 - 평소엔 글자만, 호버에서만 면. 포커스 링은 outline 대신 섀도
+export const PANEL_TOKEN_REMOVE_CLASS =
+  'shrink-0 w-[15px] h-[15px] flex items-center justify-center rounded-[4px] text-fg-muted hover:bg-fill-hover hover:text-fg transition-colors duration-fast outline-none focus-visible:shadow-focus-ring disabled:text-fg-disabled disabled:hover:bg-transparent disabled:cursor-not-allowed';

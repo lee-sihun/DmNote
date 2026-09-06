@@ -13,6 +13,7 @@ import type {
   CanonicalGraphItemPosition,
   CanonicalKeyPosition,
   CanonicalKnobItemPosition,
+  CanonicalReactiveSpritePosition,
   CanonicalStatItemPosition,
 } from '@src/types/editor';
 import type { KeySlot } from '@src/types/key/keys';
@@ -27,6 +28,7 @@ import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import {
   useGridSelectionStore,
@@ -34,6 +36,13 @@ import {
 } from '@stores/grid/useGridSelectionStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { cloneSlot } from '@utils/keySlot';
+import {
+  rebindPoseTriggersByKey,
+  reissueSpritePoseIds,
+  remapSpritePoseTriggers,
+} from '@utils/sprite/poseIdentity';
+import { buildSpriteKeyCanonicalMap } from '@utils/sprite/spriteKeyBinding';
+import { toSpriteWireShape } from '@utils/sprite/spriteWireShape';
 import {
   buildLayerItemsForMode,
   buildNextLayerGroupName,
@@ -60,6 +69,7 @@ export const pasteSelection = async ({
   if (currentClipboard.length === 0) return;
   const gestureId = crypto.randomUUID();
   const clipboardGroups = useGridSelectionStore.getState().clipboardGroups;
+  const clipboardMode = useGridSelectionStore.getState().clipboardMode;
   const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
   const currentSelectedElements =
     useGridSelectionStore.getState().selectedElements;
@@ -100,6 +110,10 @@ export const pasteSelection = async ({
       : undefined;
   };
 
+  // 배치 내 키 구id -> 신id 수집 - 함께 붙여넣는 스프라이트 트리거가
+  // 원본 키 대신 사본 키를 가리키게 한다 (groupIdMap과 같은 패턴)
+  const keyIdMap = new Map<string, string>();
+
   // 신규 native payload 동결
   const keysToAdd: {
     keyCode: KeySlot;
@@ -108,14 +122,20 @@ export const pasteSelection = async ({
   const statsToAdd: { position: CanonicalStatItemPosition }[] = [];
   const graphsToAdd: { position: CanonicalGraphItemPosition }[] = [];
   const knobsToAdd: { position: CanonicalKnobItemPosition }[] = [];
+  const spritesToAdd: {
+    position: CanonicalReactiveSpritePosition;
+    triggerCanonicals?: Record<string, string>;
+  }[] = [];
   const pluginPayloads: Omit<PluginDisplayElementInternal, 'fullId'>[] = [];
   for (const item of currentClipboard) {
     if (item.type === 'key') {
+      const newKeyId = newElementId();
+      if (item.position.id) keyIdMap.set(item.position.id, newKeyId);
       keysToAdd.push({
         keyCode: cloneSlot(item.keyCode),
         position: {
           ...item.position,
-          id: newElementId(),
+          id: newKeyId,
           groupId: remapGroupId(item.position.groupId),
           dx: (item.position.dx || 0) + PASTE_OFFSET,
           dy: (item.position.dy || 0) + PASTE_OFFSET,
@@ -151,6 +171,20 @@ export const pasteSelection = async ({
           dy: (item.position.dy || 0) + PASTE_OFFSET,
         },
       });
+    } else if (item.type === 'sprite') {
+      spritesToAdd.push({
+        triggerCanonicals: item.triggerCanonicals,
+        // wire 정규화: nullish layerName·groupId는 키 부재로 맞춰 ack와 일치
+        position: toSpriteWireShape({
+          ...item.position,
+          id: newElementId(),
+          // 사본 poseId 재발급 - 원본과 공유하면 백엔드가 중복으로 거부
+          poses: reissueSpritePoseIds(item.position.poses),
+          groupId: remapGroupId(item.position.groupId ?? undefined),
+          dx: (item.position.dx || 0) + PASTE_OFFSET,
+          dy: (item.position.dy || 0) + PASTE_OFFSET,
+        }),
+      });
     } else if (item.type === 'plugin') {
       pluginPayloads.push({
         ...item.element,
@@ -160,6 +194,47 @@ export const pasteSelection = async ({
           y: (item.element.position?.y || 0) + PASTE_OFFSET,
         },
         tabId: selectedKeyType,
+      });
+    }
+  }
+
+  // 스프라이트 트리거를 같은 배치 키의 신 id로 재결합, 배치 밖 키 참조는
+  // 유지. 키가 스프라이트 뒤에 올 수 있어 payload 동결 후 일괄 치환한다.
+  // 치환된 id가 정렬 순서를 깨뜨릴 수 있어 wire 정규화를 다시 적용한다.
+  // 다른 탭으로 옮겨 붙이면 함께 복사된 키로 재결합되지 못한 트리거는 원본 탭
+  // 키를 계속 가리킨다. 요소 id는 문서 전역 유일이라 대상 탭에서 절대 해석되지
+  // 않아 눌러도 반응하지 않는 자세가 조용히 남는다. 트리거만 비우면 백엔드가
+  // EMPTY_SPRITE_POSE_TRIGGERS로 커밋을 막으므로 복사 시 얼려둔 canonical 키로
+  // 다시 결합한다. 같은 탭이면 배치 밖 키 참조를 그대로 두는 기존 계약을 유지한다
+  const isCrossModePaste =
+    clipboardMode !== null && clipboardMode !== selectedKeyType;
+  if (spritesToAdd.length > 0) {
+    const targetKeyIdsByCanonical = new Map<string, string[]>();
+    if (isCrossModePaste) {
+      const { keyMappings, canonicalPositions } = useKeyStore.getState();
+      for (const [id, canonical] of buildSpriteKeyCanonicalMap(
+        keyMappings[selectedKeyType] ?? [],
+        canonicalPositions[selectedKeyType] ?? [],
+      )) {
+        const ids = targetKeyIdsByCanonical.get(canonical) ?? [];
+        ids.push(id);
+        targetKeyIdsByCanonical.set(canonical, ids);
+      }
+    }
+    for (const sprite of spritesToAdd) {
+      const remapped =
+        keyIdMap.size > 0
+          ? remapSpritePoseTriggers(sprite.position.poses, keyIdMap)
+          : sprite.position.poses;
+      sprite.position = toSpriteWireShape({
+        ...sprite.position,
+        poses: isCrossModePaste
+          ? rebindPoseTriggersByKey(
+              remapped,
+              sprite.triggerCanonicals ?? {},
+              targetKeyIdsByCanonical,
+            )
+          : remapped,
       });
     }
   }
@@ -229,6 +304,7 @@ export const pasteSelection = async ({
     statsToAdd.length > 0 ||
     graphsToAdd.length > 0 ||
     knobsToAdd.length > 0 ||
+    spritesToAdd.length > 0 ||
     clipboardGroups.length > 0;
   if (!hasEditorPaste && frozenPluginElements.length === 0) return;
 
@@ -239,6 +315,7 @@ export const pasteSelection = async ({
     useStatItemStore.getState().positions,
     useGraphItemStore.getState().positions,
     useKnobItemStore.getState().positions,
+    useSpriteStore.getState().positions,
     usePluginDisplayElementStore.getState().elements,
   );
   // 앵커 descriptor: 선택 요소와 선택 그룹 최상단 중 더 위를 동결하되,
@@ -278,6 +355,7 @@ export const pasteSelection = async ({
       statsToAdd,
       graphsToAdd,
       knobsToAdd,
+      spritesToAdd,
       frozenPluginElements,
       pluginIdsToAdd,
       frozenNewGroups,
@@ -316,6 +394,7 @@ export const pasteSelection = async ({
         statPositions: useStatItemStore.getState().positions as never,
         graphPositions: useGraphItemStore.getState().positions as never,
         knobPositions: useKnobItemStore.getState().positions as never,
+        spritePositions: useSpriteStore.getState().positions as never,
         layerGroups: useLayerGroupStore.getState().layerGroups as never,
       },
       eagerElementsBefore,
@@ -330,6 +409,7 @@ export const pasteSelection = async ({
         'statPositions',
         'graphPositions',
         'knobPositions',
+        'spritePositions',
         'layerGroups',
       ],
       mutate: () => {
@@ -348,6 +428,9 @@ export const pasteSelection = async ({
         useKnobItemStore
           .getState()
           .setPositions(eagerPlan.zPatch.knobPositions as never);
+        useSpriteStore
+          .getState()
+          .setPositions(eagerPlan.zPatch.spritePositions as never);
         if (eagerPlan.groupsChanged) {
           useLayerGroupStore
             .getState()
@@ -404,7 +487,7 @@ export const pasteSelection = async ({
     // 편입 전 abort로 롤백되면 정산 뒤 pruneRolledBackPasteSelection이 정리한다
     const newSelectedElements: SelectedElement[] = [];
     const collect = (
-      type: 'key' | 'stat' | 'graph' | 'knob',
+      type: 'key' | 'stat' | 'graph' | 'knob' | 'sprite',
       record: Record<string, Array<{ id: string }>>,
       ids: readonly string[],
     ) => {
@@ -436,6 +519,11 @@ export const pasteSelection = async ({
       useKnobItemStore.getState().positions as never,
       knobsToAdd.map((entry) => entry.position.id),
     );
+    collect(
+      'sprite',
+      useSpriteStore.getState().positions as never,
+      spritesToAdd.map((entry) => entry.position.id),
+    );
     const presentPluginIds = new Set(
       usePluginDisplayElementStore
         .getState()
@@ -465,6 +553,7 @@ export const pasteSelection = async ({
         ...statsToAdd.map((entry) => entry.position.id),
         ...graphsToAdd.map((entry) => entry.position.id),
         ...knobsToAdd.map((entry) => entry.position.id),
+        ...spritesToAdd.map((entry) => entry.position.id),
         ...frozenPluginElements.map((element) => element.fullId),
       ]);
       const presentIds = new Set<string>([
@@ -478,6 +567,9 @@ export const pasteSelection = async ({
           (position) => position.id,
         ),
         ...(useKnobItemStore.getState().positions[selectedKeyType] ?? []).map(
+          (position) => position.id,
+        ),
+        ...(useSpriteStore.getState().positions[selectedKeyType] ?? []).map(
           (position) => position.id,
         ),
         ...usePluginDisplayElementStore
@@ -522,6 +614,7 @@ export const pasteSelection = async ({
               statPositions: base.statPositions as never,
               graphPositions: base.graphPositions as never,
               knobPositions: base.knobPositions as never,
+              spritePositions: base.spritePositions as never,
               layerGroups: base.layerGroups as never,
             },
             pluginProjection,
@@ -533,6 +626,7 @@ export const pasteSelection = async ({
               statPositions: base.statPositions as never,
               graphPositions: base.graphPositions as never,
               knobPositions: base.knobPositions as never,
+              spritePositions: base.spritePositions as never,
               layerGroups: base.layerGroups as never,
             },
             plan,

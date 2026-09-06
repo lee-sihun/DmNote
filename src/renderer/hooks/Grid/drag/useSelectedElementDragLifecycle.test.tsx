@@ -35,11 +35,13 @@ describe('useSelectedElementDragLifecycle', () => {
   let controller: ReturnType<typeof useSelectedElementDragLifecycle>;
   const freezeSelection = vi.fn();
   const syncSelection = vi.fn();
+  const moveSelection = vi.fn();
 
   const Harness = () => {
     const value = useSelectedElementDragLifecycle({
       freezeSelectionForGesture: freezeSelection,
       syncSelectedElementsToOverlay: syncSelection,
+      moveSelectedElements: moveSelection,
     });
     useEffect(() => {
       controller = value;
@@ -110,5 +112,25 @@ describe('useSelectedElementDragLifecycle', () => {
 
     controller.commitSelectedElementsDrag();
     expect(syncSelection).toHaveBeenLastCalledWith(undefined);
+  });
+
+  it('드래그 이동은 선택 이동으로 위임하고 취소는 대기 저장을 버린다', () => {
+    let cleanup: ((commit?: boolean) => void) | undefined;
+    act(() => {
+      cleanup = controller.beginSelectedElementsDrag();
+    });
+
+    controller.moveSelectedElementsDrag(5, -3);
+    expect(moveSelection).toHaveBeenCalledWith(5, -3);
+
+    cleanup?.(false);
+    expect(lifecycleMocks.cancelMixed).toHaveBeenCalledWith(
+      GESTURE_ID,
+      expect.objectContaining({ discardPendingSave: true }),
+    );
+    expect(lifecycleMocks.endPlugin).toHaveBeenCalledWith(
+      'example',
+      'token:example',
+    );
   });
 });

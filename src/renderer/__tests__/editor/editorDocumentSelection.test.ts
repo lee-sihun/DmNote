@@ -34,6 +34,7 @@ const makeDocument = (): CanonicalEditorDocumentV1 => ({
   statPositions: { '4key': [] },
   graphPositions: { '4key': [] },
   knobPositions: { '4key': [] },
+  spritePositions: { '4key': [] },
   layerGroups: { '4key': [] },
 });
 

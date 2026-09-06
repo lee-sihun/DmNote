@@ -41,8 +41,9 @@ fn document_json(document: &EditorDocumentV1) -> String {
 
 // EditorOpV1 wire kind 기대 목록 - op_kind가 serde 실태그를 돌려주므로
 // 집합 동등 테스트(fixture_covers_every_op_kind)가 이 목록의 오타도 잡는다
-const ALL_OP_KINDS: [&str; 8] = [
+const ALL_OP_KINDS: [&str; 9] = [
     "setBounds",
+    "resizeSprite",
     "deleteElement",
     "patchElement",
     "setKeySlot",
@@ -58,6 +59,7 @@ fn op_kind(op: &EditorOpV1) -> String {
     // 단일 원천은 serde 태그라 여기서 문자열을 복제하지 않는다
     match op {
         EditorOpV1::SetBounds { .. } => {}
+        EditorOpV1::ResizeSprite { .. } => {}
         EditorOpV1::DeleteElement { .. } => {}
         EditorOpV1::PatchElement { .. } => {}
         EditorOpV1::SetKeySlot { .. } => {}

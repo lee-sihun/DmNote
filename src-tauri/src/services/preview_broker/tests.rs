@@ -115,6 +115,32 @@ fn publish_injects_source_label_and_defaults_to_patch() {
 }
 
 #[test]
+fn element_rotation_preview_round_trips_for_native_position_domains() {
+    let broker = PreviewBroker::default();
+    subscribe(&broker, "owner");
+    let messages = Arc::new(Mutex::new(Vec::new()));
+    broker
+        .subscribe("observer", recording_channel(messages.clone()))
+        .unwrap();
+    for domain in [
+        PreviewDomain::KeyPosition,
+        PreviewDomain::StatPosition,
+        PreviewDomain::GraphPosition,
+        PreviewDomain::KnobPosition,
+        PreviewDomain::SpritePosition,
+    ] {
+        let mut request = request_for_domain(&session_id(), 1, domain);
+        request.patch = Map::from_iter([("rotation".to_string(), Value::from(45.5))]);
+        broker.publish("owner", request).unwrap();
+        let messages = messages.lock();
+        let message = messages.last().unwrap();
+        assert_eq!(message.domain, domain);
+        assert_eq!(message.patch["rotation"], 45.5);
+    }
+    assert_eq!(messages.lock().len(), 5);
+}
+
+#[test]
 fn image_transform_preview_fields_round_trip_through_channel() {
     let broker = PreviewBroker::default();
     subscribe(&broker, "owner");
@@ -272,6 +298,7 @@ fn forwards_every_position_preview_domain() {
         PreviewDomain::StatPosition,
         PreviewDomain::GraphPosition,
         PreviewDomain::KnobPosition,
+        PreviewDomain::SpritePosition,
     ];
 
     for (index, domain) in domains.iter().copied().enumerate() {
@@ -289,6 +316,127 @@ fn forwards_every_position_preview_domain() {
         .map(|message| message.domain)
         .collect::<Vec<_>>();
     assert_eq!(forwarded, domains);
+}
+
+#[test]
+fn sprite_position_domain_validates_and_round_trips_through_subscribers() {
+    let broker = PreviewBroker::default();
+    subscribe(&broker, "owner");
+    let messages = Arc::new(Mutex::new(Vec::new()));
+    broker
+        .subscribe("observer", recording_channel(messages.clone()))
+        .expect("observer subscribes");
+    let session_id = session_id();
+    let patch = serde_json::json!({
+        "dx": 24,
+        "dy": -8,
+        "width": 320,
+        "height": 180,
+        "rotation": -45.5,
+        "pivot": { "x": 0.5, "y": 0.75 },
+        "idleTransform": { "x": 0, "y": 0, "rotation": 0, "scale": 1 },
+        "poses": [{ "poseId": "pose-id", "triggers": [] }],
+        "pressDurationMs": 300,
+        "transitionMs": 120,
+        "transitionEasing": "ease-out",
+        "baseImage": "/images/base.png",
+        "referenceNaturalSize": {
+            "source": "/images/base.png",
+            "width": 640,
+            "height": 360
+        }
+    });
+    let request: PreviewPublishRequest = serde_json::from_value(serde_json::json!({
+        "schemaVersion": PREVIEW_SCHEMA_VERSION,
+        "sessionId": session_id,
+        "seq": 1,
+        "domain": "spritePosition",
+        "mode": "4key",
+        "targets": [0],
+        "patch": patch
+    }))
+    .expect("spritePosition domain is accepted");
+
+    broker
+        .publish("owner", request)
+        .expect("sprite preview publishes");
+
+    let messages = messages.lock();
+    assert_eq!(messages.len(), 1);
+    assert_eq!(messages[0].domain, PreviewDomain::SpritePosition);
+    assert_eq!(messages[0].mode, "4key");
+    assert_eq!(Value::Object(messages[0].patch.clone()), patch);
+}
+
+#[test]
+fn sprite_position_preview_allowlist_matches_supported_contract() {
+    assert_eq!(
+        SPRITE_POSITION_PATCH_FIELDS,
+        [
+            "dx",
+            "dy",
+            "width",
+            "height",
+            "rotation",
+            "pivot",
+            "idleTransform",
+            "poses",
+            "pressDurationMs",
+            "transitionMs",
+            "transitionEasing",
+            "baseImage",
+            "referenceNaturalSize",
+        ]
+    );
+}
+
+#[test]
+fn preview_patch_allowlist_rejects_unknown_and_cross_domain_fields() {
+    let broker = PreviewBroker::default();
+    subscribe(&broker, "owner");
+    let session_id = session_id();
+    let mut unknown_sprite = request_for_domain(&session_id, 1, PreviewDomain::SpritePosition);
+    unknown_sprite.patch = Map::from_iter([("unknownSpriteField".to_string(), Value::Bool(true))]);
+
+    let unknown_error = broker.publish("owner", unknown_sprite).unwrap_err();
+
+    assert!(unknown_error.contains("unknownSpriteField"));
+
+    for (seq, field) in ["x", "y", "scale"].into_iter().enumerate() {
+        let mut removed_field =
+            request_for_domain(&session_id, seq as u64 + 2, PreviewDomain::SpritePosition);
+        removed_field.patch = Map::from_iter([(field.to_string(), serde_json::json!(1.0))]);
+
+        let removed_error = broker.publish("owner", removed_field).unwrap_err();
+
+        assert!(removed_error.contains(field));
+    }
+
+    let mut sprite_field_on_key = request_for_domain(&session_id, 6, PreviewDomain::KeyPosition);
+    sprite_field_on_key.patch = Map::from_iter([(
+        "pivot".to_string(),
+        serde_json::json!({ "x": 0.5, "y": 0.5 }),
+    )]);
+
+    let cross_domain_error = broker.publish("owner", sprite_field_on_key).unwrap_err();
+
+    assert!(cross_domain_error.contains("pivot"));
+}
+
+#[test]
+fn unknown_preview_domain_is_rejected_during_wire_validation() {
+    let error = serde_json::from_value::<PreviewPublishRequest>(serde_json::json!({
+        "schemaVersion": PREVIEW_SCHEMA_VERSION,
+        "sessionId": session_id(),
+        "seq": 1,
+        "domain": "spritePose",
+        "mode": "4key",
+        "targets": [0],
+        "patch": { "dx": 24 }
+    }))
+    .expect_err("unknown preview domains stay closed");
+
+    assert!(error.to_string().contains("unknown variant"));
 }
 
 #[test]

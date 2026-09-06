@@ -8,9 +8,12 @@ import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
 import {
   EDITOR_OPS_VERSION,
   EditorProtocolError,
+  assertCanonicalEditorDocument,
   assertEditorCommittedEvent,
   assertEditorOpsV1,
+  assertEditorPatch,
 } from '@src/types/editor';
+import type { ReactiveSpritePosition } from '@src/types/key/sprites';
 import { editorApi, editorCommitRaw } from './editorApi';
 
 import type { EditorCommittedV1, EditorDocumentV1 } from '@src/types/editor';
@@ -29,6 +32,7 @@ const canonicalDocument = (): EditorDocumentV1 => ({
   statPositions: {},
   graphPositions: {},
   knobPositions: {},
+  spritePositions: {},
   layerGroups: {},
 });
 
@@ -1329,5 +1333,191 @@ describe('요소 ID 검증이 백엔드와 같은 기준을 쓴다', () => {
         },
       ]),
     ).toThrow(/zUpdates\[0\] target is invalid/);
+  });
+});
+
+// pose id는 요소 id와 같은 전역 네임스페이스를 쓴다 - 백엔드
+// native_element_id의 단일 seen 집합 검증을 canonical 경계가 미러한다
+describe('canonical 검증의 스프라이트 poseId 네임스페이스', () => {
+  const SPRITE_ID = '00000000-0000-4000-8000-0000000000f0';
+  const POSE_ID = '00000000-0000-4000-8000-0000000000f1';
+
+  const sprite = (
+    overrides: Partial<ReactiveSpritePosition> = {},
+  ): ReactiveSpritePosition => ({
+    activation: 'whileHeld',
+    pressDurationMs: 300,
+    id: SPRITE_ID,
+    dx: 0,
+    dy: 0,
+    width: 200,
+    height: 200,
+    rotation: 0,
+    hidden: false,
+    zIndex: null,
+    className: null,
+    useInlineStyles: null,
+    baseImage: null,
+    pivot: { x: 0.5, y: 0.5 },
+    idleTransform: { x: 0, y: 0, rotation: 0, scale: 1 },
+    poses: [
+      {
+        imageOverrideMetrics: null,
+        poseId: POSE_ID,
+        triggers: [],
+        transform: { x: 0, y: 0, rotation: 0, scale: 1 },
+        imageOverride: null,
+      },
+    ],
+    transitionMs: 90,
+    transitionEasing: 'cubic-bezier(0.4, 0, 0.2, 1)',
+    referenceNaturalSize: null,
+    ...overrides,
+  });
+
+  const documentWith = (
+    sprites: ReactiveSpritePosition[],
+  ): EditorDocumentV1 => ({
+    ...canonicalDocument(),
+    spritePositions: { '4key': sprites },
+  });
+
+  it('유효 UUID poseId는 표기 변형까지 통과한다', () => {
+    for (const poseId of [
+      POSE_ID,
+      '000000000000400080000000000000f1',
+      '{00000000-0000-4000-8000-0000000000f1}',
+      'urn:uuid:00000000-0000-4000-8000-0000000000f1',
+    ]) {
+      const document = documentWith([sprite()]);
+      document.spritePositions['4key'][0].poses[0].poseId = poseId;
+      expect(() => assertCanonicalEditorDocument(document)).not.toThrow();
+    }
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['invalid', 'pose-0'],
+    ['nil', '00000000-0000-0000-0000-000000000000'],
+  ])('%s poseId를 거절한다', (_label, poseId) => {
+    const document = documentWith([sprite()]);
+    Object.assign(document.spritePositions['4key'][0].poses[0], { poseId });
+    expect(() => assertCanonicalEditorDocument(document)).toThrow(
+      EditorProtocolError,
+    );
+  });
+
+  it('poseId가 요소 id와 충돌하면 거절한다', () => {
+    const document = documentWith([sprite()]);
+    document.spritePositions['4key'][0].poses[0].poseId =
+      document.keyPositions['4key'][0].id!;
+    expect(() => assertCanonicalEditorDocument(document)).toThrow(
+      /not globally unique/,
+    );
+  });
+
+  it('같은 스프라이트 안의 poseId 중복을 거절한다', () => {
+    const document = documentWith([sprite()]);
+    const [pose] = document.spritePositions['4key'][0].poses;
+    document.spritePositions['4key'][0].poses = [pose, { ...pose }];
+    expect(() => assertCanonicalEditorDocument(document)).toThrow(
+      /not globally unique/,
+    );
+  });
+
+  it('다른 모드의 스프라이트 간 poseId 중복도 거절한다', () => {
+    const document = documentWith([sprite()]);
+    document.spritePositions['5key'] = [
+      sprite({ id: '00000000-0000-4000-8000-0000000000f2' }),
+    ];
+    expect(() => assertCanonicalEditorDocument(document)).toThrow(
+      /not globally unique/,
+    );
+  });
+
+  it('input 방향 patch는 poseId 생략을 허용하고 canonical 방향은 거절한다', () => {
+    const withoutPoseId = sprite();
+    delete (withoutPoseId.poses[0] as { poseId?: string }).poseId;
+    const patch = {
+      schemaVersion: 1,
+      spritePositions: { '4key': [withoutPoseId] },
+    };
+    expect(() =>
+      assertEditorPatch(patch, 'plugin patch', 'input'),
+    ).not.toThrow();
+    expect(() => assertEditorPatch(patch)).toThrow(EditorProtocolError);
+  });
+
+  it('committed patch의 스프라이트는 id·poseId 발급 완료 상태만 통과한다', () => {
+    const committed = (
+      positions: ReactiveSpritePosition[],
+    ): EditorCommittedV1 => ({
+      schemaVersion: 1,
+      revision: 1,
+      mutationId: 'committed-sprite-check',
+      changedFields: ['spritePositions'],
+      patch: {
+        schemaVersion: 1,
+        spritePositions: { '4key': positions },
+      },
+    });
+    expect(() =>
+      assertEditorCommittedEvent(committed([sprite()])),
+    ).not.toThrow();
+
+    const invalidPose = sprite();
+    invalidPose.poses[0].poseId = 'pose-0';
+    expect(() => assertEditorCommittedEvent(committed([invalidPose]))).toThrow(
+      /poseId is invalid/,
+    );
+
+    const collided = sprite();
+    collided.poses[0].poseId = SPRITE_ID;
+    expect(() => assertEditorCommittedEvent(committed([collided]))).toThrow(
+      /poseId is invalid/,
+    );
+  });
+
+  it('frozen 스프라이트는 poseId 형식·스냅샷 내 중복을 거절한다', () => {
+    const frozenOp = (positions: ReactiveSpritePosition[]) => [
+      {
+        kind: 'insertFrozenElements' as const,
+        mode: '4key',
+        elements: positions.map((position) => ({
+          elementType: 'sprite' as const,
+          position,
+        })),
+        groups: [],
+        zUpdates: [],
+      },
+    ];
+    expect(() => assertEditorOpsV1(frozenOp([sprite()]))).not.toThrow();
+
+    const invalidPose = sprite();
+    invalidPose.poses[0].poseId = 'pose-0';
+    expect(() => assertEditorOpsV1(frozenOp([invalidPose]))).toThrow(
+      /poseId is invalid/,
+    );
+
+    const duplicated = sprite();
+    const [pose] = duplicated.poses;
+    duplicated.poses = [pose, { ...pose }];
+    expect(() => assertEditorOpsV1(frozenOp([duplicated]))).toThrow(
+      /invalid or duplicate ID/,
+    );
+
+    // poseId는 요소 id와 같은 전역 네임스페이스 - 자기 스프라이트 id,
+    // 다른 frozen 스프라이트의 poseId, 다른 frozen 요소 id와도 충돌 금지
+    const selfCollision = sprite();
+    selfCollision.poses[0].poseId = SPRITE_ID;
+    expect(() => assertEditorOpsV1(frozenOp([selfCollision]))).toThrow(
+      /invalid or duplicate ID/,
+    );
+
+    const crossA = sprite();
+    const crossB = sprite({ id: '00000000-0000-4000-8000-0000000000f3' });
+    expect(() => assertEditorOpsV1(frozenOp([crossA, crossB]))).toThrow(
+      /invalid or duplicate ID/,
+    );
   });
 });

@@ -19,6 +19,7 @@ interface UsePropertiesPanelRenameOptions {
   singleStatPosition: PropertiesPanelSelection['singleStatPosition'];
   singleGraphPosition: PropertiesPanelSelection['singleGraphPosition'];
   singleKnobPosition: PropertiesPanelSelection['singleKnobPosition'];
+  singleSpritePosition: PropertiesPanelSelection['singleSpritePosition'];
   singleKeyInfo: PropertiesPanelSelection['singleKeyInfo'];
   singleKeyCode: PropertiesPanelSelection['singleKeyCode'];
   setPanelMode: (mode: 'layer' | 'property') => void;
@@ -32,6 +33,7 @@ export const usePropertiesPanelRename = ({
   singleStatPosition,
   singleGraphPosition,
   singleKnobPosition,
+  singleSpritePosition,
   singleKeyInfo,
   singleKeyCode,
   setPanelMode,
@@ -50,6 +52,7 @@ export const usePropertiesPanelRename = ({
     if (singleStatPosition) return singleStatPosition.layerName || '';
     if (singleGraphPosition) return singleGraphPosition.layerName || '';
     if (singleKnobPosition) return singleKnobPosition.layerName || '';
+    if (singleSpritePosition) return singleSpritePosition.layerName || '';
     return '';
   };
 
@@ -65,6 +68,7 @@ export const usePropertiesPanelRename = ({
       return `${getStatTypeLabel(singleGraphPosition.statType ?? null)} Graph`;
     }
     if (singleKnobPosition) return 'Knob';
+    if (singleSpritePosition) return 'Sprite';
     return '';
   };
 
@@ -89,6 +93,8 @@ export const usePropertiesPanelRename = ({
   const handleRenameStartImpl = useRef<() => void>(() => {});
   // eslint-disable-next-line react-hooks/refs -- 안정 래퍼의 최신 이름 변경 콜백 유지
   handleRenameStartImpl.current = () => {
+    // Escape로 언마운트된 입력은 blur가 오지 않아 취소 플래그가 남는다 - 다음 입력의 커밋이 삼켜지지 않게 초기화
+    renameCancelledRef.current = false;
     const current = getCurrentLayerName();
     setRenameValue(current || getCurrentDefaultTitle());
     setIsRenaming(true);
@@ -151,7 +157,8 @@ export const usePropertiesPanelRename = ({
         singleKeyPosition ||
         singleStatPosition ||
         singleGraphPosition ||
-        singleKnobPosition
+        singleKnobPosition ||
+        singleSpritePosition
       ) {
         setPanelMode('property');
         handleRenameStart();
@@ -164,6 +171,7 @@ export const usePropertiesPanelRename = ({
     singleStatPosition,
     singleGraphPosition,
     singleKnobPosition,
+    singleSpritePosition,
     setPanelMode,
   ]);
 

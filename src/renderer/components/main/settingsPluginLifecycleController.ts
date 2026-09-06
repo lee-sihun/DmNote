@@ -6,6 +6,7 @@ import { extractPluginId } from '@utils/plugin/components/pluginUtils';
 import { classifyPluginAddResult } from '@utils/plugin/pluginAddResult';
 import { jsApi } from '@api/modules/plugin/jsApi';
 import { pluginApi } from '@api/modules/plugin/pluginApi';
+import { trackEditorWrite } from '@src/renderer/editor/runtime/lifecycle/editorWriteBarrier';
 import type { I18nContextValue } from '@contexts/I18nContextDef';
 import type {
   JsLoadResult,
@@ -236,37 +237,41 @@ export const createSettingsPluginLifecycleController = ({
     setPendingPluginId(pluginId);
 
     try {
-      // 실제 플러그인 네임스페이스 추출 (@id 또는 파일명 기반)
-      const pluginNamespace: string = extractPluginId(
-        plugin.content,
-        plugin.name,
-      );
-      const pluginStorageNamespace = `${pluginNamespace}/`;
+      await trackEditorWrite(
+        (async () => {
+          // 실제 플러그인 네임스페이스 추출 (@id 또는 파일명 기반)
+          const pluginNamespace: string = extractPluginId(
+            plugin.content,
+            plugin.name,
+          );
+          const pluginStorageNamespace = `${pluginNamespace}/`;
 
-      // 네임스페이스를 prefix로 사용하는 데이터가 있는지 확인
-      // 백엔드에서 자동으로 "plugin_data_" 를 붙이므로 순수 네임스페이스만 전달
-      const hasData: boolean = await pluginApi.storage.hasData(
-        pluginStorageNamespace,
-      );
-      console.warn(
-        '[PluginRemove] namespace=',
-        pluginNamespace,
-        'hasData=',
-        hasData,
-      );
+          // 네임스페이스를 prefix로 사용하는 데이터가 있는지 확인
+          // 백엔드에서 자동으로 "plugin_data_" 를 붙이므로 순수 네임스페이스만 전달
+          const hasData: boolean = await pluginApi.storage.hasData(
+            pluginStorageNamespace,
+          );
+          console.warn(
+            '[PluginRemove] namespace=',
+            pluginNamespace,
+            'hasData=',
+            hasData,
+          );
 
-      if (hasData) {
-        setPluginToDelete({
-          id: pluginId,
-          name: plugin.name,
-          namespace: pluginNamespace,
-        });
-        setDataDeleteModalOpen(true);
-      } else {
-        removingPluginRef.current = null;
-        setPendingPluginId(null);
-        await removePluginOnly(pluginId);
-      }
+          if (hasData) {
+            setPluginToDelete({
+              id: pluginId,
+              name: plugin.name,
+              namespace: pluginNamespace,
+            });
+            setDataDeleteModalOpen(true);
+          } else {
+            removingPluginRef.current = null;
+            setPendingPluginId(null);
+            await removePluginOnly(pluginId);
+          }
+        })(),
+      );
     } catch (error) {
       console.error('Failed to check plugin data', error);
       showAlert?.(t('settings.jsPluginRemoveFailed'));
@@ -319,6 +324,7 @@ export const createSettingsPluginLifecycleController = ({
       const result: JsRemoveResult = await jsApi.remove(pluginId);
       if (!result.success) {
         showAlert?.(t('settings.jsPluginRemoveFailed'));
+        return;
       }
 
       // 2) 그 다음 스토리지 정리 → 클린업 중 재생성된 값까지 함께 제거
