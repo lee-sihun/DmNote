@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "properties": [
     "hidden",
     "layerName",
@@ -75,6 +75,7 @@
     "noteBorderRadius",
     "noteAutoYCorrection",
     "noteAlignment",
-    "noteBorderSide"
+    "noteBorderSide",
+    "rotation"
   ]
 }

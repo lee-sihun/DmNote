@@ -4,6 +4,7 @@ import type {
 } from '@src/types/key/sprites';
 
 import { isRenderableImageRef } from '@utils/core/imageSource';
+import { pointsAabb, rotatePointAround } from '@utils/core/rotation';
 
 import {
   resolveSpriteTarget,
@@ -44,7 +45,8 @@ export type SpriteReachGeometry = Pick<
   | 'idleTransform'
   | 'poses'
   | 'transitionEasing'
->;
+> &
+  Partial<Pick<ReactiveSpritePosition, 'rotation'>>;
 
 const CSS_NUMBER = String.raw`[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?`;
 
@@ -378,13 +380,28 @@ export const computeSpriteReachAabb = (
     const margin = extension * (hi - lo);
     return { lo: lo - margin, hi: hi + margin };
   };
-  const offsetX = extendedRange(transforms.map((t) => t.x));
-  const offsetY = extendedRange(transforms.map((t) => t.y));
+  let offsetX = extendedRange(transforms.map((t) => t.x));
+  let offsetY = extendedRange(transforms.map((t) => t.y));
+  const baseRotation = sprite.rotation ?? 0;
+  const boxCenter = { x: sprite.width / 2, y: sprite.height / 2 };
+  if (baseRotation !== 0) {
+    // 배치 회전은 자세 이동 범위도 함께 돌린다. 자세의 보간 각도는 그대로 둔다
+    const rotated = pointsAabb(
+      [
+        { x: offsetX.lo, y: offsetY.lo },
+        { x: offsetX.lo, y: offsetY.hi },
+        { x: offsetX.hi, y: offsetY.lo },
+        { x: offsetX.hi, y: offsetY.hi },
+      ].map((point) => rotatePointAround(point, { x: 0, y: 0 }, baseRotation)),
+    );
+    offsetX = { lo: rotated.minX, hi: rotated.maxX };
+    offsetY = { lo: rotated.minY, hi: rotated.maxY };
+  }
   const scale = extendedRange(transforms.map((t) => t.scale));
   const rotationsDiffer = transforms.some(
     (t) => t.rotation !== transforms[0].rotation,
   );
-  const rotation = transforms[0].rotation;
+  const rotation = transforms[0].rotation + baseRotation;
 
   // 같은 배치는 한 번만 계산 - 원본 크기를 모르면 상태 수와 무관하게 배치가 하나다
   const seen = new Set<string>();
@@ -400,6 +417,8 @@ export const computeSpriteReachAabb = (
       scale,
       rotation,
       rotationsDiffer,
+      baseRotation,
+      boxCenter,
     });
     union = union
       ? {
@@ -419,6 +438,8 @@ interface ReachTransformRanges {
   scale: { lo: number; hi: number };
   rotation: number;
   rotationsDiffer: boolean;
+  baseRotation: number;
+  boxCenter: { x: number; y: number };
 }
 
 // 배치 하나의 AABB - 축 기준 상대 모서리에 transform 범위를 적용한다
@@ -429,6 +450,11 @@ const placementReachAabb = (
   const { rect, pivot } = placement;
   const { offsetX, offsetY, scale } = ranges;
   const { x: pivotX, y: pivotY } = anchorPx(rect, pivot);
+  const layoutPivot = rotatePointAround(
+    { x: pivotX, y: pivotY },
+    ranges.boxCenter,
+    ranges.baseRotation,
+  );
   // pivot 기준 상대 좌표 네 모서리
   const corners: Array<[number, number]> = [
     [rect.x - pivotX, rect.y - pivotY],
@@ -446,10 +472,10 @@ const placementReachAabb = (
     }
     radius *= Math.max(Math.abs(scale.lo), Math.abs(scale.hi));
     return {
-      minX: pivotX + offsetX.lo - radius,
-      minY: pivotY + offsetY.lo - radius,
-      maxX: pivotX + offsetX.hi + radius,
-      maxY: pivotY + offsetY.hi + radius,
+      minX: layoutPivot.x + offsetX.lo - radius,
+      minY: layoutPivot.y + offsetY.lo - radius,
+      maxX: layoutPivot.x + offsetX.hi + radius,
+      maxY: layoutPivot.y + offsetY.hi + radius,
     };
   }
 
@@ -473,9 +499,9 @@ const placementReachAabb = (
     }
   }
   return {
-    minX: pivotX + offsetX.lo + cornerXLo,
-    minY: pivotY + offsetY.lo + cornerYLo,
-    maxX: pivotX + offsetX.hi + cornerXHi,
-    maxY: pivotY + offsetY.hi + cornerYHi,
+    minX: layoutPivot.x + offsetX.lo + cornerXLo,
+    minY: layoutPivot.y + offsetY.lo + cornerYLo,
+    maxX: layoutPivot.x + offsetX.hi + cornerXHi,
+    maxY: layoutPivot.y + offsetY.hi + cornerYHi,
   };
 };

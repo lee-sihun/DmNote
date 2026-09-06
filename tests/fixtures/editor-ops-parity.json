@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "comment": "semantic op 결과 동등성 파리티 fixture. 소비자: src-tauri/src/state/editor_ops_parity.rs (canonical 적용기), tests/editor-ops-parity.test.ts (프론트 낙관 적용기). 각 케이스는 같은 initialDocument에 같은 ops를 적용했을 때 양측이 만드는 문서가 expectedDocument와 일치함을 고정한다. 플러그인 그룹 멤버 원천(양측 근사 지점)은 양쪽 모두 비어 있는 상태를 전제한다.",
   "cases": [
     {
@@ -3367,6 +3367,100 @@
             }
           ]
         }
+      }
+    },
+    {
+      "name": "patch-rotation-scalar",
+      "comment": "요소 회전 스칼라 patch. 네 종류 공통 필드라 flatten 상속 대상(stat)까지 같은 값으로 적용된다",
+      "initialDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "statPositions": {
+          "4key": [
+            {
+              "id": "44444444-4444-4444-8444-444444444444",
+              "statType": "kps",
+              "dx": 120,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {},
+        "spritePositions": {}
+      },
+      "ops": [
+        {
+          "kind": "patchElement",
+          "elementType": "key",
+          "id": "11111111-1111-4111-8111-111111111111",
+          "patch": { "property": "rotation", "value": -45.5 }
+        },
+        {
+          "kind": "patchElement",
+          "elementType": "stat",
+          "id": "44444444-4444-4444-8444-444444444444",
+          "patch": { "property": "rotation", "value": 90 }
+        }
+      ],
+      "expectedDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "rotation": -45.5,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "statPositions": {
+          "4key": [
+            {
+              "id": "44444444-4444-4444-8444-444444444444",
+              "statType": "kps",
+              "dx": 120,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "rotation": 90,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {},
+        "spritePositions": {}
       }
     }
   ]

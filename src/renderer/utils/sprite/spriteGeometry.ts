@@ -9,8 +9,7 @@ import { clamp } from '@utils/core/clamp';
 
 // 스프라이트 좌표 변환 프리미티브. 도달 범위·배치·핸들·패널이 공유한다
 
-export const DEG_TO_RAD = Math.PI / 180;
-export const RAD_TO_DEG = 180 / Math.PI;
+export { DEG_TO_RAD, RAD_TO_DEG } from '@utils/core/rotation';
 
 /** 정규화 앵커를 rect 안의 요소 로컬 px로 */
 export const anchorPx = (

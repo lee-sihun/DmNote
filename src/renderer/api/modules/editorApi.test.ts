@@ -1352,6 +1352,7 @@ describe('canonical 검증의 스프라이트 poseId 네임스페이스', () => 
     dy: 0,
     width: 200,
     height: 200,
+    rotation: 0,
     hidden: false,
     zIndex: null,
     className: null,

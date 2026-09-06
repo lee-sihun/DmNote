@@ -18,6 +18,7 @@ import {
 } from '@src/types/key/keys';
 import { newElementId } from './elementId';
 import { cloneSlot } from '@utils/keySlot';
+import { DEFAULT_ELEMENT_ROTATION } from '@src/types/key/rotation';
 
 // ----------------------------------------------------------------------------
 // 기본 키 포지션 생성
@@ -33,6 +34,7 @@ export function createDefaultKeyPosition(
     dy,
     width: 60,
     height: 60,
+    rotation: DEFAULT_ELEMENT_ROTATION,
     hidden: false,
     activeImage: '',
     inactiveImage: '',

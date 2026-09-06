@@ -35,6 +35,7 @@ export const makeSpritePosition = (
   dy: 0,
   width: DEFAULT_SPRITE_SIZE,
   height: DEFAULT_SPRITE_SIZE,
+  rotation: 0,
   hidden: false,
   zIndex: null,
   // layerName·groupId는 백엔드가 None이면 키 자체를 생략한다 - 기본형도 그 형태를

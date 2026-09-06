@@ -227,6 +227,7 @@ const spriteAt = (id: string): CanonicalReactiveSpritePosition => ({
   groupId: null,
   className: null,
   useInlineStyles: null,
+  rotation: 0,
   baseImage: null,
   pivot: { x: 0.5, y: 0.5 },
   idleTransform: { x: 0, y: 0, rotation: 0, scale: 1 },

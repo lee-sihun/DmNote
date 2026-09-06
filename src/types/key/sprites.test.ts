@@ -30,6 +30,36 @@ const backendWireSprite = {
 };
 
 describe('reactiveSpritePositionSchema', () => {
+  it('구형 데이터의 배치 회전을 0으로 채우고 자세 회전과 독립적으로 보존한다', () => {
+    expect(reactiveSpritePositionSchema.parse(backendWireSprite).rotation).toBe(
+      0,
+    );
+    for (const rotation of [-180, -45.5, 0, 45.5, 180]) {
+      for (const schema of [
+        reactiveSpritePositionSchema,
+        reactiveSpritePositionInputSchema,
+      ]) {
+        const parsed = schema.parse({ ...backendWireSprite, rotation });
+        expect(parsed.rotation).toBe(rotation);
+        expect(parsed.idleTransform).toEqual(backendWireSprite.idleTransform);
+      }
+    }
+  });
+
+  it.each([null, '45', true, NaN, Infinity, -Infinity, -180.01, 180.01])(
+    '잘못된 배치 회전 %s를 거부한다',
+    (rotation) => {
+      for (const schema of [
+        reactiveSpritePositionSchema,
+        reactiveSpritePositionInputSchema,
+      ]) {
+        expect(
+          schema.safeParse({ ...backendWireSprite, rotation }).success,
+        ).toBe(false);
+      }
+    },
+  );
+
   it('layerName·groupId가 생략된 백엔드 직렬화 형태를 허용한다', () => {
     expect(
       reactiveSpritePositionSchema.safeParse(backendWireSprite).success,

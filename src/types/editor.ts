@@ -24,6 +24,7 @@ import {
 import type { LayerGroupDef, LayerGroups } from '@src/types/layerGroups';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import type { ElementShadowValuePatch } from '@src/types/key/shadows';
+import { isElementRotationValue } from '@src/types/key/rotation';
 import {
   isImageTransformLeafPatch,
   type ImageMode,
@@ -53,7 +54,7 @@ export const EDITOR_SCHEMA_VERSION = 1 as const;
 // 유지하고 id를 additive로 싣는다. v2 커밋은 포함된 모든 위치 항목에 유효 ID가
 // 필수라 백엔드가 형식·전역 유일성을 강제한다. 구형 플러그인 gateway만 v1로 남는다
 export const EDITOR_COMMIT_SCHEMA_VERSION = 2 as const;
-export const EDITOR_OPS_VERSION = 3 as const;
+export const EDITOR_OPS_VERSION = 4 as const;
 
 export const EDITOR_FIELDS = [
   'keys',
@@ -321,6 +322,7 @@ interface EditorElementPropertyValuesV1 {
   noteAlignment: 'left' | 'center' | 'right';
   noteBorderSide: 'all' | 'vertical' | 'horizontal';
   statType: 'kps' | 'kpsAvg' | 'kpsMax' | 'total';
+  rotation: number;
 }
 
 export type EditorElementPropertyKeyV1 = keyof EditorElementPropertyValuesV1;
@@ -408,6 +410,7 @@ export const EDITOR_ELEMENT_PROPERTY_KEYS = [
   'noteAutoYCorrection',
   'noteAlignment',
   'noteBorderSide',
+  'rotation',
 ] as const satisfies readonly EditorElementPropertyKeyV1[];
 
 type AssertNever<T extends never> = T;
@@ -524,6 +527,7 @@ export type EditorPreviewStylePropertyPatchV1 =
       | 'noteWidth'
       | 'noteBorderWidth'
       | 'noteBorderRadius'
+      | 'rotation'
     >;
 
 // 프리뷰 전용 - 커밋 wire는 leaf 패치지만 프리뷰는 keyPosition에 그대로 얹을 전체 변환을 보낸다
@@ -1843,6 +1847,9 @@ const isEditorElementPropertyValueValid = (
         value >= 0 &&
         value <= 50
       );
+    case 'rotation':
+      // 네이티브 4종 공통. 스프라이트는 자세 회전이 따로 있다
+      return elementType !== 'sprite' && isElementRotationValue(value);
     case 'notePaint':
     case 'noteGlowPaint':
       return elementType === 'key' && isNotePaintValuePatchV1(value);

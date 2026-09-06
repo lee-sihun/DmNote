@@ -520,6 +520,7 @@ describe('setMixedLayerGroupHidden', () => {
             dy: 0,
             width: 200,
             height: 120,
+            rotation: 0,
             hidden: false,
             zIndex: null,
             layerName: null,

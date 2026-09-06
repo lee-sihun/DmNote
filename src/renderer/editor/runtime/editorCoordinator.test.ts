@@ -1577,7 +1577,7 @@ describe('EditorSaveCoordinator', () => {
       async (context) => {
         expect(context).toMatchObject({
           // 프론트만 승격되는 사고를 잡는 anchor - 상수 참조로 바꾸지 말 것
-          editorOpsVersion: 3,
+          editorOpsVersion: 4,
           editorOps: [expect.objectContaining({ id })],
         });
         return {

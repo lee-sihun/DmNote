@@ -11,6 +11,7 @@ import { SPRITE_CONSTRAINTS } from '@src/types/key/sprites';
 import { toRenderableImageRef } from '@utils/core/imageSource';
 
 import { clamp } from '@utils/core/clamp';
+import { rotatePointAround } from '@utils/core/rotation';
 import {
   DEG_TO_RAD,
   SPRITE_ANCHOR_PRESETS,
@@ -207,6 +208,7 @@ export interface SpriteBounds {
   dy: number;
   width: number;
   height: number;
+  rotation?: number;
 }
 
 /**
@@ -225,6 +227,22 @@ export const fitSpriteBoundsToNaturalSize = (
   );
   const width = natural.width * scale;
   const height = natural.height * scale;
+  if ((bounds.rotation ?? 0) !== 0) {
+    const shift = rotatePointAround(
+      {
+        x: (pivot.x - 0.5) * (bounds.width - width),
+        y: (pivot.y - 0.5) * (bounds.height - height),
+      },
+      { x: 0, y: 0 },
+      bounds.rotation!,
+    );
+    return {
+      dx: bounds.dx + (bounds.width - width) / 2 + shift.x,
+      dy: bounds.dy + (bounds.height - height) / 2 + shift.y,
+      width,
+      height,
+    };
+  }
   return {
     dx: bounds.dx + pivot.x * (bounds.width - width),
     dy: bounds.dy + pivot.y * (bounds.height - height),

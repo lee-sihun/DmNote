@@ -12,6 +12,12 @@ import {
   type SpriteReachGeometry,
 } from './spriteReach';
 import { makeSpritePose } from './spriteFixtures';
+import { rotatePointAround } from '@utils/core/rotation';
+import {
+  placeSpriteVisual,
+  spriteIdleVisual,
+  spritePoseVisual,
+} from './spritePlacement';
 
 // 기본은 모든 트리거가 살아있고 서로 다른 키에 물린 상태 (완전 독립).
 // 죽은 키·공동 활성화 케이스만 맵을 명시한다
@@ -69,6 +75,105 @@ const makeSprite = (
 });
 
 describe('computeSpriteReachAabb', () => {
+  it('배치 회전은 상자 중심에서 자세의 이동과 기준점까지 함께 돌린다', () => {
+    const reach = computeSpriteReachAabb(
+      makeSprite({
+        width: 200,
+        height: 100,
+        rotation: 90,
+        pivot: { x: 0, y: 0 },
+        idleTransform: makeTransform({ x: 20, y: 10, rotation: 90 }),
+      }),
+    )!;
+    expect(reach.minX).toBeCloseTo(-60, 8);
+    expect(reach.maxX).toBeCloseTo(140, 8);
+    expect(reach.minY).toBeCloseTo(-130, 8);
+    expect(reach.maxY).toBeCloseTo(-30, 8);
+  });
+
+  it('배치 ±180과 자세의 긴 회전 경로를 합성한 모든 중간 꼭짓점을 포함한다', () => {
+    const pose = makePose(
+      'p1',
+      { x: 70, y: -40, rotation: 179, scale: 1.8 },
+      'wide.png',
+    );
+    pose.imageOverrideMetrics = { source: 'wide.png', width: 400, height: 50 };
+    pose.pivot = { x: 0.1, y: 0.9 };
+    const sprite = makeSprite({
+      width: 200,
+      height: 100,
+      pivot: { x: 0.2, y: 0.8 },
+      referenceNaturalSize: { source: 'base.png', width: 200, height: 100 },
+      idleTransform: makeTransform({
+        x: -30,
+        y: 20,
+        rotation: -179,
+        scale: 0.8,
+      }),
+      poses: [pose],
+    });
+    const placements = [
+      placeSpriteVisual(sprite, spriteIdleVisual(sprite)),
+      placeSpriteVisual(sprite, spritePoseVisual(sprite, pose)),
+    ];
+    for (const rotation of [0, 45, 90, 179, -180]) {
+      const reach = computeSpriteReachAabb({ ...sprite, rotation })!;
+      for (let step = 0; step <= 40; step += 1) {
+        const t = step / 40;
+        const transform = Object.fromEntries(
+          (['x', 'y', 'rotation', 'scale'] as const).map((key) => [
+            key,
+            sprite.idleTransform[key] +
+              t * (pose.transform[key] - sprite.idleTransform[key]),
+          ]),
+        ) as unknown as SpriteTransform;
+        for (const { rect, pivot } of placements) {
+          const axis = {
+            x: rect.x + pivot.x * rect.width,
+            y: rect.y + pivot.y * rect.height,
+          };
+          for (const [x, y] of [
+            [0, 0],
+            [1, 0],
+            [0, 1],
+            [1, 1],
+          ]) {
+            const relative = rotatePointAround(
+              {
+                x: (rect.x + x * rect.width - axis.x) * transform.scale,
+                y: (rect.y + y * rect.height - axis.y) * transform.scale,
+              },
+              { x: 0, y: 0 },
+              transform.rotation,
+            );
+            const point = rotatePointAround(
+              {
+                x: axis.x + transform.x + relative.x,
+                y: axis.y + transform.y + relative.y,
+              },
+              { x: sprite.width / 2, y: sprite.height / 2 },
+              rotation,
+            );
+            expect(point.x).toBeGreaterThanOrEqual(reach.minX - 1e-7);
+            expect(point.x).toBeLessThanOrEqual(reach.maxX + 1e-7);
+            expect(point.y).toBeGreaterThanOrEqual(reach.minY - 1e-7);
+            expect(point.y).toBeLessThanOrEqual(reach.maxY + 1e-7);
+          }
+        }
+      }
+    }
+  });
+
+  it('회전 중 도달 원은 배치 회전 때문에 다시 사각형으로 팽창하지 않는다', () => {
+    const sprite = makeSprite({
+      width: 200,
+      height: 100,
+      poses: [makePose('p1', { rotation: 90 })],
+    });
+    const before = computeSpriteReachAabb(sprite)!;
+    const after = computeSpriteReachAabb({ ...sprite, rotation: 45 })!;
+    expect(after).toEqual(before);
+  });
   it('변환 없는 스프라이트는 요소 상자 그대로', () => {
     const reach = computeSpriteReachAabb(makeSprite());
     expect(reach).toEqual({ minX: 0, minY: 0, maxX: 200, maxY: 200 });

@@ -47,6 +47,7 @@ const spriteFixture = (id: string): CanonicalReactiveSpritePosition => ({
   dy: 0,
   width: 200,
   height: 150,
+  rotation: 0,
   hidden: false,
   zIndex: null,
   className: null,

@@ -6,6 +6,7 @@ import type {
 } from '@src/types/key/sprites';
 
 import { makeSpritePose, makeSpritePosition } from './spriteFixtures';
+import { rotatePointAround } from '@utils/core/rotation';
 import {
   boxSpritePlacement,
   compensateTransformForPivotChange,
@@ -236,6 +237,28 @@ describe('isSameSpritePlacement', () => {
 });
 
 describe('fitSpriteBoundsToNaturalSize', () => {
+  it('배치가 회전했어도 이미지 교체의 기준점 화면 위치를 보존한다', () => {
+    const pivot = { x: 0.2, y: 0.9 };
+    for (const rotation of [0, 30, 90, 179, -180]) {
+      const before = { dx: 10, dy: 20, width: 200, height: 200, rotation };
+      const after = fitSpriteBoundsToNaturalSize(before, pivot, {
+        width: 400,
+        height: 200,
+      });
+      const point = (bounds: typeof after) =>
+        rotatePointAround(
+          {
+            x: bounds.dx + bounds.width * pivot.x,
+            y: bounds.dy + bounds.height * pivot.y,
+          },
+          { x: bounds.dx + bounds.width / 2, y: bounds.dy + bounds.height / 2 },
+          rotation,
+        );
+      expect(point(after).x).toBeCloseTo(point(before).x, 8);
+      expect(point(after).y).toBeCloseTo(point(before).y, 8);
+      expect(after.width / after.height).toBe(2);
+    }
+  });
   it('상자를 이미지 비율로 줄이되 기준점 위치는 그대로 둔다', () => {
     const bounds = { dx: 10, dy: 20, width: 200, height: 200 };
     // 가운데 기준점 - 상자가 세로로 줄어도 P는 제자리

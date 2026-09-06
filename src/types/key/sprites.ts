@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import {
+  DEFAULT_ELEMENT_ROTATION,
+  ELEMENT_ROTATION_RANGE,
+  elementRotationSchema,
+} from './rotation';
 
 // 반응형 스프라이트: 키 입력에 따라 자세가 바뀌는 이미지 레이어.
 // 키 요소와 달리 키 매핑에 인덱스 결합하지 않고, 담당 키를 자세마다 직접 참조한다.
@@ -9,7 +14,7 @@ import { z } from 'zod';
 
 export const SPRITE_CONSTRAINTS = {
   offset: { min: -2000, max: 2000 },
-  rotation: { min: -180, max: 180 },
+  rotation: ELEMENT_ROTATION_RANGE,
   scale: { min: 0.1, max: 10 },
   anchor: { min: 0, max: 1 },
   transitionMs: { min: 0, max: 1000 },
@@ -189,6 +194,7 @@ const reactiveSpritePositionBaseShape = {
   dy: z.number().finite(),
   width: z.number().finite().positive(),
   height: z.number().finite().positive(),
+  rotation: elementRotationSchema.default(DEFAULT_ELEMENT_ROTATION),
   hidden: z.boolean(),
   // Rust i32 - 소수·범위 초과는 decode에서 INVALID_REQUEST_PAYLOAD로 죽으므로 여기서 거른다
   zIndex: z.number().int().min(-2_147_483_648).max(2_147_483_647).nullable(),
