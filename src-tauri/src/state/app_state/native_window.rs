@@ -262,6 +262,12 @@ pub(super) fn apply_macos_overlay_fullscreen_behavior(window: &WebviewWindow, al
     let window = window.clone();
     let _ = app.run_on_main_thread(move || {
         apply_macos_overlay_fullscreen_behavior_inner(&window, always_on_top);
+        let app = window.app_handle();
+        if let Some(state) = app.try_state::<AppState>() {
+            if let Err(error) = state.overlay_hit.reconcile_after_parent_order(app) {
+                log::warn!("failed to follow macOS overlay window ordering: {error:#}");
+            }
+        }
     });
 }
 

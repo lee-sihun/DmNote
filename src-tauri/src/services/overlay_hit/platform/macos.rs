@@ -1,13 +1,17 @@
 use std::{
     os::raw::c_void,
     panic::{catch_unwind, AssertUnwindSafe},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Weak,
+    },
 };
 
 use anyhow::{anyhow, Context, Result};
 use cocoa::{
     appkit::{NSBackingStoreBuffered, NSEvent, NSEventType},
     base::{id, nil, BOOL, NO, YES},
-    foundation::{NSInteger, NSPoint, NSRect, NSSize},
+    foundation::{NSInteger, NSPoint, NSRect, NSSize, NSString},
 };
 use objc::{
     class,
@@ -21,22 +25,43 @@ use tauri::{AppHandle, Emitter, WebviewWindow};
 
 use super::{
     clip_hit_rect_to_bounds, hit_region_status, HitRegionStatus, OverlayHitContextMenuPayload,
-    OverlayHitDesiredState, OverlayHitRect, OVERLAY_LABEL,
+    OverlayHitDesiredState, OverlayHitRect, OverlayHitService, OverlayHitServiceInner,
+    OVERLAY_LABEL,
 };
 
 const HIT_CONTEXT_IVAR: &str = "dmNoteOverlayHitContext";
+const PARENT_OBSERVER_IVAR: &str = "dmNoteOverlayParentObserverContext";
 const NS_NONACTIVATING_PANEL_MASK: u64 = 1 << 7;
 const NS_WINDOW_ABOVE: i64 = 1;
+const NS_WINDOW_ANIMATION_NONE: NSInteger = 2;
 
 #[derive(Default)]
 pub(super) struct NativeState {
     panels: Vec<HitPanel>,
+    owner: Weak<OverlayHitServiceInner>,
+    observer: Option<ParentObserver>,
+    needs_reorder: bool,
 }
 
 struct HitPanel {
     panel: usize,
     view: usize,
     context: Box<HitContext>,
+    frame: NSRect,
+    level: Option<NSInteger>,
+    collection_behavior: Option<u64>,
+}
+
+struct ParentObserver {
+    object: usize,
+    parent: usize,
+    _context: Box<ParentObserverContext>,
+}
+
+struct ParentObserverContext {
+    app: AppHandle,
+    owner: Weak<OverlayHitServiceInner>,
+    queued: AtomicBool,
 }
 
 struct HitContext {
@@ -99,6 +124,135 @@ static HIT_VIEW_CLASS: Lazy<ObjectiveCClass> = Lazy::new(|| unsafe {
     declaration.add_ivar::<*mut c_void>(HIT_CONTEXT_IVAR);
     ObjectiveCClass(declaration.register())
 });
+
+static PARENT_OBSERVER_CLASS: Lazy<ObjectiveCClass> = Lazy::new(|| unsafe {
+    if let Some(class) = Class::get("DmNoteOverlayParentObserver") {
+        return ObjectiveCClass(class);
+    }
+    let mut declaration = ClassDecl::new("DmNoteOverlayParentObserver", class!(NSObject))
+        .expect("overlay parent observer class");
+    declaration.add_method(
+        sel!(parentStateChanged:),
+        parent_state_changed as extern "C" fn(&Object, Sel, id),
+    );
+    declaration.add_method(
+        sel!(reconcileParent:),
+        reconcile_parent as extern "C" fn(&Object, Sel, id),
+    );
+    declaration.add_ivar::<*mut c_void>(PARENT_OBSERVER_IVAR);
+    ObjectiveCClass(declaration.register())
+});
+
+extern "C" fn parent_state_changed(this: &Object, _selector: Sel, _notification: id) {
+    let _ = catch_unwind(AssertUnwindSafe(|| unsafe {
+        let pointer: *mut c_void = *this.get_ivar(PARENT_OBSERVER_IVAR);
+        let Some(context) = pointer.cast::<ParentObserverContext>().as_ref() else {
+            return;
+        };
+        if context.queued.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        // AppKit 알림은 창 정산 중에도 발생하므로 다음 공통 실행 루프에서 처리
+        let _: () = msg_send![this,
+            performSelectorOnMainThread: sel!(reconcileParent:)
+            withObject: nil
+            waitUntilDone: NO
+        ];
+    }));
+}
+
+extern "C" fn reconcile_parent(this: &Object, _selector: Sel, _argument: id) {
+    let _ = catch_unwind(AssertUnwindSafe(|| {
+        let (owner, app) = unsafe {
+            let pointer: *mut c_void = *this.get_ivar(PARENT_OBSERVER_IVAR);
+            let Some(context) = pointer.cast::<ParentObserverContext>().as_ref() else {
+                return;
+            };
+            context.queued.store(false, Ordering::Release);
+            (context.owner.upgrade(), context.app.clone())
+        };
+        if let Some(inner) = owner {
+            if let Err(error) = (OverlayHitService { inner }).reconcile_after_parent_order(&app) {
+                log::warn!("failed to follow macOS overlay parent state: {error:#}");
+            }
+        }
+    }));
+}
+
+impl ParentObserver {
+    fn new(app: &AppHandle, parent: id, owner: Weak<OverlayHitServiceInner>) -> Result<Self> {
+        let mut context = Box::new(ParentObserverContext {
+            app: app.clone(),
+            owner,
+            queued: AtomicBool::new(false),
+        });
+        unsafe {
+            let object: id = msg_send![PARENT_OBSERVER_CLASS.0, new];
+            if object.is_null() {
+                return Err(anyhow!("failed to create overlay parent observer"));
+            }
+            (*object).set_ivar(
+                PARENT_OBSERVER_IVAR,
+                (&mut *context as *mut ParentObserverContext).cast::<c_void>(),
+            );
+            let center: id = msg_send![class!(NSNotificationCenter), defaultCenter];
+            add_observer(
+                center,
+                object,
+                "NSWindowDidChangeOcclusionStateNotification",
+                parent,
+            );
+            let workspace: id = msg_send![class!(NSWorkspace), sharedWorkspace];
+            let center: id = msg_send![workspace, notificationCenter];
+            for name in [
+                "NSWorkspaceActiveSpaceDidChangeNotification",
+                "NSWorkspaceDidActivateApplicationNotification",
+            ] {
+                add_observer(center, object, name, nil);
+            }
+            Ok(Self {
+                object: object as usize,
+                parent: parent as usize,
+                _context: context,
+            })
+        }
+    }
+}
+
+impl Drop for ParentObserver {
+    fn drop(&mut self) {
+        unsafe {
+            let object = self.object as id;
+            let center: id = msg_send![class!(NSNotificationCenter), defaultCenter];
+            let _: () = msg_send![center, removeObserver: object];
+            let workspace: id = msg_send![class!(NSWorkspace), sharedWorkspace];
+            let center: id = msg_send![workspace, notificationCenter];
+            let _: () = msg_send![center, removeObserver: object];
+            // 이미 예약된 선택자는 객체를 유지하므로 컨텍스트만 먼저 해제
+            (*object).set_ivar(PARENT_OBSERVER_IVAR, std::ptr::null_mut::<c_void>());
+            let _: () = msg_send![object, release];
+        }
+    }
+}
+
+unsafe fn add_observer(center: id, observer: id, name: &str, object: id) {
+    let name = NSString::alloc(nil).init_str(name);
+    let _: () = msg_send![center,
+        addObserver: observer
+        selector: sel!(parentStateChanged:)
+        name: name
+        object: object
+    ];
+    let _: () = msg_send![name, release];
+}
+
+pub(super) fn set_owner(native: &mut NativeState, owner: Weak<OverlayHitServiceInner>) {
+    native.owner = owner;
+}
+
+pub(super) fn request_reorder(native: &mut NativeState) {
+    native.needs_reorder = true;
+}
 
 extern "C" fn never_becomes_key(_this: &Object, _selector: Sel) -> BOOL {
     NO
@@ -223,6 +377,7 @@ pub(super) fn reconcile(
     native: &mut NativeState,
 ) -> Result<HitRegionStatus> {
     let Some(overlay) = overlay else {
+        native.observer = None;
         hide_panels(native);
         return Ok(HitRegionStatus::Applied);
     };
@@ -230,11 +385,17 @@ pub(super) fn reconcile(
         .ns_window()
         .context("failed to get overlay NSWindow")? as id;
     if parent.is_null() {
+        native.observer = None;
         hide_panels(native);
         return Ok(HitRegionStatus::Applied);
     }
 
+    if native.observer.as_ref().map(|observer| observer.parent) != Some(parent as usize) {
+        native.observer = Some(ParentObserver::new(app, parent, native.owner.clone())?);
+        native.needs_reorder = true;
+    }
     let parent_visible: BOOL = unsafe { msg_send![parent, isVisible] };
+    let parent_on_space: BOOL = unsafe { msg_send![parent, isOnActiveSpace] };
     // 프론트가 "키 0개"를 확정 보고했으면 콘텐츠 전체를 잡는다 - 모든 키를 숨기거나
     // 커스텀 CSS로 지웠을 때 창을 옮길 수도 우클릭할 수도 없게 되는 것을 막는다.
     // 첫 측정 전(last_revision == None)에는 그대로 클릭 통과
@@ -258,8 +419,9 @@ pub(super) fn reconcile(
             .filter_map(|rect| clip_hit_rect_to_bounds(*rect, content_width, content_height))
             .collect::<Vec<_>>()
     };
+    let parent_available = parent_visible != NO && parent_on_space != NO;
     let active =
-        desired.visible && !desired.locked && !clipped_rects.is_empty() && parent_visible != NO;
+        desired.visible && !desired.locked && !clipped_rects.is_empty() && parent_available;
     if !active {
         hide_panels(native);
         if clipped_rects.is_empty() {
@@ -274,6 +436,14 @@ pub(super) fn reconcile(
         return Ok(HitRegionStatus::Applied);
     }
     resize_panel_pool(app, parent, &clipped_rects, native)?;
+    let (parent_level, parent_behavior, parent_number): (NSInteger, u64, NSInteger) = unsafe {
+        (
+            msg_send![parent, level],
+            msg_send![parent, collectionBehavior],
+            msg_send![parent, windowNumber],
+        )
+    };
+    let collection_behavior = hit_panel_collection_behavior(parent_behavior);
 
     for (panel, rect) in native.panels.iter_mut().zip(&clipped_rects) {
         panel.context.parent = parent as usize;
@@ -282,23 +452,47 @@ pub(super) fn reconcile(
         unsafe {
             let panel_id = panel.panel as id;
             let view_id = panel.view as id;
-            let current_parent: id = msg_send![panel_id, parentWindow];
-            if current_parent != parent {
-                if !current_parent.is_null() {
-                    let _: () = msg_send![current_parent, removeChildWindow: panel_id];
-                }
-                let _: () = msg_send![parent, addChildWindow: panel_id ordered: NS_WINDOW_ABOVE];
+            let reorder = native.needs_reorder
+                || !panel.context.active
+                || panel.level != Some(parent_level)
+                || panel.collection_behavior != Some(collection_behavior);
+            if panel.level != Some(parent_level) {
+                let _: () = msg_send![panel_id, setLevel: parent_level];
+                panel.level = Some(parent_level);
             }
-            let parent_level: NSInteger = msg_send![parent, level];
-            let _: () = msg_send![panel_id, setLevel: parent_level];
-            let _: () = msg_send![panel_id, setFrame: frame display: NO];
-            let _: () = msg_send![panel_id, setIgnoresMouseEvents: NO];
-            let _: () = msg_send![panel_id, invalidateCursorRectsForView: view_id];
+            if panel.collection_behavior != Some(collection_behavior) {
+                let _: () = msg_send![panel_id, setCollectionBehavior: collection_behavior];
+                panel.collection_behavior = Some(collection_behavior);
+            }
+            if panel.frame.origin.x != frame.origin.x
+                || panel.frame.origin.y != frame.origin.y
+                || panel.frame.size.width != frame.size.width
+                || panel.frame.size.height != frame.size.height
+                || !panel.context.active
+            {
+                let _: () = msg_send![panel_id, setFrame: frame display: NO];
+                let _: () = msg_send![panel_id, invalidateCursorRectsForView: view_id];
+                panel.frame = frame;
+            }
+            if !panel.context.active {
+                let _: () = msg_send![panel_id, setIgnoresMouseEvents: NO];
+            }
             panel.context.active = true;
-            let _: () = msg_send![panel_id, orderFront: nil];
+            if reorder {
+                // 자식 창 그룹과 중복 정렬은 회전 띠의 대량 정리 비용을 키움
+                let _: () =
+                    msg_send![panel_id, orderWindow: NS_WINDOW_ABOVE relativeTo: parent_number];
+            }
         }
     }
+    native.needs_reorder = false;
     Ok(HitRegionStatus::Applied)
+}
+
+fn hit_panel_collection_behavior(parent_behavior: u64) -> u64 {
+    let managed_stationary_cycle = (1 << 2) | (1 << 4) | (1 << 5);
+    let transient_ignores_cycle = (1 << 3) | (1 << 6);
+    (parent_behavior & !managed_stationary_cycle) | transient_ignores_cycle
 }
 
 fn content_size(parent: id) -> Result<(f64, f64)> {
@@ -364,18 +558,20 @@ fn create_panel(app: &AppHandle, parent: id, rect: OverlayHitRect) -> Result<Hit
         let _: () = msg_send![panel, setOpaque: NO];
         let _: () = msg_send![panel, setBackgroundColor: clear_color];
         let _: () = msg_send![panel, setHasShadow: NO];
+        let _: () = msg_send![panel, setAnimationBehavior: NS_WINDOW_ANIMATION_NONE];
         let _: () = msg_send![panel, setReleasedWhenClosed: NO];
         let _: () = msg_send![panel, setHidesOnDeactivate: NO];
         let _: () = msg_send![panel, setIgnoresMouseEvents: NO];
         let _: () = msg_send![view, setAlphaValue: 0.0_f64];
         let _: () = msg_send![panel, setContentView: view];
         let _: () = msg_send![view, release];
-        let _: () = msg_send![parent, addChildWindow: panel ordered: NS_WINDOW_ABOVE];
-
         Ok(HitPanel {
             panel: panel as usize,
             view: view as usize,
             context,
+            frame,
+            level: None,
+            collection_behavior: None,
         })
     }
 }
@@ -399,6 +595,9 @@ fn panel_frame(parent: id, rect: &OverlayHitRect) -> Result<NSRect> {
 
 fn hide_panels(native: &mut NativeState) {
     for panel in &mut native.panels {
+        if !panel.context.active {
+            continue;
+        }
         panel.context.parent = 0;
         panel.context.active = false;
         unsafe {
@@ -414,10 +613,6 @@ fn destroy_panel(panel: HitPanel) {
         let panel_id = panel.panel as id;
         let view_id = panel.view as id;
         (*view_id).set_ivar(HIT_CONTEXT_IVAR, std::ptr::null_mut::<c_void>());
-        let parent: id = msg_send![panel_id, parentWindow];
-        if !parent.is_null() {
-            let _: () = msg_send![parent, removeChildWindow: panel_id];
-        }
         let _: () = msg_send![panel_id, orderOut: nil];
         let _: () = msg_send![panel_id, close];
         let _: () = msg_send![panel_id, release];
@@ -428,4 +623,26 @@ fn destroy_panel(panel: HitPanel) {
 pub(super) fn register_classes_for_test() {
     Lazy::force(&HIT_PANEL_CLASS);
     Lazy::force(&HIT_VIEW_CLASS);
+    Lazy::force(&PARENT_OBSERVER_CLASS);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::hit_panel_collection_behavior;
+
+    #[test]
+    fn hit_panels_follow_parent_spaces_without_joining_window_cycles() {
+        let spaces_and_fullscreen = (1 << 0) | (1 << 8);
+        let managed_stationary_cycle = (1 << 2) | (1 << 4) | (1 << 5);
+        let transient_ignores_cycle = (1 << 3) | (1 << 6);
+        for parent in [
+            spaces_and_fullscreen,
+            spaces_and_fullscreen | managed_stationary_cycle,
+        ] {
+            let behavior = hit_panel_collection_behavior(parent);
+            assert_eq!(behavior & spaces_and_fullscreen, spaces_and_fullscreen);
+            assert_eq!(behavior & managed_stationary_cycle, 0);
+            assert_eq!(behavior & transient_ignores_cycle, transient_ignores_cycle);
+        }
+    }
 }

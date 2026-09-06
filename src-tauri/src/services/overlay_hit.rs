@@ -346,6 +346,12 @@ impl OverlayHitService {
         .context("failed to dispatch overlay hit reconciliation")
     }
 
+    #[cfg(target_os = "macos")]
+    pub(crate) fn reconcile_after_parent_order(&self, app: &AppHandle) -> Result<()> {
+        platform::request_reorder(&mut self.inner.native.lock());
+        self.reconcile(app)
+    }
+
     fn reconcile_on_main(&self, app: &AppHandle) -> Result<()> {
         let overlay = app.get_webview_window(OVERLAY_LABEL);
         let parent = platform::parent_identity(overlay.as_ref())?;
@@ -359,6 +365,8 @@ impl OverlayHitService {
             (desired.clone(), parent_changed)
         };
         let mut native = self.inner.native.lock();
+        #[cfg(target_os = "macos")]
+        platform::set_owner(&mut native, Arc::downgrade(&self.inner));
         let status = platform::reconcile(app, overlay.as_ref(), &desired, &mut native)?;
         drop(native);
 
