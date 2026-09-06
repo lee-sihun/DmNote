@@ -88,6 +88,7 @@ interface ReactiveSpritePosition {
   dy: number;
   width: number;
   height: number;
+  rotation?: number; // placement rotation around the element-box center, -180–180 deg, default 0
   hidden: boolean;
   zIndex: number | null;
   layerName?: string | null; // omitted by the backend when unset
@@ -130,6 +131,16 @@ interface SpriteTransform {
   scale: number; // 0.1–10
 }
 ```
+
+The element-level `rotation` rotates the entire sprite, including all poses,
+around the center of its logical box. It is independent of
+`idleTransform.rotation` and each pose's `transform.rotation`, which remain
+local rotations around the shared pivot. Rotating a selection changes the
+sprite's `dx`, `dy`, and element-level `rotation` together; pose transforms,
+triggers, image references, and transition directions remain unchanged.
+New sprites default to 0 when `rotation` is omitted. For an existing sprite,
+schemaVersion 1 and 2 commits preserve its stored rotation when the field is
+omitted. `null`, non-finite values, and values outside `-180..180` are rejected.
 
 A pose activates while the set of held keys, among the keys the sprite
 references, exactly matches its trigger set; keys the sprite does not reference

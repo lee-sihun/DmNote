@@ -84,6 +84,7 @@ interface ReactiveSpritePosition {
   dy: number;
   width: number;
   height: number;
+  rotation?: number; // 요소 상자 중심을 축으로 하는 배치 회전, -180–180도, 기본 0
   hidden: boolean;
   zIndex: number | null;
   layerName?: string | null; // 미설정이면 백엔드가 키를 생략합니다
@@ -126,6 +127,15 @@ interface SpriteTransform {
   scale: number; // 0.1–10
 }
 ```
+
+요소의 `rotation`은 논리 상자의 중심을 축으로 모든 자세를 포함한 스프라이트
+전체를 돌립니다. 공통 기준점을 축으로 도는 로컬 회전인 `idleTransform.rotation`,
+각 자세의 `transform.rotation`과는 독립적입니다. 선택 전체를 회전하면
+스프라이트의 `dx`, `dy`, 요소 `rotation`을 함께 바꾸며 자세 변환, 트리거,
+이미지 참조와 자세 전환 방향은 유지됩니다.
+새 스프라이트에서 `rotation`을 생략하면 0입니다. 이미 있는 스프라이트의
+schemaVersion 1·2 커밋에서는 생략 시 저장된 회전값을 유지합니다.
+`null`, 비유한값, `-180~180` 밖의 값은 거절됩니다.
 
 자세는 스프라이트가 참조하는 키 중 현재 눌린 키 집합이 트리거 집합과 정확히
 일치할 때 활성화되고, 스프라이트가 참조하지 않는 키는 무시합니다. 정확히

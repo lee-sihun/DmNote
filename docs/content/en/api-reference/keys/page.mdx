@@ -337,6 +337,7 @@ gradient siblings:
 interface KeyPosition {
   id?: string; // stable element identity (UUID), assigned and owned by the app
   // ...position, image, note, and counter fields...
+  rotation: number; // degrees, -180 to 180. Defaults to 0. Content rotation about the box center
   imageMode?: 'replace' | 'overlay'; // image placement, defaults to replace (image replaces the key)
   idleImageTransform?: {
     offsetX: number;
@@ -396,6 +397,18 @@ interface ElementShadowSpec {
   blur: number; // px, 0 to 100
 }
 ```
+
+`rotation` is the element rotation in degrees. Keys, stats, graphs, and knobs
+share the field. The logical box (`dx`/`dy`/`width`/`height`) stays axis
+aligned while the face, the note track, and the outside counter rotate
+together about the box center. Omitting the field means 0; `null`, non-finite
+values, and values outside `-180..180` are rejected. Automatic hitline
+correction (`noteAutoYCorrection`) aligns unrotated keys to the content top,
+and aligns rotated keys that flow in the same direction (within 0.5°) to the
+top edge that is furthest along that direction. A key rotated on its own
+starts at its own top edge, and note offsets apply after the correction.
+Sprites also have an element-level placement `rotation`, independent of their
+idle and per-pose rotations. See [Sprite Position Types](/docs/api-reference/editor#sprite-position-types).
 
 Every element position (`keyPositions`, `statPositions`, `graphPositions`,
 `knobPositions`, `spritePositions`) carries a stable `id`. Treat it as opaque: echo back the value

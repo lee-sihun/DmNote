@@ -111,6 +111,7 @@ interface KeyPosition {
   dy: number;
   width: number;
   height: number;
+  rotation: number; // 도, -180~180. 생략하면 0. 상자 중심 기준 콘텐츠 회전
   activeImage?: string;
   inactiveImage?: string;
   activeTransparent?: boolean;
@@ -229,6 +230,16 @@ interface ElementShadowSpec {
 `shadow`와 `activeShadow`는 대기·입력 그림자를 각각 제어합니다. 필드를
 생략하면 기존 기본 그림자가 유지되며, 그림자를 명시적으로 끄려면
 `enabled: false`인 spec을 저장하세요.
+
+`rotation`은 요소 회전(도)입니다. 키·통계·그래프·노브가 같은 필드를 쓰며
+`dx`/`dy`/`width`/`height` 논리 상자는 축 정렬 그대로 두고 얼굴, 노트
+트랙, 외부 카운터가 상자 중심을 축으로 함께 돕니다. 생략하면 0이고
+`null`, 비유한값, `-180~180` 밖의 값은 거절됩니다. 자동 히트라인
+보정(`noteAutoYCorrection`)은 회전 0인 키는 콘텐츠 상단에, 회전한 키는
+같은 방향(각도 차 0.5° 이내)으로 도는 키끼리 가장 앞선 상변에 시작선을
+맞춥니다. 혼자 돌린 키는 자기 상변에서 시작하고 노트 오프셋은 그 뒤에
+적용됩니다. 스프라이트도 요소 배치용 `rotation`을 가지며 대기·자세별 회전과
+독립적으로 적용합니다. [스프라이트 위치 타입](/docs/api-reference/editor#스프라이트-위치-타입)을 참고하세요.
 
 ```javascript
 const positions = await dmn.keys.getPositions();
