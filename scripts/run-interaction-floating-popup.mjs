@@ -95,7 +95,7 @@ const correctnessResult = spawnSync(
     'run',
     'src/renderer/components/main/Modal/floatingPopup/FloatingPopup.test.tsx',
     'src/renderer/components/main/Modal/listPopup/ListPopup.test.tsx',
-    'src/renderer/components/main/Modal/floatingPopupLayerOwnership.test.tsx',
+    'src/renderer/__tests__/popup/floatingPopupLayerOwnership.test.tsx',
   ],
   { cwd: root, stdio: 'inherit' },
 );
